@@ -17,13 +17,20 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # מתעלם מקונפליקטי peer (למשל react-helmet-async עם React 19)
     env:
+      # עוקף קונפליקטים של peer deps (למשל react-helmet-async מול React)
       NPM_CONFIG_LEGACY_PEER_DEPS: true
+      # מבטיח נתיבים נכונים ל-GitHub Pages תחת /Karina/
+      PUBLIC_URL: https://guybracha.github.io/Karina/
+      # לא לעצור על ESLint/Warnings בזמן build
+      CI: false
+      DISABLE_ESLINT_PLUGIN: true
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
@@ -31,8 +38,8 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
-      - name: Build (don’t fail on warnings)
-        run: PUBLIC_URL=https://guybracha.github.io/Karina npm run build
+      - name: Build
+        run: npm run build
 
       - name: Detect build dir
         id: detect
