@@ -1,0 +1,241 @@
+/* ========= בסיס: משתנים ========= */
+:root{
+  --a11y-gap: .5rem;
+  --a11y-pad-y: .6rem;
+  --a11y-pad-x: .8rem;
+  --a11y-radius: .75rem;
+  --a11y-fz: clamp(12px, 2.6vw, 14px);
+
+  /* ערימת כלים בצד ימין */
+  --a11y-stack-gap: .75rem;
+  --a11y-toolbar-h: 48px;
+
+  /* גובה אייקון "צור קשר" (WhatsApp/Messenger וכו’) + מרווח ביניהם.
+     עדכן אם האייקון שלך בגודל אחר. */
+  --contact-fab-size: 64px;
+  --contact-fab-gap: .75rem;
+}
+
+/* ========= קישור דילוג ========= */
+.a11y-skip-link {
+  position: fixed;
+  top: -100%;
+  inset-inline-start: 1rem;
+  z-index: 10000;
+  background: #000; color: #fff;
+  padding: .75rem 1rem; border-radius: .5rem;
+  text-decoration: none;
+}
+.a11y-skip-link:focus { top: 1rem; }
+
+/* ========= אזור חי ========= */
+.a11y-live-region {
+  position: absolute !important;
+  width: 1px; height: 1px; overflow: hidden;
+  clip: rect(1px, 1px, 1px, 1px);
+  white-space: nowrap;
+}
+
+/* ========= פוקוס כללי ========= */
+:focus-visible { outline: 3px solid #1a73e8; outline-offset: 2px; border-radius: .25rem; }
+
+/* ========= סרגל כפתורי נגישות (תחתון ימין) ========= */
+.a11y-toolbar{
+  position: fixed;
+  inset-inline-end: 1rem;      /* ימין */
+  inset-inline-start: auto;
+  /* יושב מעל אייקון צור קשר ובאותו קו אנכי עם ה־FAB */
+  bottom: calc(
+    1rem + env(safe-area-inset-bottom) +
+    var(--contact-fab-size) + var(--contact-fab-gap)
+  );
+
+  display: flex; align-items: center; gap: var(--a11y-gap);
+  background:#111; color:#fff;
+  padding: var(--a11y-pad-y) var(--a11y-pad-x);
+  border-radius: var(--a11y-radius);
+  box-shadow: 0 6px 24px rgba(0,0,0,.2);
+  font-size: var(--a11y-fz);
+  max-width: min(92vw, 520px);
+  flex-wrap: wrap;
+  justify-content: flex-start;
+
+  /* מצבים/אנימציה */
+  opacity: 0; transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 10980;              /* מתחת ל-FAB, מעל הדף והפייסבוק */
+}
+.a11y-toolbar.is-open{ opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+/* ========= כפתורי פעולה ========= */
+.a11y-btn { background:#1c1c1c; color:#fff; border:0; border-radius:.65rem; padding:.45rem .65rem; cursor:pointer; line-height:1.2; white-space:nowrap; }
+.a11y-btn-ghost{ background:transparent; border:1px solid #444; }
+.a11y-btn:focus-visible{ outline:3px solid #ffab00; }
+
+/* ========= תיבת ההקראה (ממוקמת מעל הסרגל, בצד ימין) ========= */
+.a11y-read-toolbar{
+  position: fixed;
+  inset-inline-end: 1rem;
+  inset-inline-start: auto;
+  bottom: calc(
+    1rem + env(safe-area-inset-bottom) +
+    var(--contact-fab-size) + var(--contact-fab-gap) +
+    var(--a11y-toolbar-h) + var(--a11y-stack-gap)
+  );
+
+  display:flex; flex-direction:column; gap:.5rem;
+  background:#111; color:#fff;
+  padding:.6rem .8rem; border-radius:.75rem;
+  box-shadow:0 6px 24px rgba(0,0,0,.2);
+  font-size: var(--a11y-fz);
+  max-width: min(92vw, 640px);
+
+  opacity:0; transform: translateY(8px) scale(.98);
+  pointer-events:none;
+  transition: opacity .22s ease, transform .22s ease;
+  z-index:10970;
+}
+.a11y-read-toolbar.is-open{ opacity:1; transform: translateY(0) scale(1); pointer-events:auto; }
+.a11y-read-row{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.a11y-read-ctrl{ display:flex; align-items:center; gap:.4rem; font-size:.9em; }
+.a11y-hint{ font-size:.85em; opacity:.8; }
+/* לא משתמשים בכפתור המיני – ההפעלה דרך ה-FAB */
+.a11y-read-toggle{ display:none !important; }
+
+/* ========= הגדלת טקסט ========= */
+html { --a11y-text-scale: 1; font-size: calc(100% * var(--a11y-text-scale)); }
+html.a11y-big-text { --a11y-text-scale: 1.125; }
+.hero-title { font-size: clamp(2rem, 6vw, 4rem); }
+
+/* ========= הפחתת אנימציות ========= */
+html.a11y-reduced-motion,
+html.a11y-reduced-motion body { scroll-behavior: auto !important; }
+html.a11y-reduced-motion *,
+html.a11y-reduced-motion *::before,
+html.a11y-reduced-motion *::after { animation:none !important; transition:none !important; }
+html.a11y-reduced-motion [style*="animation"],
+html.a11y-reduced-motion [style*="transition"] { animation:none !important; transition:none !important; }
+
+/* ========= ניגודיות גבוהה – ערכת צבעים ========= */
+html.a11y-high-contrast{
+  --hc-bg:#000; --hc-fg:#fff; --hc-muted:#cfcfcf;
+  --hc-card:#111; --hc-border:#666;
+  --hc-link:#00d3ff; --hc-link-vis:#7cf6ff;
+  --hc-btn-bg:#ffd200; --hc-btn-fg:#000; --hc-btn-bg-h:#ffea00;
+}
+html.a11y-high-contrast :is(body,#main,main[role="main"],.site-content){ background:var(--hc-bg) !important; color:var(--hc-fg) !important; }
+html.a11y-high-contrast h1,html.a11y-high-contrast h2,html.a11y-high-contrast h3,html.a11y-high-contrast h4,html.a11y-high-contrast h5,html.a11y-high-contrast h6{ color:var(--hc-fg) !important; }
+html.a11y-high-contrast .hero-subtitle,
+html.a11y-high-contrast .muted,
+html.a11y-high-contrast .text-muted,
+html.a11y-high-contrast p small{ color:var(--hc-muted) !important; }
+html.a11y-high-contrast .section,
+html.a11y-high-contrast .card-soft,
+html.a11y-high-contrast .hero{
+  background:var(--hc-card) !important; color:var(--hc-fg) !important; box-shadow:none !important; border:1px solid var(--hc-border) !important;
+}
+/* קישורים/כפתורים */
+html.a11y-high-contrast a{ color:var(--hc-link) !important; text-decoration:underline !important; }
+html.a11y-high-contrast a:visited{ color:var(--hc-link-vis) !important; }
+html.a11y-high-contrast button,
+html.a11y-high-contrast .btn{
+  background:var(--hc-btn-bg) !important; color:var(--hc-btn-fg) !important; border:2px solid var(--hc-btn-fg) !important; box-shadow:none !important;
+}
+html.a11y-high-contrast button:hover,
+html.a11y-high-contrast .btn:hover,
+html.a11y-high-contrast button:focus-visible,
+html.a11y-high-contrast .btn:focus-visible{
+  background:var(--hc-btn-bg-h) !important; outline:3px solid #ffab00 !important; outline-offset:2px !important;
+}
+/* ניווט עליון */
+html.a11y-high-contrast .navbar,
+html.a11y-high-contrast nav{
+  background:var(--hc-card) !important; color:var(--hc-fg) !important; border-bottom:1px solid var(--hc-border) !important;
+}
+/* מפרידים + פוקוס */
+html.a11y-high-contrast hr,
+html.a11y-high-contrast .divider{ border-color:var(--hc-border) !important; }
+html.a11y-high-contrast :focus-visible{ outline:3px solid #ffab00 !important; outline-offset:2px !important; }
+
+/* אזורי לבן לקרוסלות/לוגו */
+html.a11y-high-contrast .hc-on-white,
+html.a11y-high-contrast .hc-on-white.section,
+html.a11y-high-contrast .hc-on-white.card-soft{
+  background:#fff !important; color:#000 !important; border:1px solid #000 !important; box-shadow:none !important;
+}
+html.a11y-high-contrast .hc-on-white :is(
+  .carousel, .carousel-container, .carousel-inner,
+  .slider, .gallery, .product-carousel,
+  .swiper, .swiper-wrapper, .swiper-slide,
+  .slick-slider, .slick-list, .slick-track
+){ background:#fff !important; border-color:#000 !important; box-shadow:none !important; }
+html.a11y-high-contrast .hc-on-white :is(
+  .swiper-button-prev, .swiper-button-next,
+  .slick-prev, .slick-next,
+  .carousel-prev, .carousel-next,
+  .arrow, .nav-arrow,
+  button, .btn
+){ background:#000 !important; color:#fff !important; border:2px solid #000 !important; box-shadow:none !important; }
+html.a11y-high-contrast .hc-on-white img{ filter:none !important; mix-blend-mode:normal !important; }
+html.a11y-high-contrast .hero-logo,
+html.a11y-high-contrast .brand-logo{
+  background:#fff !important; padding:.35rem .5rem !important; border-radius:.5rem !important; box-shadow:0 0 0 2px #000 !important; filter:none !important; mix-blend-mode:normal !important;
+}
+
+/* ========= יוטיליטי ========= */
+.visually-hidden{
+  position:absolute !important; width:1px; height:1px;
+  padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0);
+  white-space:nowrap; border:0;
+}
+
+/* ===== FAB (אייקון נגישות) – בצד ימין ומעל "צור קשר" ===== */
+.a11y-fab{
+  position: fixed;
+  inset-inline-end: 1rem;              /* ימין */
+  inset-inline-start: auto;
+  bottom: calc(
+    1rem + env(safe-area-inset-bottom) +
+    var(--contact-fab-size) + var(--contact-fab-gap)
+  );                                    /* מעל אייקון הקשר */
+  width: 48px; height: 48px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%;
+  background: #111; color:#fff;
+  box-shadow: 0 8px 28px rgba(0,0,0,.25);
+  cursor: pointer;
+  z-index: 11000;                       /* מעל הכל */
+}
+.a11y-fab.is-right{ /* שמור תאימות אם מעבירים side */ inset-inline-end: 1rem; inset-inline-start: auto; }
+.a11y-fab.is-left{  inset-inline-start: 1rem; inset-inline-end: auto; }
+.a11y-fab:focus-visible{ outline: 3px solid #ffab00; outline-offset: 2px; }
+
+/* אל תערבב צבעים בניגודיות גבוהה */
+html.a11y-high-contrast .a11y-fab{ filter:none !important; mix-blend-mode:normal !important; }
+
+/* האייקונים של פייסבוק/ווטסאפ מתחת ל־FAB */
+.fab-stack{ z-index: 10000 !important; }
+
+/* ===== רספונסיביות ===== */
+@media (max-width: 640px){
+  .a11y-toolbar, .a11y-read-toolbar{
+    max-width: 94vw; overflow-x: auto; scrollbar-width: thin;
+  }
+}
+@media (max-width: 420px){
+  .a11y-fab{ width: 44px; height: 44px; }
+  .a11y-toolbar{
+    bottom: calc(
+      .75rem + env(safe-area-inset-bottom) +
+      var(--contact-fab-size) + var(--contact-fab-gap)
+    );
+  }
+  .a11y-read-toolbar{
+    bottom: calc(
+      .75rem + env(safe-area-inset-bottom) +
+      var(--contact-fab-size) + var(--contact-fab-gap) +
+      var(--a11y-toolbar-h) + .5rem
+    );
+  }
+}
