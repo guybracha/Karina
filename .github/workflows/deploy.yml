@@ -32,7 +32,7 @@ jobs:
         run: npm ci || npm i
 
       - name: Build (don’t fail on warnings)
-        run: CI=false npm run build
+        run: PUBLIC_URL=https://guybracha.github.io/Karina npm run build
 
       - name: Detect build dir
         id: detect
