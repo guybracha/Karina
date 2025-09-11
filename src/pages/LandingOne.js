@@ -144,9 +144,6 @@ export default function LandingOne() {
         <Contact1 />
       </section>
       <Footer />
-      <A11yFab side="right" />
-      <A11yToolkit mainId="main" />
-      <ReadAloud targetSelector="#main" />
 
       {/* פעולות צפות */}
       <div className="fab-stack" aria-label="Quick actions">
