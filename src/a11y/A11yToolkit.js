@@ -141,8 +141,10 @@ export default function A11yToolkit({ mainId = "main" }) {
           className="a11y-btn"
           onClick={() => setReducedMotion(v => !v)}
           aria-pressed={reducedMotion}
+          aria-label={`מצב הפחתת אנימציות ${reducedMotion ? "מופעל" : "כבוי"}`}
+          title={reducedMotion ? "כבה הפחתת אנימציות (הגבר אנימציות)" : "הפעל הפחתת אנימציות"}
         >
-          הפחת אנימציות
+          {reducedMotion ? "הגבר אנימציות" : "הפחת אנימציות"}
         </button>
 
         <button

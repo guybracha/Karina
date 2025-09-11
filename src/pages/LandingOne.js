@@ -19,6 +19,7 @@ import A11yHUD from "../a11y/A11yHUD";
 import A11yFab from "../a11y/A11yFab";
 import A11yToolkit from "../a11y/A11yToolkit";
 import ReadAloud from "../a11y/ReadAloud";
+import Contact1 from "../compLanding/Contact1";
 
 export default function LandingOne() {
   const shieldRef   = useRef(null);
@@ -110,7 +111,7 @@ export default function LandingOne() {
       </section>
 
       <Video />
-      <section id="contact" ref={contactRef} className="section card-soft">
+      <section>
         <Contact />
       </section>
 
@@ -139,10 +140,9 @@ export default function LandingOne() {
       </section>
 
       <Banner />  
-      <section id="contact" ref={contactRef} className="section card-soft">
-        <Contact />
+            <section id="contact" ref={contactRef} className="section card-soft">
+        <Contact1 />
       </section>
-
       <Footer />
       <A11yFab side="right" />
       <A11yToolkit mainId="main" />
