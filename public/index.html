@@ -1,17 +1,21 @@
 <!DOCTYPE html>
-<html lang="he">
+<html lang="he" dir="rtl">
   <head>
     <meta charset="utf-8" />
-    <!-- השתמש ב-%PUBLIC_URL% כך שיעבוד תחת /Karina/ -->
-    <link rel="icon" href="%PUBLIC_URL%/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
-    <meta name="description" content="קארינה חולצות מודפסות - חולצות עם הדפסים איכותיים ומיוחדים לכל אירוע!" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo.png" />
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <meta name="description" content="קארינה חולצות מודפסות - בגדי עבודה ממותגים ואיכותיים לעסקים, צוותים ואירועים." />
     <meta name="google-site-verification" content="PffqXWWB9GbrIdYcb0-L-8INO4jgTbauDEkqgpHSpx8" />
 
-    <!-- רידיירקט אוטומטי אם נכנסים בטעות עם /karina/ (k קטנה) -->
+    <!-- אייקונים ומניפסט נטענים מהדומיין עצמו -->
+    <link rel="icon" href="%PUBLIC_URL%/logo.png" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <!-- canonical ל-HTTPS -->
+    <link rel="canonical" href="https://karina.co.il/" />
+
+    <!-- רידיירקט במקרה של /karina/ (k קטנה) -->
     <script>
       (function () {
         var lower = '/karina/';
@@ -25,13 +29,23 @@
     </script>
 
     <title>קארינה חולצות מודפסות</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+
+    <!-- Bootstrap (HTTPS בלבד) -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+      integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
+      crossorigin="anonymous"
+    />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+      crossorigin="anonymous"
+    ></script>
   </head>
-  <body dir="rtl">
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+  <body>
+    <noscript>יש לאפשר JavaScript כדי להפעיל את האפליקציה.</noscript>
     <div id="root"></div>
   </body>
 </html>
