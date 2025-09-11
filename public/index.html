@@ -7,41 +7,24 @@
     <meta name="description" content="קארינה חולצות מודפסות - בגדי עבודה ממותגים ואיכותיים לעסקים, צוותים ואירועים." />
     <meta name="google-site-verification" content="PffqXWWB9GbrIdYcb0-L-8INO4jgTbauDEkqgpHSpx8" />
 
-    <!-- אייקונים ומניפסט נטענים מהדומיין עצמו -->
-    <link rel="icon" href="%PUBLIC_URL%/logo.png" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo.png" />
+    <!-- אייקונים ומניפסט מהדומיין עצמו (לא קישורים קשיחים) -->
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
 
     <!-- canonical ל-HTTPS -->
     <link rel="canonical" href="https://karina.co.il/" />
 
-    <!-- רידיירקט במקרה של /karina/ (k קטנה) -->
-    <script>
-      (function () {
-        var lower = '/karina/';
-        var upper = '/Karina/';
-        if (location.pathname.toLowerCase().startsWith(lower) &&
-            !location.pathname.startsWith(upper)) {
-          location.replace(location.origin + upper +
-            location.pathname.slice(lower.length) + location.search + location.hash);
-        }
-      })();
-    </script>
-
     <title>קארינה חולצות מודפסות</title>
 
-    <!-- Bootstrap (HTTPS בלבד) -->
+    <!-- Bootstrap (HTTPS). אם אינך יודע את ה-SRI המדויק – השאר בלי integrity -->
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
-      integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
-      crossorigin="anonymous"
     />
     <script
       defer
       src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-      integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
-      crossorigin="anonymous"
     ></script>
   </head>
   <body>
