@@ -15,15 +15,38 @@ function App() {
       <>
         <Helmet htmlAttributes={{ lang: 'he', dir: 'rtl' }}>
           <title>קארינה - חולצות מודפסות</title>
-          <meta name="description" content="קארינה מתמחה בהדפסות על חולצות עבודה, מוצרי בטיחות, ועיצובים אישיים." />
+          <meta
+            name="description"
+            content="קארינה מתמחה בהדפסות על חולצות עבודה, מוצרי בטיחות, ועיצובים אישיים."
+          />
           <meta property="og:title" content="קארינה - חולצות מודפסות" />
-          <meta property="og:description" content="הדפסות באיכות גבוהה, משלוח חינם, גרפיקה מקצועית." />
+          <meta
+            property="og:description"
+            content="הדפסות באיכות גבוהה, משלוח חינם, גרפיקה מקצועית."
+          />
+
+          {/* Google tag (gtag.js) */}
+          <script async src="https://www.googletagmanager.com/gtag/js?id=G-SHQSKGKY2C"></script>
+          <script>
+            {`
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-SHQSKGKY2C');
+            `}
+          </script>
         </Helmet>
+
         <div className="App">
           <LandingOne />
+          {/* כלים לנגישות */}
+          <A11yToolkit />
+          <ReadAloud />
+          <A11yFab />
         </div>
       </>
     </HelmetProvider>
   );
 }
+
 export default App;
