@@ -38,6 +38,15 @@ function App() {
               gtag('config', 'G-SHQSKGKY2C');
             `}
           </script>
+            <script async src="https://www.googletagmanager.com/gtag/js?id=G-MVPVMP76F6">
+          </script>
+          <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-MVPVMP76F6');
+          </script>
         </Helmet>
 
         <div className="App">
