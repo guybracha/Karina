@@ -14,13 +14,13 @@ function App() {
     <HelmetProvider>
       <>
         <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
-      <title>קארינה – הדפסה על חולצות לעסקים | משלוח בכל הארץ</title>
+      <title>קארינה חולצות מודפסות</title>
       <meta name="description" content="הדפסות על חולצות עבודה, בטיחות ומיתוג לחברות. גרפיקה מקצועית, זמני אספקה מהירים ושירות אישי." />
       <link rel="canonical" href="https://karina.co.il/" />
 
       {/* Open Graph */}
       <meta property="og:type" content="website" />
-      <meta property="og:title" content="קארינה – הדפסה על חולצות לעסקים" />
+      <meta property="og:title" content="קארינה חולצות מודפסות" />
       <meta property="og:description" content="איכות הדפסה גבוהה, גרפיקה מקצועית ומשלוח מהיר." />
       <meta property="og:url" content="https://karina.co.il/" />
       <meta property="og:image" content="img/logo.png" />
@@ -28,7 +28,7 @@ function App() {
 
       {/* Twitter */}
       <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content="קארינה – הדפסה על חולצות" />
+      <meta name="twitter:title" content="קארינה חולצות מודפסות" />
       <meta name="twitter:description" content="הדפסות באיכות גבוהה לכל צורך עסקי." />
       <meta name="twitter:image" content="img/logo.png" />
 
