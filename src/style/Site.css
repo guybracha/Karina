@@ -1,0 +1,540 @@
+/* ===========================
+   Karina — Global Styles
+   RTL + Bootstrap-friendly
+   =========================== */
+
+/* פונטים (התאם אם כבר טענת דרך Helmet) */
+@import url("https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;800&display=swap");
+
+:root {
+  /* צבעי מיתוג — עדכן לפי ה־PDF שלך */
+  --brand-primary: #0d6efd;   /* כחול ראשי */
+  --brand-secondary: #6c757d; /* אפור משני */
+  --brand-accent: #ff7a59;    /* דגשים/קריאה לפעולה */
+  --brand-success: #2fb344;
+  --brand-danger: #dc3545;
+  --brand-warning: #f59f00;
+
+  --bg-body: #f7f8fa;
+  --bg-card: #ffffff;
+  --text-main: #1f2937;       /* אפור כהה */
+  --text-muted: #6b7280;
+
+  --radius-lg: 1rem;
+  --radius-md: .75rem;
+  --radius-sm: .5rem;
+
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.04);
+  --shadow-md: 0 6px 20px rgba(0,0,0,.08);
+  --shadow-lg: 0 16px 40px rgba(0,0,0,.12);
+
+  --container-max: 1200px;
+
+  --transition-fast: 160ms ease;
+  --transition-mid: 260ms ease;
+}
+
+/* בסיס כללי */
+html {
+  direction: rtl;
+}
+html, body, #root {
+  height: 100%;
+}
+body {
+  font-family: "Heebo", -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans Hebrew", "Noto Sans", "Helvetica Neue", sans-serif;
+  background: var(--bg-body);
+  color: var(--text-main);
+}
+
+/* קונטיינר שמנצל רוחב יפה */
+.container {
+  max-width: var(--container-max);
+}
+
+/* קישורים */
+a {
+  color: var(--brand-primary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+a:hover { color: #0b5ed7; }
+
+/* כפתורים (שכבת ליטוש מעל Bootstrap) */
+.btn {
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+.btn-primary {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  box-shadow: 0 4px 10px rgba(13,110,253,.25);
+}
+.btn-primary:hover {
+  filter: brightness(0.95);
+  box-shadow: 0 6px 14px rgba(13,110,253,.35);
+}
+.btn-outline-primary {
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
+}
+.btn-outline-primary:hover {
+  background: var(--brand-primary);
+  color: #fff;
+}
+.btn-outline-secondary:hover {
+  background: #f3f4f6;
+}
+
+/* טפסים */
+.form-control, .form-select {
+  border-radius: .6rem;
+  border-color: #e5e7eb;
+  box-shadow: none;
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 .25rem rgba(13,110,253,.15);
+}
+
+/* כרטיסים */
+.card {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+.card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  transition: all var(--transition-mid);
+}
+
+/* Navbar */
+.karina-navbar {
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  border-bottom: 1px solid #eef0f4;
+}
+.karina-navbar .nav-link {
+  color: var(--text-main);
+  font-weight: 500;
+  padding: .5rem .9rem;
+  border-radius: .5rem;
+}
+.karina-navbar .nav-link:hover,
+.karina-navbar .nav-link.active {
+  background: #eff6ff;
+  color: var(--brand-primary);
+}
+.karina-navbar .brand {
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+
+/* Footer */
+.karina-footer {
+  background: #0e1525; /* רקע כהה אלגנטי */
+  color: #cbd5e1;
+  padding: 40px 0 20px;
+}
+.karina-footer a { color: #e2e8f0; }
+.karina-footer a:hover { color: #fff; }
+.karina-footer .footer-title {
+  color: #fff;
+  font-weight: 700;
+  margin-bottom: .75rem;
+}
+
+/* Hero / כותרות עמודים */
+.page-hero {
+  padding: 48px 0 24px;
+}
+.page-hero .title {
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+.lead { color: var(--text-muted); }
+
+/* Catalog */
+.product-card .card-img-top {
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+}
+.product-card .card-body {
+  display: flex;
+  flex-direction: column;
+}
+.product-card .card-title {
+  font-weight: 700;
+}
+.product-card .price {
+  color: var(--text-muted);
+}
+
+/* Product Detail */
+.product-media {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid #eef0f4;
+}
+.product-media img {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* בוררים (צבע/מידה) */
+.swatch-group .btn,
+.size-group .btn {
+  min-width: 44px;
+}
+.swatch-group .btn-outline-dark,
+.size-group .btn-outline-dark {
+  border-color: #d1d5db;
+  color: #374151;
+}
+.swatch-group .btn-dark,
+.size-group .btn-dark {
+  background: #111827;
+  border-color: #111827;
+}
+
+/* כמות */
+.quantity-input {
+  width: 120px;
+}
+
+/* תגית מונה לעגלה */
+.badge-cart {
+  position: absolute;
+  top: -6px;
+  inset-inline-start: 100%;
+  transform: translate(-50%, -30%);
+}
+
+/* Modals — Upload & Placement */
+.karina-modal-backdrop {
+  background: rgba(0,0,0,.6);
+}
+.karina-modal {
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: var(--shadow-lg);
+}
+.karina-modal .modal-header {
+  border: 0;
+  padding-bottom: .25rem;
+}
+.karina-modal .modal-body {
+  padding-top: 0;
+}
+
+/* אזור DnD (LogoUploadModal) */
+.dropzone {
+  border: 2px dashed #cbd5e1 !important;
+  border-radius: var(--radius-lg);
+  background: #f8fafc;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.dropzone.is-active {
+  border-color: var(--brand-primary) !important;
+  background: #f1f5ff;
+}
+.dropzone .hint {
+  color: var(--text-muted);
+}
+
+/* קנבס Fabric במודאל הצבה */
+.canvas-shell {
+  background: #fff;
+  border: 1px solid #eef0f4;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.canvas-shell canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Alerts */
+.alert {
+  border-radius: .75rem;
+  border: 1px solid transparent;
+}
+.alert-warning { background: #fff9db; color: #8d6b00; }
+.alert-info    { background: #e7f5ff; color: #0b7285; }
+.alert-danger  { background: #fff5f5; color: #c92a2a; }
+
+/* FAQ */
+.accordion-button {
+  border-radius: .6rem !important;
+}
+.accordion-button:focus {
+  box-shadow: none;
+  border-color: #e5e7eb;
+}
+.accordion-item {
+  border: 0;
+  margin-bottom: .5rem;
+  border-radius: .75rem;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Contact */
+.contact-card {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.contact-card .icon {
+  font-size: 1.1rem;
+  width: 28px;
+  display: inline-block;
+  text-align: center;
+}
+
+/* Cart */
+.cart-table .form-control {
+  max-width: 90px;
+}
+.cart-summary {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Checkout */
+.checkout-form {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.checkout-summary {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+/* NotFound */
+.notfound-hero {
+  text-align: center;
+  padding: 64px 0;
+}
+.notfound-hero .code {
+  font-size: clamp(56px, 8vw, 92px);
+  font-weight: 800;
+  color: #94a3b8;
+}
+.notfound-hero .msg {
+  color: var(--text-muted);
+}
+
+/* A11y floating layer (שכבת נגישות) */
+#a11y-fixed-layer {
+  position: fixed;
+  inset-inline-end: 16px;
+  inset-block-end: 16px;
+  display: grid;
+  gap: 10px;
+  z-index: 1100;
+  pointer-events: none;
+}
+#a11y-fixed-layer > * {
+  pointer-events: all; /* כפתורים יהיו לחיצים */
+}
+
+/* Utilities */
+.shadow-soft { box-shadow: var(--shadow-sm) !important; }
+.shadow-medium { box-shadow: var(--shadow-md) !important; }
+.rounded-xl { border-radius: var(--radius-lg) !important; }
+.text-muted-2 { color: var(--text-muted) !important; }
+.bg-card { background: var(--bg-card); }
+
+/* ===========================
+   Karina – Pages & Components
+   התאמות לדפים החדשים בסגנון ה-Landing
+   =========================== */
+
+/* ===== Navbar & Footer ===== */
+.karina-navbar {
+  position: sticky; top: 0; z-index: 1000;
+  background: #ffffffcc; backdrop-filter: blur(8px);
+  border-bottom: 1px solid #eee;
+  box-shadow: var(--shadow-sm);
+}
+.karina-navbar .nav-link {
+  font-weight: 700; color: #222; border-radius: 999px; padding: 8px 12px;
+}
+.karina-navbar .nav-link:hover,
+.karina-navbar .nav-link.active {
+  background: #f4f4f4;
+}
+.karina-navbar .brand-logo { height: 40px; width: auto; object-fit: contain; }
+
+.karina-footer {
+  margin-top: 40px;
+  background: linear-gradient(180deg, #fff 0%, var(--pink-100) 100%);
+  border-top: 1px solid #eee;
+  color: #333;
+}
+.karina-footer .footer-title {
+  font-weight: 800; font-size: 1.1rem; margin-bottom: .5rem;
+}
+.karina-footer a { color: var(--blue-fb); text-decoration: none; }
+.karina-footer a:hover { text-decoration: underline; }
+
+/* ===== Page Hero (כותרות עליונות) ===== */
+.page-hero {
+  text-align: center;
+  padding: 28px 0 18px;
+  background: linear-gradient(90deg, rgba(255,168,196,.25) 0%, rgba(255,255,255,1) 100%);
+  border-bottom: 1px solid #eee;
+}
+.page-hero .title { font-size: var(--fs-h2); font-weight: 800; }
+.page-hero .subtitle { color:#444; opacity:.9; }
+
+/* ===== Catalog ===== */
+.catalog-grid .card {
+  border: none; border-radius: 16px;
+  background: #ffffffcc; backdrop-filter: blur(4px);
+  box-shadow: var(--shadow-sm);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.catalog-grid .card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.catalog-grid .card-img-top {
+  height: 200px; object-fit: cover; border-radius: 14px;
+}
+.catalog-grid .card-title { font-weight: 800; margin-bottom: 4px; }
+.catalog-grid .price { color:#555; font-weight:600; }
+.catalog-filters .form-select, .catalog-filters .form-control {
+  border-radius: 999px; border-color: #e8e8e8;
+}
+
+/* ===== Product Detail ===== */
+.product-media {
+  background: #ffffffcc; backdrop-filter: blur(4px);
+  border: 1px solid #eee; border-radius: 20px; padding: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.product-heading { font-size: var(--fs-h2); font-weight: 800; }
+.product-price { font-weight: 800; color:#222; }
+.product-meta { color:#555; }
+
+.size-group .btn,
+.swatch-group .btn {
+  border-radius: 999px; padding: 8px 12px; font-weight: 700;
+}
+.size-group .btn-outline-dark,
+.swatch-group .btn-outline-dark {
+  border-color: #dcdcdc; color:#222; background:#fff;
+}
+.size-group .btn-dark,
+.swatch-group .btn-dark {
+  background:#222; color:#fff; border-color:#222;
+}
+
+.quantity-input { width: 120px; border-radius: 999px; }
+.product-actions .btn-primary {
+  background: var(--pink-500); color:#fff; border:none; border-radius:999px;
+  box-shadow: var(--shadow-sm);
+}
+.product-actions .btn-primary:hover { background: var(--pink-600); }
+.product-actions .btn-outline-secondary { border-radius: 999px; }
+
+/* ===== Modals: Logo Upload & Placement ===== */
+.karina-modal-backdrop { background: rgba(0,0,0,.45); backdrop-filter: blur(2px); }
+.karina-modal {
+  background: #fff; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+.dropzone {
+  border: 2px dashed #cfd6dd !important; border-radius: 16px;
+  background: #fff; padding: 18px; text-align: center;
+}
+.dropzone.is-active { border-color: var(--pink-500) !important; background: var(--pink-100); }
+.canvas-shell {
+  background: #fff; border: 1px solid #eee; border-radius: 16px; padding: 8px;
+  box-shadow: var(--shadow-sm);
+}
+.canvas-shell canvas { width: 100%; height: auto; display: block; }
+
+/* ===== Cart ===== */
+.cart-table .table {
+  background: #ffffffcc; backdrop-filter: blur(4px);
+  border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-sm);
+}
+.cart-table thead th { background: #fff; border-bottom: 1px solid #eee; }
+.cart-table .form-control { border-radius: 999px; max-width: 90px; }
+
+.cart-summary {
+  background: #ffffffcc; backdrop-filter: blur(4px);
+  border: 1px solid #eee; border-radius: 16px; padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.cart-summary .total {
+  font-weight: 800; font-size: 1.2rem;
+}
+.btn-checkout {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--pink-500); color:#fff; border:none; border-radius:999px;
+  padding: 12px 18px; box-shadow: var(--shadow-sm);
+}
+.btn-checkout:hover { background: var(--pink-600); }
+
+/* ===== Checkout ===== */
+.checkout-form, .checkout-summary {
+  background: #ffffffcc; backdrop-filter: blur(4px);
+  border: 1px solid #eee; border-radius: 20px; padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.checkout-form .form-control, .checkout-form .form-select {
+  border-radius: 12px; border-color: #e8e8e8;
+}
+.payment-option { display:flex; align-items:center; gap:10px; }
+
+/* ===== Contact ===== */
+.contact-card {
+  background: #ffffffcc; backdrop-filter: blur(4px);
+  border: 1px solid #eee; border-radius: 16px; padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.contact-card .icon { width: 28px; display:inline-block; text-align:center; }
+
+/* ===== FAQ (Accordion) ===== */
+.accordion-item {
+  border: none; margin-bottom: 10px; border-radius: 16px; overflow: hidden;
+  background: #ffffffcc; backdrop-filter: blur(4px);
+  box-shadow: var(--shadow-sm);
+}
+.accordion-button { font-weight: 700; }
+.accordion-button:not(.collapsed) {
+  color: #222; background: var(--pink-100);
+  box-shadow: inset 0 -1px 0 #eee;
+}
+
+/* ===== Not Found ===== */
+.notfound-hero {
+  text-align: center; padding: 64px 0;
+  background: linear-gradient(180deg, #fff 0%, var(--pink-100) 100%);
+  border-radius: 20px; box-shadow: var(--shadow-sm);
+}
+.notfound-hero .code { font-size: clamp(56px, 8vw, 92px); font-weight: 800; color:#999; }
+.notfound-hero .msg { color:#555; }
+
+/* ===== Utilities ===== */
+.badge-cart {
+  position: absolute; top: -6px; inset-inline-start: 100%;
+  transform: translate(-50%, -30%);
+  background: var(--pink-500); color:#fff;
+}
+.shadow-sm { box-shadow: var(--shadow-sm) !important; }
+.shadow-md { box-shadow: var(--shadow-md) !important; }
+.rounded-xl { border-radius: var(--radius-xl) !important; }
+
+/* ===== Mobile tweaks ===== */
+@media (max-width: 768px){
+  .product-media { padding: 10px; }
+  .catalog-grid .card-img-top { height: 180px; }
+}
+
