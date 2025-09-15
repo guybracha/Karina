@@ -14,31 +14,37 @@ function App() {
     <HelmetProvider>
       <>
         <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
-          <title>קארינה - חולצות מודפסות</title>
-          <meta
-            name="description"
-            content="קארינה מתמחה בהדפסות על חולצות עבודה, מוצרי בטיחות, ועיצובים אישיים."
-          />
-          <meta property="og:title" content="קארינה - חולצות מודפסות" />
-          <meta
-            property="og:description"
-            content="הדפסות באיכות גבוהה, משלוח חינם, גרפיקה מקצועית."
-          />
+      <title>קארינה – הדפסה על חולצות לעסקים | משלוח בכל הארץ</title>
+      <meta name="description" content="הדפסות על חולצות עבודה, בטיחות ומיתוג לחברות. גרפיקה מקצועית, זמני אספקה מהירים ושירות אישי." />
+      <link rel="canonical" href="https://karina.co.il/" />
 
-          {/* Google tag (gtag.js) */}
-          <script
-            async
-            src="https://www.googletagmanager.com/gtag/js?id=G-SHQSKGKY2C"
-          ></script>
-          <script>
-            {`
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-SHQSKGKY2C');
-            `}
-          </script>
-        </Helmet>
+      {/* Open Graph */}
+      <meta property="og:type" content="website" />
+      <meta property="og:title" content="קארינה – הדפסה על חולצות לעסקים" />
+      <meta property="og:description" content="איכות הדפסה גבוהה, גרפיקה מקצועית ומשלוח מהיר." />
+      <meta property="og:url" content="https://karina.co.il/" />
+      <meta property="og:image" content="img/logo.png" />
+      <meta property="og:locale" content="he_IL" />
+
+      {/* Twitter */}
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content="קארינה – הדפסה על חולצות" />
+      <meta name="twitter:description" content="הדפסות באיכות גבוהה לכל צורך עסקי." />
+      <meta name="twitter:image" content="img/logo.png" />
+
+      {/* Preconnect לשיפור ביצועים (Core Web Vitals) */}
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-SHQSKGKY2C"></script>
+        <script>
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-SHQSKGKY2C');
+          `}
+        </script>
+    </Helmet>
+
 
         <div className="App">
           <LandingOne />
