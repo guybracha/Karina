@@ -10,7 +10,6 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 
 import "./style/Site.css";
-import "bootstrap-icons/font/bootstrap-icons.css";
 
 // דפים חדשים
 import HomePage from "./pages/HomePage";
@@ -28,7 +27,6 @@ import Orders from "./pages/Orders";
 
 import { OrdersProvider } from "./contexts/OrdersContext";
 // אם אתה משתמש ב-Bootstrap JS (לא חובה אם כבר נטען במקום אחר)
-import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
 /** מגלגל לראש בכל ניווט */
 
@@ -50,14 +48,14 @@ export default function AppAlt() {
       <OrdersProvider>
       <BrowserRouter>
         <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
-          <title>Karina — Preview Mode</title>
+          <title>קארינה חולצות מודפסות</title>
           <meta
             name="description"
             content="תצוגת פיתוח לדפים החדשים של קארינה: קטלוג, מוצר, עגלה, תשלום ועוד."
           />
           <link rel="canonical" href="https://karina.co.il/preview" />
           <meta property="og:type" content="website" />
-          <meta property="og:title" content="Karina — Preview" />
+          <meta property="og:title" content="קארינה חולצות מודפסות" />
           <meta
             property="og:description"
             content="תצוגת פיתוח לדפים החדשים של האתר."
@@ -65,19 +63,6 @@ export default function AppAlt() {
           <meta property="og:image" content="/img/logo.png" />
           <meta property="og:locale" content="he_IL" />
         </Helmet>
-
-        {/* רצועת Preview עדינה — לא חובה */}
-        <div
-          style={{
-            textAlign: "center",
-            background: "linear-gradient(90deg, rgba(255,168,196,.3) 0%, #fff 100%)",
-            borderBottom: "1px solid #eee",
-            fontWeight: 700,
-            padding: "8px 12px",
-          }}
-        >
-          מצב תצוגה (AppAlt) — הדפים החדשים נטענים כאן ללא השפעה על האתר החי
-        </div>
 
         <Navbar />
 

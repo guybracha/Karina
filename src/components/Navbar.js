@@ -1,9 +1,9 @@
+// src/components/Navbar.jsx
 import React, { useEffect, useRef, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import logo from "../img/logo.png";
 import useDebounce from "../hooks/useDebounce";
 import { searchProducts } from "../lib/searchService";
-import { Offcanvas } from "bootstrap";
 
 export default function Navbar() {
   const [q, setQ] = useState("");
@@ -13,18 +13,27 @@ export default function Navbar() {
   const debounced = useDebounce(q, 200);
 
   const navigate = useNavigate();
+  const location = useLocation();
+
   const inputRef = useRef(null);
   const panelRef = useRef(null);
+  const collapseRef = useRef(null);
 
-  // סגירת offcanvas דרך ה-API של Bootstrap
-  function closeOffcanvas() {
-    const el = document.getElementById("navOffcanvas");
-    if (!el) return;
-    const oc = Offcanvas.getInstance(el) || new Offcanvas(el);
-    oc.hide();
+  // סגירת הקולאפס (Bootstrap bundle נטען ב-HTML)
+  function closeNav() {
+    const el = collapseRef.current;
+    const bs = window?.bootstrap;
+    if (!el || !bs?.Collapse) return;
+    bs.Collapse.getOrCreateInstance(el).hide();
   }
 
-  // הצעות (עם debounce)
+  // סגירה אוטומטית בכל שינוי מסלול
+  useEffect(() => {
+    setOpen(false);
+    closeNav();
+  }, [location.pathname]);
+
+  // חיפוש עם debounce
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -47,7 +56,7 @@ export default function Navbar() {
     };
   }, [debounced]);
 
-  // סגירת לוח הצעות בלחיצה מחוץ (דסקטופ)
+  // סגירה בלחיצה מחוץ להצעות
   useEffect(() => {
     function onDocClick(e) {
       if (
@@ -68,6 +77,7 @@ export default function Navbar() {
     const term = q.trim();
     if (term) navigate(`/catalog?query=${encodeURIComponent(term)}`);
     setOpen(false);
+    closeNav();
   }
 
   function goTo(item) {
@@ -77,6 +87,7 @@ export default function Navbar() {
       navigate(`/product/${item.slug || item.id}`);
     }
     setOpen(false);
+    closeNav();
   }
 
   function onKeyDown(e) {
@@ -104,47 +115,68 @@ export default function Navbar() {
       aria-label="Primary"
       dir="rtl"
     >
-      <div className="container align-items-center">
-        {/* Brand */}
+      <div className="container">
+        {/* Brand + Toggler */}
         <NavLink
           className="navbar-brand d-flex align-items-center gap-2"
           to="/"
           aria-label="דף הבית"
+          onClick={closeNav}
         >
           <img src={logo} alt="Karina" width="28" height="28" />
         </NavLink>
 
-        {/* Toggler → Offcanvas במובייל */}
         <button
           className="navbar-toggler"
           type="button"
-          data-bs-toggle="offcanvas"
-          data-bs-target="#navOffcanvas"
-          aria-controls="navOffcanvas"
+          data-bs-toggle="collapse"
+          data-bs-target="#mainNavbar"
+          aria-controls="mainNavbar"
+          aria-expanded="false"
           aria-label="פתח תפריט"
         >
-          <span className="navbar-toggler-icon" />
+          <span className="navbar-toggler-icon"></span>
         </button>
 
-        {/* דסקטופ */}
-        <div className="collapse navbar-collapse d-none d-lg:flex" id="mainNavbar">
-          <ul className="navbar-nav gap-3 align-items-center me-3 mb-2 mb-lg-0">
+        {/* ===== תפריט רספונסיבי =====
+            מובייל: עמודה (collapse)
+            דסקטופ: שורה ישרה (d-lg-flex) */}
+        <div
+          id="mainNavbar"
+          ref={collapseRef}
+          className="
+            collapse navbar-collapse
+            d-lg-flex flex-column flex-lg-row align-items-lg-center w-100
+            gap-3 gap-lg-0
+            p-3 p-lg-0 mt-2 mt-lg-0
+          "
+        >
+          {/* קישורים (ימין בדסקטופ) */}
+          <ul className="navbar-nav gap-3 align-items-center me-lg-3 mb-3 mb-lg-0">
             <li className="nav-item">
-              <NavLink to="/catalog" className={linkClass}>ביגוד</NavLink>
+              <NavLink to="/catalog" className={linkClass} onClick={closeNav}>
+                ביגוד
+              </NavLink>
             </li>
             <li className="nav-item">
-              <NavLink to="/faq" className={linkClass}>שו״ת</NavLink>
+              <NavLink to="/faq" className={linkClass} onClick={closeNav}>
+                שו״ת
+              </NavLink>
             </li>
             <li className="nav-item">
-              <NavLink to="/about" className={linkClass}>אודות</NavLink>
+              <NavLink to="/about" className={linkClass} onClick={closeNav}>
+                אודות
+              </NavLink>
             </li>
             <li className="nav-item">
-              <NavLink to="/contact" className={linkClass}>צור קשר</NavLink>
+              <NavLink to="/contact" className={linkClass} onClick={closeNav}>
+                צור קשר
+              </NavLink>
             </li>
           </ul>
 
-          {/* חיפוש דסקטופ */}
-          <div className="flex-grow-1 mx-lg-3" style={{ minWidth: 260, maxWidth: 520 }}>
+          {/* חיפוש (אמצע בדסקטופ) */}
+          <div className="flex-grow-1 mx-lg-3" style={{ minWidth: 320, maxWidth: 600 }}>
             <form className="d-flex align-items-center gap-2" role="search" onSubmit={onSubmit}>
               <label htmlFor="navSearch" className="visually-hidden">חיפוש</label>
               <div className="position-relative flex-grow-1">
@@ -169,7 +201,6 @@ export default function Navbar() {
                   aria-activedescendant={active >= 0 ? `nav-sugg-${active}` : undefined}
                 />
 
-                {/* הצעות דסקטופ */}
                 {open && list.length > 0 && (
                   <div
                     ref={panelRef}
@@ -225,6 +256,7 @@ export default function Navbar() {
                       onClick={() => {
                         navigate(`/catalog?query=${encodeURIComponent(q)}`);
                         setOpen(false);
+                        closeNav();
                       }}
                     >
                       הצג את כל התוצאות עבור “{q}”
@@ -236,152 +268,14 @@ export default function Navbar() {
             </form>
           </div>
 
-          {/* פעולות */}
-          <div className="d-flex align-items-center gap-2">
-            <NavLink to="/cart" className="btn btn-outline-dark">עגלה</NavLink>
-            <NavLink to="/account" className="btn btn-primary">אזור אישי</NavLink>
-          </div>
-        </div>
-
-        {/* Offcanvas – מובייל/טאבלט */}
-        <div
-          className="offcanvas offcanvas-end d-lg-none"
-          tabIndex="-1"
-          id="navOffcanvas"
-          aria-labelledby="navOffcanvasLabel"
-          dir="rtl"
-        >
-          <div className="offcanvas-header">
-            <h5 className="offcanvas-title" id="navOffcanvasLabel">תפריט</h5>
-            <button type="button" className="btn-close" data-bs-dismiss="offcanvas" aria-label="סגור"></button>
-          </div>
-
-          <div className="offcanvas-body d-flex flex-column gap-3">
-            {/* חיפוש מובייל */}
-            <form
-              className="d-flex align-items-center gap-2"
-              role="search"
-              onSubmit={(e) => {
-                onSubmit(e);
-                closeOffcanvas();
-              }}
-            >
-              <label htmlFor="mobileSearch" className="visually-hidden">חיפוש</label>
-              <div className="position-relative flex-grow-1">
-                <i
-                  className="bi bi-search position-absolute top-50 translate-middle-y"
-                  style={{ left: 12, opacity: 0.6 }}
-                  aria-hidden="true"
-                />
-                <input
-                  id="mobileSearch"
-                  className="form-control ps-5 py-2"
-                  type="search"
-                  placeholder="חיפוש פריטים…"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  onFocus={() => list.length && setOpen(true)}
-                  onKeyDown={onKeyDown}
-                />
-                {open && list.length > 0 && (
-                  <div
-                    className="list-group mt-2 mobile-suggest"
-                    role="listbox"
-                    aria-label="הצעות חיפוש"
-                    style={{ maxHeight: "40vh", overflowY: "auto", borderRadius: "0.5rem" }}
-                  >
-                    {list.map((item, i) => (
-                      <button
-                        key={item.id || `${item.type}-${i}`}
-                        className={`list-group-item list-group-item-action d-flex align-items-center gap-2 ${active === i ? "active" : ""}`}
-                        onMouseEnter={() => setActive(i)}
-                        onClick={() => {
-                          goTo(item);
-                          closeOffcanvas();
-                        }}
-                      >
-                        {item.thumb && (
-                          <img
-                            src={item.thumb}
-                            alt=""
-                            width="28"
-                            height="28"
-                            style={{ objectFit: "cover", borderRadius: 6 }}
-                            loading="lazy"
-                          />
-                        )}
-                        <span className="fw-semibold text-truncate">{item.title}</span>
-                        {item.meta && (
-                          <span className="ms-auto text-muted small text-truncate" style={{ maxWidth: 140 }}>
-                            {item.meta}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                    <button
-                      className="list-group-item list-group-item-action fw-semibold"
-                      onClick={() => {
-                        navigate(`/catalog?query=${encodeURIComponent(q)}`);
-                        setOpen(false);
-                        closeOffcanvas();
-                      }}
-                    >
-                      הצג את כל התוצאות עבור “{q}”
-                    </button>
-                  </div>
-                )}
-              </div>
-              <button className="btn btn-outline-secondary" type="submit">חפש</button>
-            </form>
-
-            {/* לינקים גדולים לטאץ' */}
-            <ul className="list-unstyled m-0">
-              {[
-                { to: "/catalog", label: "ביגוד" },
-                { to: "/faq", label: "שו״ת" },
-                { to: "/about", label: "אודות" },
-                { to: "/contact", label: "צור קשר" },
-              ].map((l) => (
-                <li key={l.to} className="mb-2">
-                  <NavLink
-                    to={l.to}
-                    className="btn btn-light w-100 py-3 fs-6"
-                    data-bs-dismiss="offcanvas"
-                    onClick={closeOffcanvas}
-                  >
-                    {l.label}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-
-            {/* CTA תחתון */}
-            <div className="mt-auto d-grid gap-2">
-              <NavLink
-                to="/account"
-                className="btn btn-primary btn-lg"
-                data-bs-dismiss="offcanvas"
-                onClick={closeOffcanvas}
-              >
-                אזור אישי
-              </NavLink>
-              <NavLink
-                to="/cart"
-                className="btn btn-outline-dark btn-lg"
-                data-bs-dismiss="offcanvas"
-                onClick={closeOffcanvas}
-              >
-                עגלה
-              </NavLink>
-              <a
-                href="tel:0545042443"
-                className="btn btn-outline-secondary btn-lg"
-                data-bs-dismiss="offcanvas"
-                onClick={closeOffcanvas}
-              >
-                📞 התקשרו עכשיו
-              </a>
-            </div>
+          {/* פעולות (שמאל בדסקטופ) */}
+          <div className="d-flex align-items-center gap-2 mt-3 mt-lg-0">
+            <NavLink to="/cart" className="btn btn-outline-dark" onClick={closeNav}>
+              עגלה
+            </NavLink>
+            <NavLink to="/account" className="btn btn-primary" onClick={closeNav}>
+              אזור אישי
+            </NavLink>
           </div>
         </div>
       </div>

@@ -1,43 +1,54 @@
 // src/pages/ProductDetail.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
+
 import LogoPlacementModal from "../components/LogoPlacementModal";
 import LogoUploadModal from "../components/LogoUploadModal";
 import ColorSwatches from "../components/ColorSwatches";
 import SizePicker from "../components/SizePicker";
-
 import { PRODUCTS } from "../lib/products";
 
-const LS_USER_LOGO_KEY = "karina:userLogo";              // לוגו של המשתמש (DataURL)
-const LS_PREVIEW_KEY = (slug) => `karina:preview:${slug}`; // הדמיה לכל מוצר
+const LS_USER_LOGO_KEY = "karina:userLogo";
+const LS_PREVIEW_KEY = (slug) => `karina:preview:${slug}`;
 
 export default function ProductDetail() {
   const [showUpload, setShowUpload] = useState(false);
   const { slug } = useParams();
+  const location = useLocation();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
 
   const [color, setColor] = useState(product?.colors?.[0] || "");
   const [size, setSize]   = useState(product?.sizes?.[0] || "");
   const [qty, setQty]     = useState(1);
 
-  // מודאלים + הדמיה
   const [showLogoModal, setShowLogoModal] = useState(false);
-  const [logoDataUrl, setLogoDataUrl] = useState(null);   // הלוגו של המשתמש (מקומי / שמור)
-  const [previewImage, setPreviewImage] = useState(null); // ההדמיה שנוצרה ושמורה
+  const [logoDataUrl, setLogoDataUrl] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
 
-  // בעת החלפת מוצר: אתחול בחירות וטעינת מידע שמור מה-LocalStorage
+  // canonical דינמי
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://example.com";
+  const canonical = `${origin}/product/${slug}`;
+
+  // SEO helpers
+  const colorsList = product?.colors?.slice(0, 4)?.join(" / ") || "";
+  const sizesList  = product?.sizes?.slice(0, 4)?.join(", ") || "";
+  const ogImage = previewImage || product?.img;
+  const description = product
+    ? `חולצת ${product.name} להדפסה אישית. צבעים: ${colorsList}. מידות: ${sizesList}. הזמנה מהירה מקארינה – הדפסה על חולצות ושירות לכל הארץ.`
+    : "המוצר לא נמצא.";
+
+  // בעת החלפת מוצר: אתחול בחירות וטעינת LocalStorage
   useEffect(() => {
     setColor(product?.colors?.[0] || "");
     setSize(product?.sizes?.[0] || "");
     setQty(1);
 
-    // טען הדמיה שמורה למוצר
     try {
       const savedPreview = localStorage.getItem(LS_PREVIEW_KEY(product?.slug || ""));
       setPreviewImage(savedPreview || null);
     } catch { setPreviewImage(null); }
 
-    // טען לוגו שמור של המשתמש (זמין חוצה מוצרים)
     try {
       const savedLogo = localStorage.getItem(LS_USER_LOGO_KEY);
       setLogoDataUrl(savedLogo || null);
@@ -50,6 +61,12 @@ export default function ProductDetail() {
   if (!product) {
     return (
       <div className="container py-4">
+        <Helmet>
+          <title>המוצר לא נמצא | קארינה</title>
+          <meta name="robots" content="noindex" />
+          <link rel="canonical" href={`${origin}${location.pathname}`} />
+        </Helmet>
+
         <div className="alert alert-warning">המוצר לא נמצא</div>
         <Link className="btn btn-outline-primary" to="/catalog">חזרה לקטלוג</Link>
       </div>
@@ -60,18 +77,15 @@ export default function ProductDetail() {
   function onSavePlacement({ dataUrl }) {
     setPreviewImage(dataUrl);
     setShowLogoModal(false);
-    // שמור הדמיה למוצר
     try { localStorage.setItem(LS_PREVIEW_KEY(product.slug), dataUrl); } catch {}
   }
 
   function addToCart() {
-    // TODO: לחבר לעגלת הקניות
     alert(`נוסף לעגלה: ${product.name} - ${color} / ${size} x${qty}`);
   }
 
   const canAdd = Boolean(color) && Boolean(size) && qty > 0;
 
-  // איפוס לוגו/הדמיה שמורים
   function resetSaved() {
     try {
       localStorage.removeItem(LS_USER_LOGO_KEY);
@@ -81,8 +95,63 @@ export default function ProductDetail() {
     setPreviewImage(null);
   }
 
+  // JSON-LD Product + Breadcrumbs
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    image: ogImage ? [ogImage] : [],
+    description,
+    sku: product.slug,
+    brand: { "@type": "Brand", name: "Karina" },
+    offers: {
+      "@type": "Offer",
+      url: canonical,
+      priceCurrency: "ILS",
+      price: String(product.price),
+      availability: "https://schema.org/InStock"
+    }
+  };
+
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "דף הבית", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "קטלוג", item: `${origin}/catalog` },
+      { "@type": "ListItem", position: 3, name: product.name, item: canonical }
+    ]
+  };
+
   return (
     <div className="container py-4">
+      {/* SEO */}
+      <Helmet prioritizeSeoTags>
+        <title>{`${product.name} | קארינה - הדפסה על חולצות`}</title>
+        <meta name="description" content={description} />
+        <link rel="canonical" href={canonical} />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="product" />
+        <meta property="og:site_name" content="Karina" />
+        <meta property="og:title" content={`${product.name} | קארינה`} />
+        <meta property="og:description" content={description} />
+        {ogImage && <meta property="og:image" content={ogImage} />}
+        <meta property="og:url" content={canonical} />
+        <meta property="product:price:amount" content={String(product.price)} />
+        <meta property="product:price:currency" content="ILS" />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={`${product.name} | קארינה`} />
+        <meta name="twitter:description" content={description} />
+        {ogImage && <meta name="twitter:image" content={ogImage} />}
+
+        {/* JSON-LD */}
+        <script type="application/ld+json">{JSON.stringify(productJsonLd)}</script>
+        <script type="application/ld+json">{JSON.stringify(breadcrumbJsonLd)}</script>
+      </Helmet>
+
       <div className="row g-4">
         {/* תצוגת פריט / הדמיה */}
         <div className="col-12 col-lg-6">
@@ -118,19 +187,11 @@ export default function ProductDetail() {
           <small className="text-muted d-block mb-3">לא כולל משלוח</small>
 
           <div className="mb-3">
-            <ColorSwatches
-              colors={product.colors}
-              value={color}
-              onChange={setColor}
-            />
+            <ColorSwatches colors={product.colors} value={color} onChange={setColor} />
           </div>
 
           <div className="mb-3">
-            <SizePicker
-              sizes={product.sizes}
-              value={size}
-              onChange={setSize}
-            />
+            <SizePicker sizes={product.sizes} value={size} onChange={setSize} />
           </div>
 
           <div className="mb-3">
@@ -154,7 +215,6 @@ export default function ProductDetail() {
               העלה לוגו
             </button>
 
-            {/* אם יש לוגו שמור – אפשר לקפוץ ישר למודאל ההצבה */}
             <button
               type="button"
               className="btn btn-outline-primary"
@@ -193,12 +253,11 @@ export default function ProductDetail() {
       <LogoUploadModal
         show={showUpload}
         onClose={() => setShowUpload(false)}
-        onConfirm={(dataUrl /*, file */) => {
-          // שמור לוגו ללקוח
+        onConfirm={(dataUrl) => {
           try { localStorage.setItem(LS_USER_LOGO_KEY, dataUrl); } catch {}
           setLogoDataUrl(dataUrl);
           setShowUpload(false);
-          setShowLogoModal(true); // אחרי העלאה – עבור ישר להצבה
+          setShowLogoModal(true);
         }}
       />
 

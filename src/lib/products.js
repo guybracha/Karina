@@ -7,6 +7,7 @@ import yellow from "../img/safety/yellowVest.png";
 import orange from "../img/safety/orangeVest.png";
 import manager from "../img/safety/manager.png";
 import cargo from "../img/work/cargoPants.png";
+import kenguru from "../img/work/kenguru.png";
 
 export const PRODUCTS = [
   {
@@ -71,7 +72,7 @@ export const PRODUCTS = [
   },
   {
     slug: "cargo-pants",
-    name: "מכנסי קארגו לעבודה",
+    name: 'מכנסי דגמ"ח לעבודה',
     price: 110,
     img: cargo,
     colors: ["חאקי", "שחור", "כחול"],
@@ -79,4 +80,14 @@ export const PRODUCTS = [
     category: "workwear",
     season: "כל השנה",
   },
+  {
+    slug: "kenguru",
+    name: 'חולצת קנגורו לעבודה',
+    price: 95,
+    img: kenguru,
+    colors: ["כחול", "שחור", "אפור"],
+    sizes: ["S", "M", "L", "XL", "XXL"],
+    category: "workwear",
+    season: "כל השנה",
+  }
 ];
