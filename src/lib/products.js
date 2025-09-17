@@ -8,6 +8,8 @@ import orange from "../img/safety/orangeVest.png";
 import manager from "../img/safety/manager.png";
 import cargo from "../img/work/cargoPants.png";
 import kenguru from "../img/work/kenguru.png";
+import yellowBack from "../img/safety/yellowVestBack.png";
+import orangeBack from "../img/safety/orangeVestBack.png";
 
 export const PRODUCTS = [
   {
@@ -45,6 +47,7 @@ export const PRODUCTS = [
     name: "אפוד זוהר צהוב",
     price: 30,
     img: yellow,
+    backImg: yellowBack, // צד אחורי
     colors: ["צהוב"],
     sizes: ["M", "L", "XL"],
     category: "safety",
@@ -55,6 +58,7 @@ export const PRODUCTS = [
     name: "אפוד זוהר כתום",
     price: 30,
     img: orange,
+    backImg: orangeBack, // צד אחורי
     colors: ["כתום"],
     sizes: ["M", "L", "XL"],
     category: "safety",

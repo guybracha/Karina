@@ -18,13 +18,16 @@ export default function ProductDetail() {
   const location = useLocation();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
 
-  const [color, setColor] = useState(product?.colors?.[0] || "");
-  const [size, setSize]   = useState(product?.sizes?.[0] || "");
-  const [qty, setQty]     = useState(1);
+  const [color, setColor]   = useState(product?.colors?.[0] || "");
+  const [size, setSize]     = useState(product?.sizes?.[0] || "");
+  const [qty, setQty]       = useState(1);
 
   const [showLogoModal, setShowLogoModal] = useState(false);
-  const [logoDataUrl, setLogoDataUrl] = useState(null);
-  const [previewImage, setPreviewImage] = useState(null);
+  const [logoDataUrl, setLogoDataUrl]     = useState(null);
+  const [previewImage, setPreviewImage]   = useState(null);
+
+  // צד מוצג: 'front' | 'back'
+  const [side, setSide] = useState("front");
 
   // canonical דינמי
   const origin = typeof window !== "undefined" ? window.location.origin : "https://example.com";
@@ -33,7 +36,10 @@ export default function ProductDetail() {
   // SEO helpers
   const colorsList = product?.colors?.slice(0, 4)?.join(" / ") || "";
   const sizesList  = product?.sizes?.slice(0, 4)?.join(", ") || "";
-  const ogImage = previewImage || product?.img;
+  // תמונה שמוצגת כרגע (לפי צד). אם אין backImg – נשתמש ב-front.
+  const baseImageForSide = side === "front" ? product?.img : (product?.backImg || product?.img);
+  const shownImage = previewImage || baseImageForSide;
+
   const description = product
     ? `חולצת ${product.name} להדפסה אישית. צבעים: ${colorsList}. מידות: ${sizesList}. הזמנה מהירה מקארינה – הדפסה על חולצות ושירות לכל הארץ.`
     : "המוצר לא נמצא.";
@@ -56,6 +62,7 @@ export default function ProductDetail() {
 
     setShowLogoModal(false);
     setShowUpload(false);
+    setSide("front"); // אתחול לצד קדמי במעבר בין מוצרים
   }, [product]);
 
   if (!product) {
@@ -100,7 +107,7 @@ export default function ProductDetail() {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
-    image: ogImage ? [ogImage] : [],
+    image: shownImage ? [shownImage] : [],
     description,
     sku: product.slug,
     brand: { "@type": "Brand", name: "Karina" },
@@ -123,6 +130,9 @@ export default function ProductDetail() {
     ]
   };
 
+  // אזור הדפסה לפי צד (אם תרצה בעתיד backPrintArea נפרד)
+  const shownPrintArea = side === "front" ? product.printArea : (product.backPrintArea || product.printArea);
+
   return (
     <div className="container py-4">
       {/* SEO */}
@@ -136,7 +146,7 @@ export default function ProductDetail() {
         <meta property="og:site_name" content="Karina" />
         <meta property="og:title" content={`${product.name} | קארינה`} />
         <meta property="og:description" content={description} />
-        {ogImage && <meta property="og:image" content={ogImage} />}
+        {shownImage && <meta property="og:image" content={shownImage} />}
         <meta property="og:url" content={canonical} />
         <meta property="product:price:amount" content={String(product.price)} />
         <meta property="product:price:currency" content="ILS" />
@@ -145,7 +155,7 @@ export default function ProductDetail() {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={`${product.name} | קארינה`} />
         <meta name="twitter:description" content={description} />
-        {ogImage && <meta name="twitter:image" content={ogImage} />}
+        {shownImage && <meta name="twitter:image" content={shownImage} />}
 
         {/* JSON-LD */}
         <script type="application/ld+json">{JSON.stringify(productJsonLd)}</script>
@@ -155,9 +165,31 @@ export default function ProductDetail() {
       <div className="row g-4">
         {/* תצוגת פריט / הדמיה */}
         <div className="col-12 col-lg-6">
+          {/* מתג צד קדמי/אחורי */}
+          {(product.img || product.backImg) && (
+            <div className="btn-group mb-2" role="group" aria-label="בחר צד">
+              <button
+                type="button"
+                className={`btn btn-sm ${side === "front" ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => setSide("front")}
+              >
+                צד קדמי
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${side === "back" ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => setSide("back")}
+                disabled={!product.backImg}
+                title={product.backImg ? "" : "אין תמונת צד אחורי"}
+              >
+                צד אחורי
+              </button>
+            </div>
+          )}
+
           <div className="border rounded-4 p-2 bg-white" style={{ minHeight: 480 }}>
             <img
-              src={previewImage || product.img}
+              src={shownImage}
               alt={product.name}
               className="img-fluid d-block mx-auto"
               style={{ maxHeight: 520, objectFit: "contain" }}
@@ -166,12 +198,15 @@ export default function ProductDetail() {
 
           {/* פס עזר: סטטוס שמירה + פעולה */}
           <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <span className="badge text-bg-light">תצוגה: {side === "front" ? "קדמי" : "אחורי"}</span>
+
             {logoDataUrl ? (
               <span className="badge text-bg-success">לוגו שמור ללקוח</span>
             ) : (
               <span className="badge text-bg-secondary">אין לוגו שמור</span>
             )}
             {previewImage && <span className="badge text-bg-primary">הדמיה שמורה למוצר</span>}
+
             {(logoDataUrl || previewImage) && (
               <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>
                 איפוס לוגו/הדמיה שמורים
@@ -266,8 +301,8 @@ export default function ProductDetail() {
         show={showLogoModal}
         onClose={() => setShowLogoModal(false)}
         onSave={onSavePlacement}
-        baseImageUrl={product.img}
-        printArea={product.printArea}
+        baseImageUrl={baseImageForSide}
+        printArea={shownPrintArea}
         logoDataUrl={logoDataUrl}
       />
 
