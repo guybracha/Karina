@@ -6,7 +6,10 @@ import LogoUploadModal from "../components/LogoUploadModal";
 import ColorSwatches from "../components/ColorSwatches";
 import SizePicker from "../components/SizePicker";
 
-import { PRODUCTS } from "../lib/products";  // ✅ מקור אחד למוצרים
+import { PRODUCTS } from "../lib/products";
+
+const LS_USER_LOGO_KEY = "karina:userLogo";              // לוגו של המשתמש (DataURL)
+const LS_PREVIEW_KEY = (slug) => `karina:preview:${slug}`; // הדמיה לכל מוצר
 
 export default function ProductDetail() {
   const [showUpload, setShowUpload] = useState(false);
@@ -19,16 +22,27 @@ export default function ProductDetail() {
 
   // מודאלים + הדמיה
   const [showLogoModal, setShowLogoModal] = useState(false);
-  const [logoDataUrl, setLogoDataUrl] = useState(null);
-  const [previewImage, setPreviewImage] = useState(null);
+  const [logoDataUrl, setLogoDataUrl] = useState(null);   // הלוגו של המשתמש (מקומי / שמור)
+  const [previewImage, setPreviewImage] = useState(null); // ההדמיה שנוצרה ושמורה
 
-  // אתחול/רענון בחירות כשמחליפים מוצר
+  // בעת החלפת מוצר: אתחול בחירות וטעינת מידע שמור מה-LocalStorage
   useEffect(() => {
     setColor(product?.colors?.[0] || "");
     setSize(product?.sizes?.[0] || "");
     setQty(1);
-    setPreviewImage(null);
-    setLogoDataUrl(null);
+
+    // טען הדמיה שמורה למוצר
+    try {
+      const savedPreview = localStorage.getItem(LS_PREVIEW_KEY(product?.slug || ""));
+      setPreviewImage(savedPreview || null);
+    } catch { setPreviewImage(null); }
+
+    // טען לוגו שמור של המשתמש (זמין חוצה מוצרים)
+    try {
+      const savedLogo = localStorage.getItem(LS_USER_LOGO_KEY);
+      setLogoDataUrl(savedLogo || null);
+    } catch { setLogoDataUrl(null); }
+
     setShowLogoModal(false);
     setShowUpload(false);
   }, [product]);
@@ -42,17 +56,30 @@ export default function ProductDetail() {
     );
   }
 
+  // שמירת ההדמיה מהמודאל
   function onSavePlacement({ dataUrl }) {
     setPreviewImage(dataUrl);
     setShowLogoModal(false);
+    // שמור הדמיה למוצר
+    try { localStorage.setItem(LS_PREVIEW_KEY(product.slug), dataUrl); } catch {}
   }
 
   function addToCart() {
-    // TODO: חבר לעגלת הקניות (CartContext / api.cartAdd)
+    // TODO: לחבר לעגלת הקניות
     alert(`נוסף לעגלה: ${product.name} - ${color} / ${size} x${qty}`);
   }
 
   const canAdd = Boolean(color) && Boolean(size) && qty > 0;
+
+  // איפוס לוגו/הדמיה שמורים
+  function resetSaved() {
+    try {
+      localStorage.removeItem(LS_USER_LOGO_KEY);
+      localStorage.removeItem(LS_PREVIEW_KEY(product.slug));
+    } catch {}
+    setLogoDataUrl(null);
+    setPreviewImage(null);
+  }
 
   return (
     <div className="container py-4">
@@ -66,6 +93,21 @@ export default function ProductDetail() {
               className="img-fluid d-block mx-auto"
               style={{ maxHeight: 520, objectFit: "contain" }}
             />
+          </div>
+
+          {/* פס עזר: סטטוס שמירה + פעולה */}
+          <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
+            {logoDataUrl ? (
+              <span className="badge text-bg-success">לוגו שמור ללקוח</span>
+            ) : (
+              <span className="badge text-bg-secondary">אין לוגו שמור</span>
+            )}
+            {previewImage && <span className="badge text-bg-primary">הדמיה שמורה למוצר</span>}
+            {(logoDataUrl || previewImage) && (
+              <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>
+                איפוס לוגו/הדמיה שמורים
+              </button>
+            )}
           </div>
         </div>
 
@@ -102,8 +144,8 @@ export default function ProductDetail() {
             />
           </div>
 
-          {/* העלאת לוגו -> מודאל העלאה ואז מודאל הצבה */}
-          <div className="d-flex align-items-center gap-2 mb-3">
+          {/* העלאת לוגו + פתיחת הצבה */}
+          <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
             <button
               type="button"
               className="btn btn-outline-secondary"
@@ -111,6 +153,18 @@ export default function ProductDetail() {
             >
               העלה לוגו
             </button>
+
+            {/* אם יש לוגו שמור – אפשר לקפוץ ישר למודאל ההצבה */}
+            <button
+              type="button"
+              className="btn btn-outline-primary"
+              disabled={!logoDataUrl}
+              onClick={() => setShowLogoModal(true)}
+              title={logoDataUrl ? "" : "אין לוגו שמור"}
+            >
+              פתח הצבה עם הלוגו שלי
+            </button>
+
             {previewImage && <span className="small text-success">יש הדמיה שמורה</span>}
           </div>
 
@@ -135,17 +189,20 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      {/* מודאלים */}
+      {/* מודאל העלאת לוגו */}
       <LogoUploadModal
         show={showUpload}
         onClose={() => setShowUpload(false)}
         onConfirm={(dataUrl /*, file */) => {
+          // שמור לוגו ללקוח
+          try { localStorage.setItem(LS_USER_LOGO_KEY, dataUrl); } catch {}
           setLogoDataUrl(dataUrl);
           setShowUpload(false);
-          setShowLogoModal(true);
+          setShowLogoModal(true); // אחרי העלאה – עבור ישר להצבה
         }}
       />
 
+      {/* מודאל הצבת לוגו על המוצר */}
       <LogoPlacementModal
         show={showLogoModal}
         onClose={() => setShowLogoModal(false)}

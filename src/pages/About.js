@@ -21,8 +21,8 @@ export default function About() {
       </ul>
 
       <h5 className="mt-5 mb-3">פרטי קשר</h5>
-      <p className="mb-1">📍 משרדי החברה: תל אביב, ישראל</p>
-      <p className="mb-1">📞 טלפון: 03-1234567</p>
+      <p className="mb-1">📍 צבי הנחל 4, פארק תעשיות עמק חפר</p>
+      <p className="mb-1">📞 טלפון: 054-5042443</p>
       <p className="mb-1">✉️ דוא״ל: info@karina.co.il</p>
     </div>
   );

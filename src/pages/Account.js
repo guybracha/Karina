@@ -3,7 +3,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 
 export default function Account() {
-  // כאן בעתיד תשלוף את פרטי המשתמש מה־Auth Context או Firebase
+  // בעתיד: למשוך מ-Auth/Firebase
   const user = {
     name: "גיא ברכה",
     email: "guy@example.com",
@@ -15,6 +15,17 @@ export default function Account() {
     { id: "ORD123", date: "2025-09-01", total: 250, status: "נשלח" },
     { id: "ORD122", date: "2025-08-12", total: 120, status: "הושלם" },
   ];
+
+  const statusBadge = (status) => {
+    const map = {
+      "נשלח": "bg-success",
+      "הושלם": "bg-primary",
+      "בטיפול": "bg-warning text-dark",
+      "התקבלה": "bg-info text-dark",
+      "בוטלה": "bg-danger",
+    };
+    return `badge ${map[status] || "bg-secondary"}`;
+  };
 
   return (
     <div className="container py-5">
@@ -32,7 +43,7 @@ export default function Account() {
           <div>
             <h5 className="mb-1">{user.name}</h5>
             <p className="mb-1 text-muted">{user.email}</p>
-            <small className="text-muted">משתמש מאז: {user.joined}</small>
+            <small className="text-muted">משתמש מאז: {new Date(user.joined).toLocaleDateString("he-IL")}</small>
           </div>
         </div>
       </div>
@@ -48,15 +59,25 @@ export default function Account() {
                 <th>תאריך</th>
                 <th>סה״כ</th>
                 <th>סטטוס</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
-                  <td>{o.id}</td>
-                  <td>{o.date}</td>
+                  <td className="fw-semibold">
+                    <Link to={`/orders/${o.id}`} className="link-primary text-decoration-none">
+                      {o.id}
+                    </Link>
+                  </td>
+                  <td>{new Date(o.date).toLocaleDateString("he-IL")}</td>
                   <td>{o.total} ₪</td>
-                  <td>{o.status}</td>
+                  <td><span className={statusBadge(o.status)}>{o.status}</span></td>
+                  <td className="text-end">
+                    <Link to={`/orders/${o.id}`} className="btn btn-sm btn-outline-primary">
+                      פרטי הזמנה
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>

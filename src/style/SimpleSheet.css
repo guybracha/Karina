@@ -1,0 +1,23 @@
+.sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1080; /* מעל ה-navbar */
+}
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+}
+.sheet-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #fff;
+  max-width: 100%;
+  box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  transition: transform .22s ease;
+  border-radius: .75rem 0 0 .75rem; /* יפה ב-RTL מצד ימין */
+  overflow: auto;
+}
+@media (max-width: 576px) {
+  .sheet-panel { border-radius: .75rem 0 0 .75rem; }
+}

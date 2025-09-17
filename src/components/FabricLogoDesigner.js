@@ -12,39 +12,43 @@ export default function FabricLogoDesigner({
   const canvasRef = useRef(null);
   const [bgImg, setBgImg] = useState(null);
 
+  const W = 600, H = 600;
+
   // יצירת קנבס
   useEffect(() => {
     const c = new Canvas(canvasEl.current, {
-      width: 600,
-      height: 600,
+      width: W,
+      height: H,
       backgroundColor: "#fff",
       preserveObjectStacking: true,
     });
     canvasRef.current = c;
-    return () => c.dispose();
+    return () => { try { c.dispose(); } catch {} };
   }, []);
 
   // טעינת תמונת בסיס
   useEffect(() => {
-    if (!canvasRef.current || !baseImageUrl) return;
+    const c = canvasRef.current;
+    if (!c || !baseImageUrl) return;
 
-    FabricImage.fromURL(
-      baseImageUrl,
-      (img) => {
-        const scale = 600 / img.width; // img.width מוגדר לאחר הטעינה
-        img.set({
-          selectable: false,
-          evented: false,
-          scaleX: scale,
-          scaleY: scale,
-          left: 0,
-          top: 0,
-        });
-        setBgImg(img);
-        canvasRef.current.setBackgroundImage(img, canvasRef.current.renderAll.bind(canvasRef.current));
-      },
-      { crossOrigin: "anonymous" }
-    );
+    (async () => {
+      const img = await FabricImage.fromURL(String(baseImageUrl), { crossOrigin: "anonymous" });
+      const el = img.getElement?.();
+      const iw = img.width || el?.naturalWidth || W;
+      const ih = img.height || el?.naturalHeight || H;
+      const scale = Math.min(W / iw, H / ih);
+
+      img.set({
+        selectable: false,
+        evented: false,
+        scaleX: scale,
+        scaleY: scale,
+        left: (W - iw * scale) / 2,
+        top:  (H - ih * scale) / 2,
+      });
+      setBgImg(img);
+      c.setBackgroundImage(img, c.renderAll.bind(c));
+    })().catch(console.error);
   }, [baseImageUrl]);
 
   // ציור/עדכון אזור הדפסה
@@ -52,17 +56,21 @@ export default function FabricLogoDesigner({
     const c = canvasRef.current;
     if (!c) return;
 
-    // הסר כל מלבן שסימנו כאזור הדפסה
-    c.getObjects().forEach((o) => {
+    // הסר ריבועי הדפסה קודמים
+    c.getObjects().forEach(o => {
       if (o._isPrintArea) c.remove(o);
     });
 
     if (printArea && showPrintArea && bgImg) {
-      const scale = 600 / bgImg.width;
+      const el = bgImg.getElement?.();
+      const iw = bgImg.width || el?.naturalWidth || W;
+      const ih = bgImg.height || el?.naturalHeight || H;
+      const scale = Math.min(W / iw, H / ih);
+
       const rect = new Rect({
-        left: printArea.x * scale,
-        top: printArea.y * scale,
-        width: printArea.w * scale,
+        left: bgImg.left + printArea.x * scale,
+        top:  bgImg.top  + printArea.y * scale,
+        width:  printArea.w * scale,
         height: printArea.h * scale,
         fill: "rgba(0, 120, 255, 0.08)",
         stroke: "rgba(0, 120, 255, 0.6)",
@@ -72,7 +80,7 @@ export default function FabricLogoDesigner({
       });
       rect._isPrintArea = true;
       c.add(rect);
-      rect.moveTo(1); // מעל הרקע ומתחת ללוגו
+      rect.moveTo(1);
       c.renderAll();
     }
   }, [printArea, showPrintArea, bgImg]);
@@ -82,39 +90,43 @@ export default function FabricLogoDesigner({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      FabricImage.fromURL(reader.result, (logo) => {
-        const initialScale = 250 / logo.width;
-        logo.set({
-          left: 300,
-          top: 300,
-          originX: "center",
-          originY: "center",
-          scaleX: initialScale,
-          scaleY: initialScale,
-          cornerStyle: "circle",
-          transparentCorners: false,
-          borderColor: "#0d6efd",
-          cornerColor: "#0d6efd",
-          padding: 4,
-        });
+    reader.onload = async () => {
+      const logo = await FabricImage.fromURL(String(reader.result));
+      const el = logo.getElement?.();
+      const lw = logo.width || el?.naturalWidth || 300;
+      const initialScale = Math.min(250 / lw, 1);
 
-        // הגבלת הדפסה לתוך printArea (אם קיים)
-        if (printArea && bgImg) {
-          const scale = 600 / bgImg.width;
-          const clip = new Rect({
-            left: printArea.x * scale,
-            top: printArea.y * scale,
-            width: printArea.w * scale,
-            height: printArea.h * scale,
-            absolutePositioned: true,
-          });
-          logo.clipPath = clip;
-        }
-
-        canvasRef.current.add(logo).setActiveObject(logo);
-        canvasRef.current.renderAll();
+      logo.set({
+        left: W / 2,
+        top: H / 2,
+        originX: "center",
+        originY: "center",
+        scaleX: initialScale,
+        scaleY: initialScale,
+        cornerStyle: "circle",
+        transparentCorners: false,
+        borderColor: "#0d6efd",
+        cornerColor: "#0d6efd",
+        padding: 4,
       });
+
+      if (printArea && bgImg) {
+        const elBg = bgImg.getElement?.();
+        const iw = bgImg.width || elBg?.naturalWidth || W;
+        const ih = bgImg.height || elBg?.naturalHeight || H;
+        const scale = Math.min(W / iw, H / ih);
+
+        logo.clipPath = new Rect({
+          left: bgImg.left + printArea.x * scale,
+          top:  bgImg.top  + printArea.y * scale,
+          width:  printArea.w * scale,
+          height: printArea.h * scale,
+          absolutePositioned: true,
+        });
+      }
+
+      canvasRef.current.add(logo).setActiveObject(logo);
+      canvasRef.current.renderAll();
     };
     reader.readAsDataURL(file);
   }
@@ -133,9 +145,7 @@ export default function FabricLogoDesigner({
   // הצג/הסתר אזור הדפסה
   function togglePrintArea() {
     const c = canvasRef.current;
-    c.getObjects().forEach((o) => {
-      if (o._isPrintArea) o.set("visible", !o.visible);
-    });
+    c.getObjects().forEach(o => { if (o._isPrintArea) o.set("visible", !o.visible); });
     c.renderAll();
   }
 
@@ -164,7 +174,7 @@ export default function FabricLogoDesigner({
       </div>
 
       <div className="border rounded shadow-sm p-2 bg-white">
-        <canvas ref={canvasEl} />
+        <canvas ref={canvasEl} width={W} height={H} style={{ width: "100%", height: "auto", display: "block" }} />
       </div>
 
       <p className="text-muted small mt-2">

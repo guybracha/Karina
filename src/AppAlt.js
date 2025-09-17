@@ -1,6 +1,6 @@
 // src/AppAlt.jsx
 import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Helmet, HelmetProvider } from "react-helmet-async";
 
 // עיצוב כללי (התאם למסלול אצלך)
@@ -10,6 +10,7 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 
 import "./style/Site.css";
+import "bootstrap-icons/font/bootstrap-icons.css";
 
 // דפים חדשים
 import HomePage from "./pages/HomePage";
@@ -22,23 +23,31 @@ import FAQ from "./pages/FAQ";
 import About from "./pages/About";
 import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
+import OrderDetail from "./pages/OrderDetail";
+import Orders from "./pages/Orders";
 
+import { OrdersProvider } from "./contexts/OrdersContext";
 // אם אתה משתמש ב-Bootstrap JS (לא חובה אם כבר נטען במקום אחר)
-// import "bootstrap/dist/js/bootstrap.bundle.min.js";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
 /** מגלגל לראש בכל ניווט */
+
 function ScrollToTop() {
+  const { pathname, search, hash } = useLocation();
+
   React.useEffect(() => {
-    const handler = () => window.scrollTo({ top: 0, behavior: "smooth" });
-    window.addEventListener("hashchange", handler, false);
-    return () => window.removeEventListener("hashchange", handler, false);
-  }, []);
+    // אם יש עוגן (#section) תן לדפדפן לגלול לעוגן בעצמו
+    if (hash) return;
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [pathname, search, hash]);
+
   return null;
 }
 
 export default function AppAlt() {
   return (
     <HelmetProvider>
+      <OrdersProvider>
       <BrowserRouter>
         <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
           <title>Karina — Preview Mode</title>
@@ -84,12 +93,15 @@ export default function AppAlt() {
             <Route path="/faq" element={<FAQ />} />
             <Route path="/about" element={<About />} />
             <Route path="/account" element={<Account />} />
+            <Route path="/orders/:orderId" element={<OrderDetail />} />
+            <Route path="/orders" element={<Orders />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
 
         <Footer />
       </BrowserRouter>
+      </OrdersProvider>
     </HelmetProvider>
   );
 }
