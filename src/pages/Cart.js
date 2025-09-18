@@ -1,31 +1,69 @@
 // src/pages/Cart.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+const LS_CART_KEY = "karina:cart";
 const LS_PREVIEW_KEY = (slug) => `karina:preview:${slug}`;
 
 export default function Cart() {
-  // דמו — בעתיד תחליף ב־CartContext / LocalStorage של העגלה
-  const [items, setItems] = useState([
-    { id: 1, slug: "hoodie-navy",   name: "קפוצ׳ון נייבי",     price: 120, qty: 2, color: "שחור", size: "M" },
-    { id: 2, slug: "tshirt-gray",   name: "חולצת טריקו אפורה", price: 35,  qty: 1, color: "אפור",  size: "L" },
-    // הוסף כאן פריטים נוספים עם slug תואם לקטלוג שלך
-  ]);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // --- LS helpers ---
+  function readCartFromLS() {
+    try {
+      const raw = localStorage.getItem(LS_CART_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveCartToLS(next) {
+    try {
+      localStorage.setItem(LS_CART_KEY, JSON.stringify(next));
+      // שידור לכל האפליקציה (Navbar וכו׳)
+      window.dispatchEvent(new Event("karina:cartUpdated"));
+    } catch {}
+  }
+
+  // טוען מה־LS ומסתנכרן עם שינויים חיצוניים
+  useEffect(() => {
+    setItems(readCartFromLS());
+
+    function onStorage(e) {
+      if (e.key === LS_CART_KEY) setItems(readCartFromLS());
+    }
+    function onCustom() {
+      setItems(readCartFromLS());
+    }
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("karina:cartUpdated", onCustom);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("karina:cartUpdated", onCustom);
+    };
+  }, []);
 
   function updateQty(id, newQty) {
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === id ? { ...it, qty: Math.max(1, Number(newQty) || 1) } : it
-      )
-    );
+    const qty = Math.max(1, Number(newQty) || 1);
+    setItems((prev) => {
+      const next = prev.map((it) => (it.id === id ? { ...it, qty } : it));
+      saveCartToLS(next);
+      return next;
+    });
   }
 
   function removeItem(id) {
-    setItems((prev) => prev.filter((it) => it.id !== id));
+    setItems((prev) => {
+      const next = prev.filter((it) => it.id !== id);
+      saveCartToLS(next);
+      return next;
+    });
   }
 
   const total = useMemo(
-    () => items.reduce((sum, it) => sum + it.price * it.qty, 0),
+    () => items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.qty || 0), 0),
     [items]
   );
 
@@ -36,6 +74,30 @@ export default function Cart() {
       return localStorage.getItem(LS_PREVIEW_KEY(it.slug));
     } catch {
       return null;
+    }
+  }
+
+  // התחלת תשלום: פנייה לשרת שיוצר סשן קופה ומחזיר URL
+  async function startCheckout() {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/checkout/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // שולחים רק מידע לוגי; המחיר הסופי יחושב בשרת
+        body: JSON.stringify({
+          items: items.map(({ slug, qty, color, size }) => ({ slug, qty, color, size })),
+        }),
+      });
+      if (!res.ok) throw new Error("Checkout request failed");
+      const { checkoutUrl } = await res.json();
+      if (!checkoutUrl) throw new Error("Missing checkoutUrl");
+      window.location.href = checkoutUrl;
+    } catch (err) {
+      console.error(err);
+      alert("אירעה שגיאה בהפניה לקופה. נסה שוב.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -101,8 +163,8 @@ export default function Cart() {
                           className="form-control form-control-sm w-auto"
                         />
                       </td>
-                      <td>{it.price} ₪</td>
-                      <td>{it.price * it.qty} ₪</td>
+                      <td>{Number(it.price).toLocaleString("he-IL")} ₪</td>
+                      <td>{(Number(it.price) * Number(it.qty)).toLocaleString("he-IL")} ₪</td>
                       <td>
                         <button
                           className="btn btn-sm btn-outline-danger"
@@ -123,9 +185,14 @@ export default function Cart() {
               המשך בקנייה
             </Link>
             <div className="text-end">
-              <h5>סה״כ לתשלום: {total} ₪</h5>
-              <button className="btn btn-primary btn-lg mt-2">
-                מעבר לתשלום
+              <h5>סה״כ לתשלום: {total.toLocaleString("he-IL")} ₪</h5>
+              <button
+                className="btn btn-primary btn-lg mt-2"
+                onClick={startCheckout}
+                disabled={loading || items.length === 0}
+                title={items.length === 0 ? "העגלה ריקה" : undefined}
+              >
+                {loading ? "מפנה לקופה..." : "מעבר לתשלום"}
               </button>
             </div>
           </div>

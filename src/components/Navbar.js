@@ -1,9 +1,13 @@
 // src/components/Navbar.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import logo from "../img/logo.png";
 import useDebounce from "../hooks/useDebounce";
 import { searchProducts } from "../lib/searchService";
+import { PRODUCTS } from "../lib/products";
+
+const LS_CART_KEY = "karina:cart";
+const LS_PREVIEW_KEY = (slug) => `karina:preview:${slug}`;
 
 export default function Navbar() {
   const [q, setQ] = useState("");
@@ -12,6 +16,10 @@ export default function Navbar() {
   const [active, setActive] = useState(-1);
   const debounced = useDebounce(q, 200);
 
+  // ▼ מצב עגלה
+  const [cart, setCart] = useState([]);
+  const [cartOpen, setCartOpen] = useState(false);
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -19,7 +27,10 @@ export default function Navbar() {
   const panelRef = useRef(null);
   const collapseRef = useRef(null);
 
-  // סגירת הקולאפס (Bootstrap bundle נטען ב-HTML)
+  const cartBtnRef = useRef(null);
+  const cartPanelRef = useRef(null);
+
+  // Bootstrap collapse close
   function closeNav() {
     const el = collapseRef.current;
     const bs = window?.bootstrap;
@@ -27,9 +38,73 @@ export default function Navbar() {
     bs.Collapse.getOrCreateInstance(el).hide();
   }
 
+  // ----- עגלה: קריאה/שמירה מ־LS -----
+  function readCartFromLS() {
+    try {
+      const raw = localStorage.getItem(LS_CART_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveCartToLS(next) {
+    try {
+      localStorage.setItem(LS_CART_KEY, JSON.stringify(next));
+      window.dispatchEvent(new Event("karina:cartUpdated"));
+    } catch {}
+  }
+  function removeFromCart(id) {
+    const next = readCartFromLS().filter((it) => it.id !== id);
+    saveCartToLS(next);
+    setCart(next);
+  }
+
+  useEffect(() => {
+    setCart(readCartFromLS());
+
+    // האזנה לשינויים מחלון אחר
+    function onStorage(e) {
+      if (e.key === LS_CART_KEY) setCart(readCartFromLS());
+    }
+    window.addEventListener("storage", onStorage);
+
+    // טריגר פנימי: window.dispatchEvent(new Event("karina:cartUpdated"))
+    function onCustom() {
+      setCart(readCartFromLS());
+    }
+    window.addEventListener("karina:cartUpdated", onCustom);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("karina:cartUpdated", onCustom);
+    };
+  }, []);
+
+  // סכימה
+  const cartCount = useMemo(
+    () => cart.reduce((sum, it) => sum + Number(it.qty || 0), 0),
+    [cart]
+  );
+  const cartTotal = useMemo(
+    () => cart.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.qty || 0), 0),
+    [cart]
+  );
+
+  // תצוגת תמונה לפריט
+  function getThumbForItem(it) {
+    try {
+      const preview = localStorage.getItem(LS_PREVIEW_KEY(it.slug || ""));
+      if (preview) return preview;
+    } catch {}
+    const p = PRODUCTS.find((x) => x.slug === it.slug);
+    return p?.img || "";
+  }
+
   // סגירה אוטומטית בכל שינוי מסלול
   useEffect(() => {
     setOpen(false);
+    setCartOpen(false);
     closeNav();
   }, [location.pathname]);
 
@@ -51,14 +126,13 @@ export default function Navbar() {
         setActive(-1);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [debounced]);
 
-  // סגירה בלחיצה מחוץ להצעות
+  // סגירה בלחיצה מחוץ להצעות/עגלה
   useEffect(() => {
     function onDocClick(e) {
+      // הצעות חיפוש
       if (
         panelRef.current &&
         !panelRef.current.contains(e.target) &&
@@ -66,6 +140,15 @@ export default function Navbar() {
         !inputRef.current.contains(e.target)
       ) {
         setOpen(false);
+      }
+      // עגלה
+      if (
+        cartPanelRef.current &&
+        !cartPanelRef.current.contains(e.target) &&
+        cartBtnRef.current &&
+        !cartBtnRef.current.contains(e.target)
+      ) {
+        setCartOpen(false);
       }
     }
     document.addEventListener("mousedown", onDocClick);
@@ -138,9 +221,7 @@ export default function Navbar() {
           <span className="navbar-toggler-icon"></span>
         </button>
 
-        {/* ===== תפריט רספונסיבי =====
-            מובייל: עמודה (collapse)
-            דסקטופ: שורה ישרה (d-lg-flex) */}
+        {/* ===== תפריט ===== */}
         <div
           id="mainNavbar"
           ref={collapseRef}
@@ -151,7 +232,7 @@ export default function Navbar() {
             p-3 p-lg-0 mt-2 mt-lg-0
           "
         >
-          {/* קישורים (ימין בדסקטופ) */}
+          {/* קישורים */}
           <ul className="navbar-nav gap-3 align-items-center me-lg-3 mb-3 mb-lg-0">
             <li className="nav-item">
               <NavLink to="/catalog" className={linkClass} onClick={closeNav}>
@@ -175,7 +256,7 @@ export default function Navbar() {
             </li>
           </ul>
 
-          {/* חיפוש (אמצע בדסקטופ) */}
+          {/* חיפוש */}
           <div className="flex-grow-1 mx-lg-3" style={{ minWidth: 320, maxWidth: 600 }}>
             <form className="d-flex align-items-center gap-2" role="search" onSubmit={onSubmit}>
               <label htmlFor="navSearch" className="visually-hidden">חיפוש</label>
@@ -268,11 +349,102 @@ export default function Navbar() {
             </form>
           </div>
 
-          {/* פעולות (שמאל בדסקטופ) */}
-          <div className="d-flex align-items-center gap-2 mt-3 mt-lg-0">
-            <NavLink to="/cart" className="btn btn-outline-dark" onClick={closeNav}>
+          {/* פעולות: עגלה + אזור אישי */}
+          <div className="d-flex align-items-center gap-2 mt-3 mt-lg-0 position-relative">
+            {/* כפתור עגלה */}
+            <button
+              ref={cartBtnRef}
+              type="button"
+              className="btn btn-outline-dark position-relative"
+              onClick={() => setCartOpen((v) => !v)}
+              aria-expanded={cartOpen}
+              aria-haspopup="true"
+              aria-controls="nav-cart-dropdown"
+              title="תצוגת עגלה"
+            >
               עגלה
-            </NavLink>
+              {cartCount > 0 && (
+                <span
+                  className="position-absolute top-0 start-0 translate-middle badge rounded-pill bg-danger"
+                  style={{ fontSize: 11 }}
+                >
+                  {cartCount}
+                </span>
+              )}
+            </button>
+
+            {/* Dropdown עגלה */}
+            {cartOpen && (
+              <div
+                ref={cartPanelRef}
+                id="nav-cart-dropdown"
+                className="dropdown-menu dropdown-menu-end show shadow"
+                style={{
+                  minWidth: 320,
+                  maxWidth: 380,
+                  top: "100%",
+                  insetInlineEnd: 0,
+                  marginTop: 8,
+                  zIndex: 1060,
+                }}
+                aria-label="עגלת קניות"
+              >
+                {cart.length === 0 ? (
+                  <div className="px-3 py-2 text-muted small">העגלה ריקה</div>
+                ) : (
+                  <>
+                    <ul className="list-unstyled mb-2" style={{ maxHeight: "50vh", overflowY: "auto" }}>
+                      {cart.slice(0, 6).map((it) => (
+                        <li key={it.id} className="px-3 py-2 d-flex align-items-center gap-2">
+                          <img
+                            src={getThumbForItem(it)}
+                            alt=""
+                            width="48"
+                            height="48"
+                            style={{ objectFit: "contain", background: "#fff", border: "1px solid rgba(0,0,0,.08)", borderRadius: 8 }}
+                          />
+                          <div className="flex-grow-1">
+                            <div className="small fw-semibold text-truncate">{it.name}</div>
+                            <div className="small text-muted text-truncate">
+                              {it.color} • {it.size}
+                            </div>
+                          </div>
+                          <div className="d-flex align-items-center gap-2">
+                            <div className="small text-nowrap">{it.qty}× {it.price} ₪</div>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              title="הסר מהעגלה"
+                              onClick={() => removeFromCart(it.id)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="dropdown-divider" />
+                    <div className="px-3 py-2 d-flex justify-content-between align-items-center">
+                      <strong>סה״כ:</strong>
+                      <span className="fw-bold">{cartTotal} ₪</span>
+                    </div>
+                    <div className="px-3 pb-2 d-flex gap-2">
+                      <NavLink
+                        to="/cart"
+                        className="btn btn-primary w-100"
+                        onClick={() => {
+                          setCartOpen(false);
+                          closeNav();
+                        }}
+                      >
+                        לצפייה בעגלה
+                      </NavLink>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <NavLink to="/account" className="btn btn-primary" onClick={closeNav}>
               אזור אישי
             </NavLink>

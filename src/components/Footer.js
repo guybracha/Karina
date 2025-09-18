@@ -1,6 +1,8 @@
 // src/components/Footer.jsx
 import React from "react";
 import { NavLink } from "react-router-dom";
+// ייבוא האייקונים מ-NPM
+import "bootstrap-icons/font/bootstrap-icons.css";
 
 export default function Footer() {
   return (
@@ -33,10 +35,20 @@ export default function Footer() {
           <div className="col-12 col-md-3">
             <h6 className="fw-bold mb-3">עקבו אחרינו</h6>
             <div className="d-flex gap-3">
-              <a href="https://www.facebook.com/profile.php?id=61557693732178" target="_blank" rel="noreferrer" className="link-light fs-4">
+              <a
+                href="https://www.facebook.com/profile.php?id=61557693732178"
+                target="_blank"
+                rel="noreferrer"
+                className="link-light fs-4"
+              >
                 <i className="bi bi-facebook"></i>
               </a>
-              <a href="https://wa.me/972500000000" target="_blank" rel="noreferrer" className="link-light fs-4">
+              <a
+                href="https://wa.me/972500000000"
+                target="_blank"
+                rel="noreferrer"
+                className="link-light fs-4"
+              >
                 <i className="bi bi-whatsapp"></i>
               </a>
             </div>

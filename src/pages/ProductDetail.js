@@ -11,6 +11,7 @@ import { PRODUCTS } from "../lib/products";
 
 const LS_USER_LOGO_KEY = "karina:userLogo";
 const LS_PREVIEW_KEY = (slug) => `karina:preview:${slug}`;
+const LS_CART_KEY = "karina:cart";
 
 export default function ProductDetail() {
   const [showUpload, setShowUpload] = useState(false);
@@ -18,9 +19,9 @@ export default function ProductDetail() {
   const location = useLocation();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
 
-  const [color, setColor]   = useState(product?.colors?.[0] || "");
-  const [size, setSize]     = useState(product?.sizes?.[0] || "");
-  const [qty, setQty]       = useState(1);
+  const [color, setColor] = useState(product?.colors?.[0] || "");
+  const [size, setSize]   = useState(product?.sizes?.[0] || "");
+  const [qty, setQty]     = useState(1);
 
   const [showLogoModal, setShowLogoModal] = useState(false);
   const [logoDataUrl, setLogoDataUrl]     = useState(null);
@@ -36,6 +37,7 @@ export default function ProductDetail() {
   // SEO helpers
   const colorsList = product?.colors?.slice(0, 4)?.join(" / ") || "";
   const sizesList  = product?.sizes?.slice(0, 4)?.join(", ") || "";
+
   // תמונה שמוצגת כרגע (לפי צד). אם אין backImg – נשתמש ב-front.
   const baseImageForSide = side === "front" ? product?.img : (product?.backImg || product?.img);
   const shownImage = previewImage || baseImageForSide;
@@ -43,6 +45,38 @@ export default function ProductDetail() {
   const description = product
     ? `חולצת ${product.name} להדפסה אישית. צבעים: ${colorsList}. מידות: ${sizesList}. הזמנה מהירה מקארינה – הדפסה על חולצות ושירות לכל הארץ.`
     : "המוצר לא נמצא.";
+
+  // -------- מוצרים דומים לפי type או category --------
+  const currentKey = product?.type ?? product?.category ?? null;
+  const similarProducts = useMemo(
+    () =>
+      product && currentKey
+        ? PRODUCTS
+            .filter((p) => p.slug !== product.slug && (p.type ?? p.category) === currentKey)
+            .slice(0, 8)
+        : [],
+    [product, currentKey]
+  );
+  // ---------------------------------------------------
+
+  // ───── עזרי עגלה (LocalStorage) ─────
+  function readCartFromLS() {
+    try {
+      const raw = localStorage.getItem(LS_CART_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveCartToLS(next) {
+    try {
+      localStorage.setItem(LS_CART_KEY, JSON.stringify(next));
+      // עדכון ה־Navbar (שמאזין לאירוע הזה)
+      window.dispatchEvent(new Event("karina:cartUpdated"));
+    } catch {}
+  }
 
   // בעת החלפת מוצר: אתחול בחירות וטעינת LocalStorage
   useEffect(() => {
@@ -53,18 +87,23 @@ export default function ProductDetail() {
     try {
       const savedPreview = localStorage.getItem(LS_PREVIEW_KEY(product?.slug || ""));
       setPreviewImage(savedPreview || null);
-    } catch { setPreviewImage(null); }
+    } catch {
+      setPreviewImage(null);
+    }
 
     try {
       const savedLogo = localStorage.getItem(LS_USER_LOGO_KEY);
       setLogoDataUrl(savedLogo || null);
-    } catch { setLogoDataUrl(null); }
+    } catch {
+      setLogoDataUrl(null);
+    }
 
     setShowLogoModal(false);
     setShowUpload(false);
     setSide("front"); // אתחול לצד קדמי במעבר בין מוצרים
   }, [product]);
 
+  // אם אין מוצר – מחזירים מסך "לא נמצא"
   if (!product) {
     return (
       <div className="container py-4">
@@ -75,19 +114,48 @@ export default function ProductDetail() {
         </Helmet>
 
         <div className="alert alert-warning">המוצר לא נמצא</div>
-        <Link className="btn btn-outline-primary" to="/catalog">חזרה לקטלוג</Link>
+        <Link className="btn btn-outline-primary" to="/catalog">
+          חזרה לקטלוג
+        </Link>
       </div>
     );
   }
 
-  // שמירת ההדמיה מהמודאל
+  // פעולות
   function onSavePlacement({ dataUrl }) {
     setPreviewImage(dataUrl);
     setShowLogoModal(false);
-    try { localStorage.setItem(LS_PREVIEW_KEY(product.slug), dataUrl); } catch {}
+    try {
+      localStorage.setItem(LS_PREVIEW_KEY(product.slug), dataUrl);
+    } catch {}
   }
 
   function addToCart() {
+    // מזהה ייחודי לשורה (אותו מוצר+צבע+מידה יתמזג ויגדל בכמות)
+    const lineId = `${product.slug}__${color}__${size}`;
+    const current = readCartFromLS();
+
+    const existingIdx = current.findIndex((it) => it.id === lineId);
+    if (existingIdx >= 0) {
+      const next = [...current];
+      const prevQty = Number(next[existingIdx].qty || 0);
+      next[existingIdx] = { ...next[existingIdx], qty: prevQty + Number(qty || 1) };
+      saveCartToLS(next);
+    } else {
+      const newItem = {
+        id: lineId,              // חשוב ל־Navbar (להסרה)
+        slug: product.slug,
+        name: product.name,
+        price: Number(product.price) || 0,
+        qty: Number(qty || 1),
+        color,
+        size,
+        addedAt: Date.now()
+      };
+      saveCartToLS([newItem, ...current]);
+    }
+
+    // פידבק קטן למשתמש
     alert(`נוסף לעגלה: ${product.name} - ${color} / ${size} x${qty}`);
   }
 
@@ -116,8 +184,8 @@ export default function ProductDetail() {
       url: canonical,
       priceCurrency: "ILS",
       price: String(product.price),
-      availability: "https://schema.org/InStock"
-    }
+      availability: "https://schema.org/InStock",
+    },
   };
 
   const breadcrumbJsonLd = {
@@ -126,12 +194,13 @@ export default function ProductDetail() {
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "דף הבית", item: `${origin}/` },
       { "@type": "ListItem", position: 2, name: "קטלוג", item: `${origin}/catalog` },
-      { "@type": "ListItem", position: 3, name: product.name, item: canonical }
-    ]
+      { "@type": "ListItem", position: 3, name: product.name, item: canonical },
+    ],
   };
 
   // אזור הדפסה לפי צד (אם תרצה בעתיד backPrintArea נפרד)
-  const shownPrintArea = side === "front" ? product.printArea : (product.backPrintArea || product.printArea);
+  const shownPrintArea =
+    side === "front" ? product.printArea : (product.backPrintArea || product.printArea);
 
   return (
     <div className="container py-4">
@@ -165,7 +234,6 @@ export default function ProductDetail() {
       <div className="row g-4">
         {/* תצוגת פריט / הדמיה */}
         <div className="col-12 col-lg-6">
-          {/* מתג צד קדמי/אחורי */}
           {(product.img || product.backImg) && (
             <div className="btn-group mb-2" role="group" aria-label="בחר צד">
               <button
@@ -289,7 +357,9 @@ export default function ProductDetail() {
         show={showUpload}
         onClose={() => setShowUpload(false)}
         onConfirm={(dataUrl) => {
-          try { localStorage.setItem(LS_USER_LOGO_KEY, dataUrl); } catch {}
+          try {
+            localStorage.setItem(LS_USER_LOGO_KEY, dataUrl);
+          } catch {}
           setLogoDataUrl(dataUrl);
           setShowUpload(false);
           setShowLogoModal(true);
@@ -309,24 +379,28 @@ export default function ProductDetail() {
       {/* מוצרים דומים */}
       <div className="mt-5">
         <h5 className="mb-3">מוצרים דומים</h5>
-        <div className="d-flex gap-3 flex-wrap">
-          {PRODUCTS.filter((p) => p.slug !== product.slug).map((p) => (
-            <Link key={p.slug} to={`/product/${p.slug}`} className="text-decoration-none">
-              <div className="card" style={{ width: 180 }}>
-                <img
-                  src={p.img}
-                  className="card-img-top"
-                  alt={p.name}
-                  style={{ height: 120, objectFit: "cover" }}
-                />
-                <div className="card-body p-2">
-                  <div className="small fw-semibold">{p.name}</div>
-                  <div className="small text-muted">{p.price} ₪</div>
+        {similarProducts.length === 0 ? (
+          <div className="text-muted small">אין פריטים דומים כרגע.</div>
+        ) : (
+          <div className="d-flex gap-3 flex-wrap">
+            {similarProducts.map((p) => (
+              <Link key={p.slug} to={`/product/${p.slug}`} className="text-decoration-none">
+                <div className="card" style={{ width: 180 }}>
+                  <img
+                    src={p.img}
+                    className="card-img-top"
+                    alt={p.name}
+                    style={{ height: 120, objectFit: "cover" }}
+                  />
+                  <div className="card-body p-2">
+                    <div className="small fw-semibold">{p.name}</div>
+                    <div className="small text-muted">{p.price} ₪</div>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
