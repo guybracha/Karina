@@ -1356,3 +1356,19 @@ a:hover { color: #0b5ed7; }
 
 /* RTL – ודא שלא נשבר באייקוני Bootstrap */
 html[dir="rtl"] .accordion-button { text-align: right; }
+
+/* חידוד קונטרסט של הכרטיס (במיוחד על רקעים בהירים) */
+.modal-card-contrast {
+  --bs-card-spacer-y: 1rem;
+  --bs-card-spacer-x: 1rem;
+}
+
+/* אם אתה משתמש ב-Bootstrap's .modal-backdrop, שמור שם אחר כדי לא להתנגש */
+.modal-backdrop-custom {
+  /* כבר נתנו inline, אפשר להשאיר כרפרנס */
+}
+
+/* אופציונלי: מניעת גלילה ברקע בזמן מודל פתוח */
+body:has(.modal-portal) {
+  overflow: hidden;
+}
