@@ -1338,3 +1338,21 @@ a:hover { color: #0b5ed7; }
 
 /* RTL תיקון קטן ל-badges/אייקונים */
 .text-white-75 { color: rgba(255,255,255,.75) !important; }
+
+/* FAQ polish */
+.faq-search { max-width: 720px; }
+
+/* כרטיסיות רכות */
+.accordion-item { background: var(--bg-card, #fff); }
+
+/* סיבוב החץ */
+.accordion-button .chev { transition: transform .2s ease; }
+.accordion-button[aria-expanded="true"] .chev { transform: rotate(180deg); }
+
+/* מצב פוקוס נגיש וברור */
+.accordion-button:focus {
+  box-shadow: 0 0 0 .2rem rgba(13,110,253,.2);
+}
+
+/* RTL – ודא שלא נשבר באייקוני Bootstrap */
+html[dir="rtl"] .accordion-button { text-align: right; }

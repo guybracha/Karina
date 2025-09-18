@@ -29,18 +29,29 @@ export default function Contact() {
             <p className="mb-1">✉️ info@karina.co.il</p>
             <p className="mb-3">🕒 ימים א׳–ה׳, 9:00–17:00</p>
 
+            {/* כפתור וואטסאפ */}
+            <a
+              href="https://wa.me/972545042443"
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-success mb-3"
+            >
+              <i className="bi bi-whatsapp me-2"></i>
+              שלח הודעה בוואטסאפ
+            </a>
+
             {/* Google Maps */}
             <div className="ratio ratio-4x3 mt-auto">
-            <iframe
-              title="מפת גוגל - צבי הנחל 4, פארק תעשיות עמק חפר"
-              src="https://maps.google.com/maps?q=צבי%20הנחל%204%20עמק%20חפר&t=&z=16&ie=UTF8&iwloc=&output=embed"
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              allowFullScreen=""
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-            />
+              <iframe
+                title="מפת גוגל - צבי הנחל 4, פארק תעשיות עמק חפר"
+                src="https://maps.google.com/maps?q=צבי%20הנחל%204%20עמק%20חפר&t=&z=16&ie=UTF8&iwloc=&output=embed"
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                allowFullScreen=""
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
             </div>
           </div>
         </div>

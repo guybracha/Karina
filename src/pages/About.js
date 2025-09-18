@@ -5,9 +5,9 @@ export default function About() {
   const address = "צבי הנחל 4, פארק תעשיות עמק חפר";
   const q = encodeURIComponent(address);
 
-  // מפה עם סיכה אמיתית על הכתובת (ללא API Key)
-  const mapEmbed = `https://www.google.com/maps?hl=he&q=${q}&z=17&t=m&output=embed`;
-  const mapLink  = `https://www.google.com/maps/search/?api=1&query=${q}`;
+  // מפה עם סיכה אדומה אמיתית על הכתובת (ללא API Key)
+  const mapEmbed = `https://maps.google.com/maps?q=${q}&t=&z=16&ie=UTF8&iwloc=B&output=embed`;
+  const mapLink = `https://www.google.com/maps/search/?api=1&query=${q}`;
 
   return (
     <div className="container py-5">
@@ -32,6 +32,37 @@ export default function About() {
       <p className="mb-1">📞 טלפון: 054-5042443</p>
       <p className="mb-3">✉️ דוא״ל: info@karina.co.il</p>
 
+      {/* כפתור וואטסאפ */}
+      <a
+        href="https://wa.me/972545042443"
+        target="_blank"
+        rel="noreferrer"
+        className="btn btn-success mb-4"
+      >
+        <i className="bi bi-whatsapp me-2"></i>
+        צור קשר בוואטסאפ
+      </a>
+
+      {/* מפת גוגל עם סיכה */}
+      <div className="ratio ratio-16x9">
+        <iframe
+          title="מפת גוגל - קארינה"
+          src={mapEmbed}
+          width="100%"
+          height="100%"
+          style={{ border: 0 }}
+          allowFullScreen=""
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
+      </div>
+
+      {/* קישור ישיר לפתיחה במפות */}
+      <p className="mt-2">
+        <a href={mapLink} target="_blank" rel="noreferrer">
+          פתח במפות גוגל
+        </a>
+      </p>
     </div>
   );
 }

@@ -51,6 +51,14 @@ export default function Footer() {
               >
                 <i className="bi bi-whatsapp"></i>
               </a>
+              <a
+                href="https://www.tiktok.com/@karina_printing"
+                target="_blank"
+                rel="noreferrer"
+                className="link-light fs-4"
+              >
+                <i className="bi bi-tiktok"></i>
+              </a>
             </div>
           </div>
         </div>
