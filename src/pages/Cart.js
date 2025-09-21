@@ -1,13 +1,39 @@
 // src/pages/Cart.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+// ---- Firebase ----
+import { auth, db, functions } from "../firebase"; // ← עדכן את הנתיב/ייצוא לפי הפרויקט שלך
+import { onAuthStateChanged } from "firebase/auth";
+import {
+  doc, getDoc, setDoc, updateDoc, serverTimestamp
+} from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+
 const LS_CART_KEY = "karina:cart";
-const LS_PREVIEW_KEY = (slug) => `karina:preview:${slug}`;
+const LS_SHIP_KEY = "karina:shipping";
+// הדמיה שמורה לפי מוצר+צד
+const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
+
+// טבלת אפשרויות משלוח (קל לשינוי)
+const SHIP_OPTIONS = {
+  standard: { label: "משלוח רגיל", cost: 20 },
+  express:  { label: "משלוח אקספרס", cost: 45 },
+  pickup:   { label: "איסוף מהמפעל", cost: 0  },
+};
 
 export default function Cart() {
   const [items, setItems] = useState([]);
+  const [shipping, setShipping] = useState(() => {
+    try { return localStorage.getItem(LS_SHIP_KEY) || "standard"; } catch { return "standard"; }
+  });
   const [loading, setLoading] = useState(false);
+
+  // Firebase user state
+  const [uid, setUid] = useState(null);
+
+  // דיבאונס לשמירה ל-Firestore
+  const saveTimer = useRef(null);
 
   // --- LS helpers ---
   function readCartFromLS() {
@@ -22,17 +48,88 @@ export default function Cart() {
   function saveCartToLS(next) {
     try {
       localStorage.setItem(LS_CART_KEY, JSON.stringify(next));
-      // שידור לכל האפליקציה (Navbar וכו׳)
       window.dispatchEvent(new Event("karina:cartUpdated"));
     } catch {}
   }
 
-  // טוען מה־LS ומסתנכרן עם שינויים חיצוניים
-  useEffect(() => {
-    setItems(readCartFromLS());
+  // --- Firestore helpers ---
+  function cartDocRef(userId) {
+    // שמירת עגלת טיוטה תחת users/{uid}/carts/current
+    return doc(db, "users", userId, "carts", "current");
+  }
+  function orderDraftDocRef(userId) {
+    // אופציונלי: הזמנת טיוטה אחת פעילה
+    return doc(db, "users", userId, "orders", "draft");
+  }
 
+  async function loadCartFromFirestore(userId) {
+    try {
+      const snap = await getDoc(cartDocRef(userId));
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        const fsItems = Array.isArray(data.items) ? data.items : [];
+        const fsShipping = data.shipping?.method || "standard";
+        setItems(fsItems);
+        setShipping(fsShipping);
+        // גם לעדכן LS כדי לאפשר גלישה לאורח אח"כ
+        saveCartToLS(fsItems);
+        try { localStorage.setItem(LS_SHIP_KEY, fsShipping); } catch {}
+      } else {
+        // אין עגלה ב-FS → לדחוף את ה-LS ל-FS
+        const lsItems = readCartFromLS();
+        setItems(lsItems);
+        await setDoc(cartDocRef(userId), {
+          items: lsItems,
+          shipping: { method: shipping, label: SHIP_OPTIONS[shipping]?.label || "משלוח רגיל", cost: SHIP_OPTIONS[shipping]?.cost ?? 20 },
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+    } catch (e) {
+      console.warn("Failed to load cart from Firestore, using LS fallback:", e);
+      setItems(readCartFromLS());
+    }
+  }
+
+  function scheduleSaveToFirestore(userId, nextItems, nextShipping) {
+    if (!userId) return; // אורח: לא שומר ל-FS
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        const opt = SHIP_OPTIONS[nextShipping] || SHIP_OPTIONS.standard;
+        await setDoc(cartDocRef(userId), {
+          items: nextItems,
+          shipping: { method: nextShipping, label: opt.label, cost: opt.cost },
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (e) {
+        console.warn("Failed to save cart to Firestore:", e);
+      }
+    }, 400); // דיבאונס קצר
+  }
+
+  // ----- mount: auth + load cart -----
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      const userId = user?.uid || null;
+      setUid(userId);
+      if (userId) {
+        await loadCartFromFirestore(userId);
+      } else {
+        // אורח: נטען מ-LS
+        setItems(readCartFromLS());
+      }
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // סנכרון LS כשיש שינוי מהחוץ
+  useEffect(() => {
     function onStorage(e) {
       if (e.key === LS_CART_KEY) setItems(readCartFromLS());
+      if (e.key === LS_SHIP_KEY) {
+        try { setShipping(localStorage.getItem(LS_SHIP_KEY) || "standard"); } catch {}
+      }
     }
     function onCustom() {
       setItems(readCartFromLS());
@@ -45,11 +142,19 @@ export default function Cart() {
     };
   }, []);
 
+  // שמירת בחירת משלוח ב-LS וב-FS
+  useEffect(() => {
+    try { localStorage.setItem(LS_SHIP_KEY, shipping); } catch {}
+    scheduleSaveToFirestore(uid, items, shipping);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipping]);
+
   function updateQty(id, newQty) {
     const qty = Math.max(1, Number(newQty) || 1);
     setItems((prev) => {
       const next = prev.map((it) => (it.id === id ? { ...it, qty } : it));
       saveCartToLS(next);
+      scheduleSaveToFirestore(uid, next, shipping);
       return next;
     });
   }
@@ -58,39 +163,109 @@ export default function Cart() {
     setItems((prev) => {
       const next = prev.filter((it) => it.id !== id);
       saveCartToLS(next);
+      scheduleSaveToFirestore(uid, next, shipping);
       return next;
     });
   }
 
-  const total = useMemo(
+  // סה״כ מוצרים (ללא משלוח)
+  const merchandiseTotal = useMemo(
     () => items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.qty || 0), 0),
     [items]
   );
 
-  // מביא הדמיה שמורה (אם קיימת) לכל פריט
-  function getPreviewForItem(it) {
+  // עלות משלוח
+  const shippingCost = useMemo(() => {
+    const opt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
+    return items.length === 0 ? 0 : Number(opt.cost || 0);
+  }, [shipping, items.length]);
+
+  const grandTotal = useMemo(() => merchandiseTotal + shippingCost, [merchandiseTotal, shippingCost]);
+
+  // מביא הדמיות שמורות לכל פריט — קדמי/אחורי
+  function getPreviewsForItem(it) {
     try {
-      if (!it.slug) return null;
-      return localStorage.getItem(LS_PREVIEW_KEY(it.slug));
+      if (!it.slug) return { front: null, back: null };
+      const front = localStorage.getItem(LS_PREVIEW_KEY(it.slug, "front"));
+      const back  = localStorage.getItem(LS_PREVIEW_KEY(it.slug, "back"));
+      return { front: front || null, back: back || null };
     } catch {
-      return null;
+      return { front: null, back: null };
     }
   }
 
-  // התחלת תשלום: פנייה לשרת שיוצר סשן קופה ומחזיר URL
+  // יצירת/עדכון הזמנת טיוטה ב-FS לפני יציאה לתשלום
+  async function upsertDraftOrder(userId, payload) {
+    if (!userId) return;
+    try {
+      await setDoc(orderDraftDocRef(userId), {
+        status: "draft",
+        payload,
+        amount: grandTotal,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.warn("Failed to upsert draft order:", e);
+    }
+  }
+
+  // התחלת תשלום: שולחים גם הדמיות וגם משלוח
   async function startCheckout() {
     try {
       setLoading(true);
-      const res = await fetch("/api/checkout/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // שולחים רק מידע לוגי; המחיר הסופי יחושב בשרת
-        body: JSON.stringify({
-          items: items.map(({ slug, qty, color, size }) => ({ slug, qty, color, size })),
-        }),
+
+      const payloadItems = items.map(({ slug, qty, color, size, name, price }) => {
+        const previews = getPreviewsForItem({ slug });
+        return {
+          slug, qty, color, size, name, price,
+          previews: { front: previews.front || null, back: previews.back || null },
+        };
       });
-      if (!res.ok) throw new Error("Checkout request failed");
-      const { checkoutUrl } = await res.json();
+
+      const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
+
+      const payload = {
+        items: payloadItems,
+        shipping: {
+          method: shipping,
+          label: shipOpt.label,
+          cost: shipOpt.cost,
+        },
+        clientTotals: {
+          merchandiseTotal,
+          shippingCost,
+          grandTotal,
+        },
+      };
+
+      // עדכון הזמנת טיוטה למשתמשים מחוברים (לא חובה לאורחים)
+      if (uid) {
+        await upsertDraftOrder(uid, payload);
+      }
+
+      // --- ניסיון 1: Cloud Function (callable) ---
+      let checkoutUrl = null;
+      try {
+        const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
+        const { data } = await createCheckoutSession(payload);
+        checkoutUrl = data?.checkoutUrl || null;
+      } catch (e) {
+        console.info("Callable function failed/absent, trying /api/checkout/session…", e);
+      }
+
+      // --- ניסיון 2: fetch ל-API פרטי (נפילה) ---
+      if (!checkoutUrl) {
+        const res = await fetch("/api/checkout/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("Checkout request failed");
+        const json = await res.json();
+        checkoutUrl = json?.checkoutUrl;
+      }
+
       if (!checkoutUrl) throw new Error("Missing checkoutUrl");
       window.location.href = checkoutUrl;
     } catch (err) {
@@ -108,9 +283,7 @@ export default function Cart() {
       {items.length === 0 ? (
         <div className="alert alert-info">
           העגלה שלך ריקה.{" "}
-          <Link to="/catalog" className="alert-link">
-            חזור לקטלוג
-          </Link>
+          <Link to="/catalog" className="alert-link">חזור לקטלוג</Link>
         </div>
       ) : (
         <>
@@ -118,7 +291,7 @@ export default function Cart() {
             <table className="table align-middle">
               <thead>
                 <tr>
-                  <th style={{ width: 96 }}>תצוגה</th>
+                  <th style={{ width: 140 }}>תצוגה</th>
                   <th>מוצר</th>
                   <th>צבע</th>
                   <th>מידה</th>
@@ -130,27 +303,48 @@ export default function Cart() {
               </thead>
               <tbody>
                 {items.map((it) => {
-                  const preview = getPreviewForItem(it);
+                  const { front, back } = getPreviewsForItem(it);
                   return (
                     <tr key={it.id}>
                       <td>
-                        {preview ? (
-                          <img
-                            src={preview}
-                            alt={`הדמיה עבור ${it.name}`}
-                            style={{
-                              width: 72,
-                              height: 72,
-                              objectFit: "contain",
-                              borderRadius: 8,
-                              background: "#fff",
-                              border: "1px solid rgba(0,0,0,.08)",
-                            }}
-                          />
-                        ) : (
-                          <span className="badge text-bg-secondary">ללא הדמיה</span>
-                        )}
+                        <div className="d-flex gap-2 align-items-center">
+                          {/* קדמי */}
+                          {front ? (
+                            <div className="text-center">
+                              <img
+                                src={front}
+                                alt={`הדמיה קדמית עבור ${it.name}`}
+                                style={{
+                                  width: 60, height: 60, objectFit: "contain",
+                                  borderRadius: 8, background: "#fff",
+                                  border: "1px solid rgba(0,0,0,.08)", display: "block",
+                                }}
+                              />
+                              <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>קדמי</small>
+                            </div>
+                          ) : (
+                            <span className="badge text-bg-secondary">אין קדמי</span>
+                          )}
+                          {/* אחורי */}
+                          {back ? (
+                            <div className="text-center">
+                              <img
+                                src={back}
+                                alt={`הדמיה אחורית עבור ${it.name}`}
+                                style={{
+                                  width: 60, height: 60, objectFit: "contain",
+                                  borderRadius: 8, background: "#fff",
+                                  border: "1px solid rgba(0,0,0,.08)", display: "block",
+                                }}
+                              />
+                              <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>אחורי</small>
+                            </div>
+                          ) : (
+                            <span className="badge text-bg-secondary">אין אחורי</span>
+                          )}
+                        </div>
                       </td>
+
                       <td className="fw-semibold">{it.name}</td>
                       <td>{it.color}</td>
                       <td>{it.size}</td>
@@ -166,10 +360,7 @@ export default function Cart() {
                       <td>{Number(it.price).toLocaleString("he-IL")} ₪</td>
                       <td>{(Number(it.price) * Number(it.qty)).toLocaleString("he-IL")} ₪</td>
                       <td>
-                        <button
-                          className="btn btn-sm btn-outline-danger"
-                          onClick={() => removeItem(it.id)}
-                        >
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(it.id)}>
                           הסר
                         </button>
                       </td>
@@ -180,14 +371,52 @@ export default function Cart() {
             </table>
           </div>
 
-          <div className="d-flex justify-content-between align-items-center mt-4">
-            <Link to="/catalog" className="btn btn-outline-secondary">
-              המשך בקנייה
-            </Link>
-            <div className="text-end">
-              <h5>סה״כ לתשלום: {total.toLocaleString("he-IL")} ₪</h5>
+          {/* בחירת משלוח */}
+          <div className="mt-3 p-3 border rounded-3">
+            <h6 className="mb-3">אפשרות משלוח</h6>
+            <div className="d-flex flex-wrap gap-4">
+              {Object.entries(SHIP_OPTIONS).map(([value, opt]) => (
+                <div className="form-check" key={value}>
+                  <input
+                    className="form-check-input"
+                    type="radio"
+                    name="shipping"
+                    id={`ship-${value}`}
+                    value={value}
+                    checked={shipping === value}
+                    onChange={(e) => setShipping(e.target.value)}
+                  />
+                  <label className="form-check-label" htmlFor={`ship-${value}`}>
+                    {opt.label}{" "}
+                    <small className="text-muted">({opt.cost.toLocaleString("he-IL")} ₪)</small>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* סיכום תשלום */}
+          <div className="d-flex justify-content-between align-items-end mt-4 flex-wrap gap-3">
+            <Link to="/catalog" className="btn btn-outline-secondary">המשך בקנייה</Link>
+
+            <div className="ms-auto">
+              <div className="text-end">
+                <div className="d-flex justify-content-between" style={{ minWidth: 260 }}>
+                  <span className="text-muted">סה״כ מוצרים:</span>
+                  <strong>{merchandiseTotal.toLocaleString("he-IL")} ₪</strong>
+                </div>
+                <div className="d-flex justify-content-between" style={{ minWidth: 260 }}>
+                  <span className="text-muted">
+                    משלוח ({(SHIP_OPTIONS[shipping]?.label) || "—"}):
+                  </span>
+                  <strong>{shippingCost.toLocaleString("he-IL")} ₪</strong>
+                </div>
+                <hr className="my-2" />
+                <h5 className="mb-0">סה״כ לתשלום: {grandTotal.toLocaleString("he-IL")} ₪</h5>
+              </div>
+
               <button
-                className="btn btn-primary btn-lg mt-2"
+                className="btn btn-primary btn-lg mt-3 w-100"
                 onClick={startCheckout}
                 disabled={loading || items.length === 0}
                 title={items.length === 0 ? "העגלה ריקה" : undefined}

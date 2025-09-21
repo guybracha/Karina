@@ -1,6 +1,7 @@
 // src/components/Navbar.jsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext"; // 👈 הוספה
 import logo from "../img/logo.png";
 import useDebounce from "../hooks/useDebounce";
 import { searchProducts } from "../lib/searchService";
@@ -20,6 +21,7 @@ export default function Navbar() {
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
 
+  const { user } = useAuth();            // 👈 מידע על המשתמש המחובר
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -445,9 +447,13 @@ export default function Navbar() {
               </div>
             )}
 
-            <NavLink to="/account" className="btn btn-primary" onClick={closeNav}>
-              אזור אישי
-            </NavLink>
+            <NavLink
+            to={user ? "/account" : "/auth"}   // 👈 אם מחובר → account, אחרת → auth
+            className="btn btn-primary"
+            onClick={closeNav}
+            >
+            {user ? "אזור אישי" : "התחברות"}
+          </NavLink>
           </div>
         </div>
       </div>
