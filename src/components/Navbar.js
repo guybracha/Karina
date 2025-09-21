@@ -1,14 +1,48 @@
 // src/components/Navbar.jsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext"; // 👈 הוספה
+import { useAuth } from "../contexts/AuthContext";
 import logo from "../img/logo.png";
 import useDebounce from "../hooks/useDebounce";
 import { searchProducts } from "../lib/searchService";
 import { PRODUCTS } from "../lib/products";
 
 const LS_CART_KEY = "karina:cart";
-const LS_PREVIEW_KEY = (slug) => `karina:preview:${slug}`;
+const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
+
+// ===== LocalStorage helpers (עם נירמול) =====
+function isValidItem(x) {
+  return x && typeof x === "object" &&
+    "id" in x && "name" in x &&
+    "qty" in x && !Number.isNaN(Number(x.qty)) &&
+    "price" in x && !Number.isNaN(Number(x.price));
+}
+function normalizeCartArray(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter(isValidItem)
+    .map(it => ({
+      ...it,
+      qty: Math.max(1, Number(it.qty) || 1),
+      price: Number(it.price) || 0,
+    }));
+}
+function readCartFromLS() {
+  try {
+    const raw = localStorage.getItem(LS_CART_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeCartArray(parsed);
+  } catch {
+    return [];
+  }
+}
+function saveCartToLS(next) {
+  try {
+    const normalized = normalizeCartArray(next);
+    localStorage.setItem(LS_CART_KEY, JSON.stringify(normalized));
+    window.dispatchEvent(new Event("karina:cartUpdated"));
+  } catch {}
+}
 
 export default function Navbar() {
   const [q, setQ] = useState("");
@@ -21,7 +55,7 @@ export default function Navbar() {
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
 
-  const { user } = useAuth();            // 👈 מידע על המשתמש המחובר
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -41,21 +75,6 @@ export default function Navbar() {
   }
 
   // ----- עגלה: קריאה/שמירה מ־LS -----
-  function readCartFromLS() {
-    try {
-      const raw = localStorage.getItem(LS_CART_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr : [];
-    } catch {
-      return [];
-    }
-  }
-  function saveCartToLS(next) {
-    try {
-      localStorage.setItem(LS_CART_KEY, JSON.stringify(next));
-      window.dispatchEvent(new Event("karina:cartUpdated"));
-    } catch {}
-  }
   function removeFromCart(id) {
     const next = readCartFromLS().filter((it) => it.id !== id);
     saveCartToLS(next);
@@ -63,6 +82,7 @@ export default function Navbar() {
   }
 
   useEffect(() => {
+    // טעינה ראשונית יציבה
     setCart(readCartFromLS());
 
     // האזנה לשינויים מחלון אחר
@@ -93,11 +113,13 @@ export default function Navbar() {
     [cart]
   );
 
-  // תצוגת תמונה לפריט
+  // תצוגת תמונה לפריט (מתואם לעגלה: front → back → תמונת מוצר)
   function getThumbForItem(it) {
     try {
-      const preview = localStorage.getItem(LS_PREVIEW_KEY(it.slug || ""));
-      if (preview) return preview;
+      const front = localStorage.getItem(LS_PREVIEW_KEY(it.slug || "", "front"));
+      if (front) return front;
+      const back = localStorage.getItem(LS_PREVIEW_KEY(it.slug || "", "back"));
+      if (back) return back;
     } catch {}
     const p = PRODUCTS.find((x) => x.slug === it.slug);
     return p?.img || "";
@@ -412,7 +434,9 @@ export default function Navbar() {
                             </div>
                           </div>
                           <div className="d-flex align-items-center gap-2">
-                            <div className="small text-nowrap">{it.qty}× {it.price} ₪</div>
+                            <div className="small text-nowrap">
+                              {Number(it.qty)}× {Number(it.price).toLocaleString("he-IL")} ₪
+                            </div>
                             <button
                               type="button"
                               className="btn btn-sm btn-outline-danger"
@@ -428,7 +452,7 @@ export default function Navbar() {
                     <div className="dropdown-divider" />
                     <div className="px-3 py-2 d-flex justify-content-between align-items-center">
                       <strong>סה״כ:</strong>
-                      <span className="fw-bold">{cartTotal} ₪</span>
+                      <span className="fw-bold">{cartTotal.toLocaleString("he-IL")} ₪</span>
                     </div>
                     <div className="px-3 pb-2 d-flex gap-2">
                       <NavLink
@@ -448,12 +472,12 @@ export default function Navbar() {
             )}
 
             <NavLink
-            to={user ? "/account" : "/auth"}   // 👈 אם מחובר → account, אחרת → auth
-            className="btn btn-primary"
-            onClick={closeNav}
+              to={user ? "/account" : "/auth"}
+              className="btn btn-primary"
+              onClick={closeNav}
             >
-            {user ? "אזור אישי" : "התחברות"}
-          </NavLink>
+              {user ? "אזור אישי" : "התחברות"}
+            </NavLink>
           </div>
         </div>
       </div>

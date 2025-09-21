@@ -18,13 +18,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # למנוע כשלי peer deps בזמן התקנה
+      # מניעת כשלים בהתקנות/אזהרות
       NPM_CONFIG_LEGACY_PEER_DEPS: true
-      # דומיין הייצור שלנו (לא תת-נתיב של /Karina/)
       PUBLIC_URL: https://karina.co.il/
-      # לא לעצור על warnings בזמן build
       CI: false
       DISABLE_ESLINT_PLUGIN: true
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,7 +37,26 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
-      # 👇 הזרקת ה-ENV של Firebase מה-Secrets בזמן build
+      # אימות שכל משתני Firebase קיימים לפני ה-build (כדי לא "לאפות" undefined)
+      - name: Verify Firebase env are present
+        run: |
+          missing=0
+          for k in REACT_APP_FB_API_KEY REACT_APP_FB_AUTH_DOMAIN REACT_APP_FB_PROJECT_ID REACT_APP_FB_STORAGE_BUCKET REACT_APP_FB_MESSAGING_SENDER_ID REACT_APP_FB_APP_ID; do
+            if [ -z "${!k}" ]; then
+              echo "::error::Missing $k"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then exit 1; fi
+        env:
+          REACT_APP_FB_API_KEY: ${{ secrets.REACT_APP_FB_API_KEY }}
+          REACT_APP_FB_AUTH_DOMAIN: ${{ secrets.REACT_APP_FB_AUTH_DOMAIN }}
+          REACT_APP_FB_PROJECT_ID: ${{ secrets.REACT_APP_FB_PROJECT_ID }}
+          REACT_APP_FB_STORAGE_BUCKET: ${{ secrets.REACT_APP_FB_STORAGE_BUCKET }}
+          REACT_APP_FB_MESSAGING_SENDER_ID: ${{ secrets.REACT_APP_FB_MESSAGING_SENDER_ID }}
+          REACT_APP_FB_APP_ID: ${{ secrets.REACT_APP_FB_APP_ID }}
+
+      # Build עם הזרקת ה-ENV של Firebase
       - name: Build
         run: npm run build
         env:
@@ -57,15 +75,13 @@ jobs:
           elif [ -d build ]; then echo "dir=build" >> "$GITHUB_OUTPUT";
           else echo "No dist/build dir"; exit 1; fi
 
-      # 👇 קובץ CNAME כדי להצמיד את הדומיין ל-Pages
       - name: Add CNAME for custom domain
         run: echo "karina.co.il" > "${{ steps.detect.outputs.dir }}/CNAME"
 
-      # 👇 SPA fallback כדי שכל נתיב יחזור ל-index.html
       - name: Add 404.html for SPA
         run: |
           d=${{ steps.detect.outputs.dir }}
-          [ -f "$d/index.html" ] && cp "$d/index.html" "$d/404.html"
+          [ -f "$d/index.html" ] && cp -f "$d/index.html" "$d/404.html"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
