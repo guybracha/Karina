@@ -18,11 +18,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # עוקף קונפליקטים של peer deps (למשל react-helmet-async מול React)
+      # למנוע כשלי peer deps בזמן התקנה
       NPM_CONFIG_LEGACY_PEER_DEPS: true
-      # מבטיח נתיבים נכונים ל-GitHub Pages תחת /Karina/
-      PUBLIC_URL: https://guybracha.github.io/Karina/
-      # לא לעצור על ESLint/Warnings בזמן build
+      # דומיין הייצור שלנו (לא תת-נתיב של /Karina/)
+      PUBLIC_URL: https://karina.co.il/
+      # לא לעצור על warnings בזמן build
       CI: false
       DISABLE_ESLINT_PLUGIN: true
     steps:
@@ -38,8 +38,17 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
+      # 👇 הזרקת ה-ENV של Firebase מה-Secrets בזמן build
       - name: Build
         run: npm run build
+        env:
+          REACT_APP_FB_API_KEY: ${{ secrets.REACT_APP_FB_API_KEY }}
+          REACT_APP_FB_AUTH_DOMAIN: ${{ secrets.REACT_APP_FB_AUTH_DOMAIN }}
+          REACT_APP_FB_PROJECT_ID: ${{ secrets.REACT_APP_FB_PROJECT_ID }}
+          REACT_APP_FB_STORAGE_BUCKET: ${{ secrets.REACT_APP_FB_STORAGE_BUCKET }}
+          REACT_APP_FB_MESSAGING_SENDER_ID: ${{ secrets.REACT_APP_FB_MESSAGING_SENDER_ID }}
+          REACT_APP_FB_APP_ID: ${{ secrets.REACT_APP_FB_APP_ID }}
+          REACT_APP_FB_MEASUREMENT_ID: ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
 
       - name: Detect build dir
         id: detect
@@ -48,6 +57,11 @@ jobs:
           elif [ -d build ]; then echo "dir=build" >> "$GITHUB_OUTPUT";
           else echo "No dist/build dir"; exit 1; fi
 
+      # 👇 קובץ CNAME כדי להצמיד את הדומיין ל-Pages
+      - name: Add CNAME for custom domain
+        run: echo "karina.co.il" > "${{ steps.detect.outputs.dir }}/CNAME"
+
+      # 👇 SPA fallback כדי שכל נתיב יחזור ל-index.html
       - name: Add 404.html for SPA
         run: |
           d=${{ steps.detect.outputs.dir }}
