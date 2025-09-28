@@ -230,7 +230,16 @@ export default function Navbar() {
           aria-label="דף הבית"
           onClick={closeNav}
         >
-          <img src={logo} alt="Karina" width="28" height="28" />
+          {/* מוגדל בצורה רספונסיבית: היה 28px, כעת clamp ל-56–96px */}
+          <img
+            src={logo}
+            alt="Karina"
+            style={{
+              height: "clamp(56px, 8vw, 96px)",
+              width: "auto",
+              display: "block"
+            }}
+          />
         </NavLink>
 
         <button

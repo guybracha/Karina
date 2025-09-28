@@ -114,7 +114,7 @@ export default function HomePage() {
       {/* CATEGORIES – מתוך הקטלוג */}
       <section className="container py-6">
         <div className="d-flex align-items-center justify-content-between mb-3">
-          <h2 className="fw-bold m-0">קטגוריות מובילות</h2>
+          <h2 className="fw-bold m-0">קטגוריות</h2>
           <NavLink to="/catalog" className="btn btn-outline-primary btn-sm">לכל הקטלוג</NavLink>
         </div>
 

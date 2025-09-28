@@ -18,6 +18,7 @@ export default function Footer() {
               <li><NavLink to="/faq" className="link-light text-decoration-none">שו״ת</NavLink></li>
               <li><NavLink to="/about" className="link-light text-decoration-none">אודות</NavLink></li>
               <li><NavLink to="/contact" className="link-light text-decoration-none">צור קשר</NavLink></li>
+              <li><NavLink to="/legal" className="link-light text-decoration-none">תקנון האתר</NavLink></li>
             </ul>
           </div>
 
@@ -26,7 +27,7 @@ export default function Footer() {
             <h6 className="fw-bold mb-3">צור קשר</h6>
             <ul className="list-unstyled small">
               <li>טלפון: <a href="tel:0545042443" className="link-light">0545042443</a></li>
-              <li>אימייל: <a href="mailto:info@karina.co.il" className="link-light">info@karina.co.il</a></li>
+              <li>אימייל: <a href="mailto:karina.official.israel@gmail.com" className="link-light">karina.official.israel@gmail.com</a></li>
               <li>כתובת: צבי הנחל 4, אזור תעשייה עמק חפר</li>
             </ul>
           </div>

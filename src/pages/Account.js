@@ -1,5 +1,5 @@
 // src/pages/Account.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserProfile, updateUserProfile } from "../services/users";
@@ -85,13 +85,6 @@ export default function Account() {
     return () => unsub && unsub();
   }, [user]);
 
-  const avatar = useMemo(() => {
-    return (
-      user?.photoURL ||
-      profile?.avatar ||
-      "https://cdn-icons-png.flaticon.com/512/149/149071.png"
-    );
-  }, [user, profile]);
 
   const displayName = profile?.displayName || user?.displayName || (user?.email?.split("@")[0]) || "Customer";
   const email = profile?.email || user?.email || "";
@@ -164,14 +157,8 @@ export default function Account() {
       <h1 className="mb-4">החשבון שלי</h1>
 
       {/* פרטי משתמש - תצוגה */}
-      <div className="card mb-4 shadow-sm">
+       <div className="card mb-4 shadow-sm">
         <div className="card-body d-flex align-items-center gap-3">
-          <img
-            src={avatar}
-            alt={displayName}
-            className="rounded-circle"
-            style={{ width: 80, height: 80, objectFit: "cover" }}
-          />
           <div className="flex-grow-1">
             <h5 className="mb-1">{loadingProfile ? "..." : displayName}</h5>
             <p className="mb-1 text-muted">{email}</p>
@@ -192,6 +179,7 @@ export default function Account() {
           </div>
         </div>
       </div>
+
 
       {/* מודאל עריכת פרטים */}
       {showEdit && (
@@ -278,11 +266,6 @@ export default function Account() {
           </div>
         </div>
       )}
-    {/* למחוק ברגע שהמערכת מוכנה לאוויר */}
-    <div className="d-flex align-items-center justify-content-between mb-3">
-      <h5 className="mb-0">הזמנות אחרונות</h5>
-      <CreateDemoOrderButton />
-    </div>
       {/* הזמנות אחרונות */}
       <h5 className="mb-3">הזמנות אחרונות</h5>
       {loadingOrders ? (

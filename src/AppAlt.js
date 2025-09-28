@@ -28,6 +28,7 @@ import NotFound from "./pages/NotFound";
 import OrderDetail from "./pages/OrderDetail";
 import Orders from "./pages/Orders";
 import AuthPage from "./pages/AuthPage";   // ✅ דף כניסה חדש
+import Legal from "./pages/Legal";
 
 import ChatWidget from "./components/ChatWidget";
 
@@ -139,12 +140,14 @@ export default function AppAlt() {
 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
+                <Route path="/legal" element={<Legal />} />
               </Routes>
             </main>
 
             <Footer />
-
-            <ChatWidget onSend={handleChatSend} />
+            {/*
+              <ChatWidget onSend={handleChatSend} />
+             */}
           </BrowserRouter>
         </OrdersProvider>
       </AuthProvider>

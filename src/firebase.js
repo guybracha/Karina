@@ -2,14 +2,21 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported as analyticsSupported } from "firebase/analytics";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import {
+  getFirestore,
+  connectFirestoreEmulator,
+  enableIndexedDbPersistence,
+  enableNetwork,
+  disableNetwork,
+} from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
-// ---------------------------
-// טעינת קונפיג מה-ENV (ברירת מחדל)
-// ---------------------------
-let firebaseConfig = {
+// ----------------------------------------------------
+// קונפיג מ-ENV (פשוט וללא top-level await)
+// אם חסרים ערכים ב-ENV, האפליקציה תאתחל ותציג אזהרה בקונסול.
+// ----------------------------------------------------
+const firebaseConfig = {
   apiKey: process.env.REACT_APP_FB_API_KEY,
   authDomain: process.env.REACT_APP_FB_AUTH_DOMAIN,
   projectId: process.env.REACT_APP_FB_PROJECT_ID,
@@ -19,43 +26,20 @@ let firebaseConfig = {
   measurementId: process.env.REACT_APP_FB_MEASUREMENT_ID,
 };
 
-// ---------------------------
-// Fallback בזמן ריצה: אם חסר apiKey/projectId נטען public/firebase.config.json
-// ---------------------------
-async function ensureRuntimeConfig() {
-  if (!firebaseConfig?.apiKey || !firebaseConfig?.projectId) {
-    try {
-      const res = await fetch("/firebase.config.json", { cache: "no-store" });
-      if (res.ok) {
-        const json = await res.json();
-        firebaseConfig = { ...firebaseConfig, ...json };
-      }
-    } catch {
-      // מתעלמים – אם עדיין חסר, נראה לוג בהמשך
-    }
-  }
-}
-
 const isBrowser = typeof window !== "undefined";
-if (isBrowser) {
-  // אם סביבת הבילד שלך לא תומכת top-level await, הזז לפונקציית bootstrap לפני render של האפליקציה.
-  await ensureRuntimeConfig();
-}
-
-// DEBUG (בפיתוח בלבד)
 if (process.env.NODE_ENV !== "production") {
   // eslint-disable-next-line no-console
   console.log("Firebase config:", firebaseConfig);
   if (!firebaseConfig.projectId) {
     // eslint-disable-next-line no-console
-    console.error("❌ Missing REACT_APP_FB_PROJECT_ID (ENV לא נטענו?).");
+    console.warn("⚠️ Missing REACT_APP_FB_PROJECT_ID (בדקו את קובץ ה-.env).");
   }
 }
 
-// אתחול אפליקציה (להימנע מאתחול כפול)
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+// אתחול יחיד
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// אנליטיקס – רק אם נתמך ובדפדפן
+// אנליטיקס – רק בדפדפן ותמיכה
 export let analytics = null;
 if (isBrowser) {
   analyticsSupported().then((ok) => {
@@ -66,24 +50,40 @@ if (isBrowser) {
 // שירותים
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-
-// ✅ STORAGE
-// אם הגדרת storageBucket ב-config (מומלץ), getStorage ישתמש בו אוטומטית.
 export const storage = getStorage(app);
 
-// ✅ FUNCTIONS – אזור ברירת מחדל (התאם לפי הפריסה שלך)
+// Functions באזור קבוע (התאם אם צריך)
 const FUNCTIONS_REGION = "europe-west1";
 export const functions = getFunctions(app, FUNCTIONS_REGION);
 
-// ---------------------------
-// Emulators – פיתוח מקומי ללא עלות
-// הפעלה אוטומטית אם:
-// 1) רץ ב-localhost, או
-// 2) מוגדר REACT_APP_USE_EMULATORS=true
-// ---------------------------
+// ----------------------------------------------------
+// שיפור חוויית אופליין: פרסיסטנס + שינוי מצב רשת
+// ----------------------------------------------------
+enableIndexedDbPersistence(db).catch((err) => {
+  // מרבית השגיאות פה קשורות ל-multi-tab; מתעלמים בשקט
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.info("IndexedDB persistence note:", err?.code || err?.message || err);
+  }
+});
+
+if (isBrowser) {
+  // ננהל מצב רשת של Firestore מול חיבור הדפדפן
+  window.addEventListener("online", () => enableNetwork(db));
+  window.addEventListener("offline", () => disableNetwork(db));
+  // אם נכנסנו כבר אופליין, נכבה רשת (ימשיך לעבוד מקאש אם קיים)
+  if (!navigator.onLine) {
+    disableNetwork(db).catch(() => {});
+  }
+}
+
+// ----------------------------------------------------
+// Emulators – פיתוח מקומי ללא עלות (localhost או ENV)
+// ----------------------------------------------------
+// רק אם הגדירו במפורש בקובץ .env: REACT_APP_USE_EMULATORS=true
 const wantEmulators =
-  (isBrowser && window.location.hostname === "localhost") ||
   String(process.env.REACT_APP_USE_EMULATORS).toLowerCase() === "true";
+
 
 if (wantEmulators) {
   try {
@@ -91,7 +91,7 @@ if (wantEmulators) {
     console.log("🔌 Using Firebase Emulators");
     connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
     connectFirestoreEmulator(db, "127.0.0.1", 8080);
-    connectStorageEmulator(storage, "127.0.0.1", 9199); // 👈 STORAGE EMULATOR
+    connectStorageEmulator(storage, "127.0.0.1", 9199);
     connectFunctionsEmulator(functions, "127.0.0.1", 5001);
   } catch (e) {
     // eslint-disable-next-line no-console

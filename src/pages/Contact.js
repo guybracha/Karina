@@ -55,51 +55,6 @@ export default function Contact() {
             </div>
           </div>
         </div>
-
-        {/* טופס יצירת קשר */}
-        <div className="col-lg-7">
-          <div className="card shadow-sm p-4">
-            <h5 className="mb-3">השאירו הודעה</h5>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-3">
-                <label className="form-label">שם מלא</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  className="form-control"
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">אימייל</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  className="form-control"
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">הודעה</label>
-                <textarea
-                  name="message"
-                  rows="4"
-                  value={form.message}
-                  onChange={handleChange}
-                  className="form-control"
-                  required
-                ></textarea>
-              </div>
-              <button type="submit" className="btn btn-primary">
-                שלח הודעה
-              </button>
-            </form>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import AppAlt from './AppAlt';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <AppAlt />
   </React.StrictMode>
 );
 
