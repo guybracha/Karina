@@ -1372,3 +1372,173 @@ html[dir="rtl"] .accordion-button { text-align: right; }
 body:has(.modal-portal) {
   overflow: hidden;
 }
+
+/* ===========================
+   Karina — Upgrade Patch
+   מוסיף משתנים חסרים + קומפוננטות מכירה
+   =========================== */
+
+/* ---- Tokens (חסרים/חדשים) ---- */
+:root {
+  /* Brand extensions */
+  --pink-100: #ffe5ee;
+  --pink-500: #ff5a8b;
+  --pink-600: #e64e7a;
+
+  --blue-fb: #1877f2;
+
+  /* Type scale */
+  --fs-h1: clamp(28px, 3.4vw, 44px);
+  --fs-h2: clamp(22px, 2.6vw, 32px);
+  --fs-h3: clamp(18px, 2.0vw, 24px);
+  --fs-body: 16px;
+
+  /* Radius scale */
+  --radius-xl: 1.25rem; /* חסר בקוד הישן */
+
+  /* Shadows – עדינות למוצרי E-com */
+  --shadow-card: 0 8px 24px rgba(16, 24, 40, .06);
+  --shadow-card-hover: 0 16px 32px rgba(16, 24, 40, .12);
+
+  /* Gradients לשטחי Hero/CTA */
+  --grad-hero: linear-gradient(90deg, rgba(255,168,196,.20) 0%, rgba(255,255,255,1) 100%);
+  --grad-cta: linear-gradient(90deg, var(--pink-500), #ff7a59);
+}
+
+/* ---- Hero משודרג (מסרים + כפתורים) ---- */
+.page-hero {
+  text-align: center;
+  padding: 48px 0 28px;
+  background: var(--grad-hero);
+  border-bottom: 1px solid #eee;
+}
+.page-hero .title { font-size: var(--fs-h1); font-weight: 900; letter-spacing: 0; }
+.page-hero .subtitle { font-size: clamp(14px, 1.6vw, 18px); color:#444; opacity:.95; }
+.page-hero .cta-row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:16px; }
+.btn-cta {
+  padding: 12px 18px; border-radius: 999px; font-weight: 800; border: 0; color:#fff;
+  background: var(--grad-cta); box-shadow: var(--shadow-sm);
+}
+.btn-cta:hover { filter: brightness(0.97); transform: translateY(-1px); }
+.btn-cta-outline {
+  padding: 12px 18px; border-radius: 999px; font-weight: 800;
+  color:#222; background:#fff; border:1px solid #e8e8e8;
+}
+.btn-cta-outline:hover { background:#f8f9fb; }
+
+/* ---- Product Cards (תגיות, דירוג, מחסור) ---- */
+.product-card { position: relative; overflow: hidden; box-shadow: var(--shadow-card); }
+.product-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-2px); }
+
+.product-badge {
+  position: absolute; top: 12px; inset-inline-start: 12px;
+  background: #111827; color:#fff; font-weight: 800; font-size: .75rem;
+  padding: 6px 10px; border-radius: 999px; letter-spacing: .2px;
+}
+.product-badge.sale { background: var(--pink-500); }
+.product-badge.new  { background: #0ea5e9; }
+
+.product-meta-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px; color:#555;
+}
+.stars {
+  --star-size: 16px;
+  display: inline-flex; gap: 2px; align-items:center;
+}
+.stars i { width: var(--star-size); height: var(--star-size); display:inline-block; }
+.stars i::before { content: "★"; display:block; line-height:1; }
+.stars .on  { color: #f59f00; }
+.stars .off { color: #e5e7eb; }
+.review-count { font-size: .9rem; color:#6b7280; }
+
+.low-stock {
+  margin-top: 8px;
+  display: grid; gap: 6px; font-size: .9rem; color:#7a5a00;
+}
+.low-stock .bar {
+  height: 6px; border-radius: 999px; background: #fff3bf; overflow: hidden;
+  border: 1px solid #ffe08a;
+}
+.low-stock .bar > span {
+  display:block; height:100%; width: 45%; background: #f59f00; border-radius: 999px;
+}
+
+/* ---- Sticky Actions לנייד (גלובלי) ---- */
+.mobile-sticky {
+  position: fixed; inset-inline: 0; bottom: 0; z-index: 1040;
+  background: #ffffffee; backdrop-filter: blur(8px); border-top: 1px solid #eee;
+  padding: 10px 12px; display: none; gap: 10px;
+}
+.mobile-sticky .btn { flex: 1; border-radius: 999px; }
+@media (max-width: 768px){
+  .mobile-sticky { display: flex; }
+}
+
+/* ---- WhatsApp / Chat Floating ---- */
+.fab-wrap {
+  position: fixed; inset-inline-end: 16px; inset-block-end: 88px; z-index: 1030;
+  display: grid; gap: 10px;
+}
+.fab {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: grid; place-items: center; box-shadow: var(--shadow-md);
+  background:#25d366; color:#fff; border:0;
+}
+.fab:hover { filter: brightness(0.95); transform: translateY(-1px); }
+
+/* ---- Trust Badges בקופה / מוצר ---- */
+.trust-badges {
+  display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px;
+}
+.trust-badges .badge {
+  border: 1px solid #e6e7ea; border-radius: 12px; padding: 10px; background:#fff;
+  display:flex; align-items:center; gap:8px; font-weight:700;
+}
+
+/* ---- Skeleton Loading ---- */
+.skeleton {
+  background: linear-gradient(90deg, #f2f4f7, #eceff3, #f2f4f7);
+  background-size: 200% 100%;
+  animation: sk 1.2s ease-in-out infinite;
+  border-radius: 8px;
+}
+@keyframes sk { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ---- נגישות ופוקוס ---- */
+:focus-visible {
+  outline: 3px solid rgba(13,110,253,.35);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ---- Navbar – ניקוי כפילויות + הדגשת CTA ---- */
+.karina-navbar {
+  position: sticky; top: 0; z-index: 1000;
+  background: #ffffffcc; backdrop-filter: blur(8px);
+  border-bottom: 1px solid #eee; box-shadow: var(--shadow-sm);
+}
+.karina-navbar .nav-link {
+  font-weight: 700; color: #222; border-radius: 999px; padding: 8px 12px;
+}
+.karina-navbar .nav-link:hover, .karina-navbar .nav-link.active { background: #f4f4f4; }
+.karina-navbar .nav-cta {
+  background: var(--grad-cta); color:#fff; border-radius: 999px; padding: 8px 14px; font-weight:800;
+}
+.karina-navbar .nav-cta:hover { filter: brightness(0.97); }
+
+/* ---- Cards/Containers – צל וגובה עקביים ---- */
+.card { box-shadow: var(--shadow-card); }
+.card:hover { box-shadow: var(--shadow-card-hover); }
+
+/* ---- Footer – גרסת מכירה בהירה ---- */
+.karina-footer {
+  margin-top: 40px;
+  background: linear-gradient(180deg, #fff 0%, var(--pink-100) 100%);
+  border-top: 1px solid #eee; color: #333;
+}
+.karina-footer .footer-title { font-weight: 800; font-size: 1.1rem; margin-bottom: .5rem; }
+.karina-footer a { color: var(--blue-fb); }
+.karina-footer a:hover { text-decoration: underline; }

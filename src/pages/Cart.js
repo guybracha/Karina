@@ -13,6 +13,7 @@ import { uploadPreview } from "../lib/uploadPreview";
 
 const LS_CART_KEY = "karina:cart";
 const LS_SHIP_KEY = "karina:shipping";
+const LS_ADDR_KEY = "karina:shippingAddress"; // שדות נפרדים נשמרים כ-JSON
 // הדמיה שמורה לפי מוצר+צד
 const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
 
@@ -23,7 +24,37 @@ const SHIP_OPTIONS = {
   pickup:   { label: "איסוף מהמפעל", cost: 0  },
 };
 
-// ===== LocalStorage helpers (עם נירמול והקשחה) =====
+/* ===== כתובת: עזר ===== */
+function defaultAddress() {
+  return { city: "", street: "", house: "", apt: "", zip: "", notes: "" };
+}
+function normalizeAddress(x) {
+  if (!x) return defaultAddress();
+  if (typeof x === "string") {
+    // תאימות לאחור: אם שמור כמחרוזת – נשמר בהערות
+    return { ...defaultAddress(), notes: x };
+  }
+  const base = defaultAddress();
+  const out = { ...base, ...x };
+  // הבטח שכל השדות מחרוזות
+  for (const k of Object.keys(base)) out[k] = String(out[k] ?? "");
+  return out;
+}
+function readAddressFromLS() {
+  try {
+    const raw = localStorage.getItem(LS_ADDR_KEY);
+    return normalizeAddress(raw ? JSON.parse(raw) : null);
+  } catch {
+    return defaultAddress();
+  }
+}
+function writeAddressToLS(addr) {
+  try {
+    localStorage.setItem(LS_ADDR_KEY, JSON.stringify(normalizeAddress(addr)));
+  } catch {}
+}
+
+/* ===== LocalStorage helpers (עם נירמול והקשחה) ===== */
 function isValidItem(x) {
   return x && typeof x === "object" &&
     "id" in x && "name" in x &&
@@ -67,6 +98,7 @@ export default function Cart() {
   const [shipping, setShipping] = useState(() => {
     try { return localStorage.getItem(LS_SHIP_KEY) || "standard"; } catch { return "standard"; }
   });
+  const [shippingAddress, setShippingAddress] = useState(() => readAddressFromLS());
   const [loading, setLoading] = useState(false);
 
   // Firebase user state
@@ -93,13 +125,18 @@ export default function Cart() {
         const data = snap.data() || {};
         const fsItems = Array.isArray(data.items) ? data.items : [];
         const fsShipping = data.shipping?.method || "standard";
+        const fsAddress = normalizeAddress(data.shipping?.address || ""); // תאימות לכל פורמט
 
         // אם עגלת הענן לא ריקה → היא המקור
         if (fsItems.length > 0) {
           setItems(fsItems);
           setShipping(fsShipping);
+          setShippingAddress(fsAddress);
           saveCartToLS(fsItems); // סנכרון חד־כיווני FS→LS
-          try { localStorage.setItem(LS_SHIP_KEY, fsShipping); } catch {}
+          try {
+            localStorage.setItem(LS_SHIP_KEY, fsShipping);
+            writeAddressToLS(fsAddress);
+          } catch {}
           return;
         }
 
@@ -109,7 +146,12 @@ export default function Cart() {
           setItems(lsItems);
           await setDoc(cartDocRef(userId), {
             items: lsItems,
-            shipping: { method: shipping, label: SHIP_OPTIONS[shipping]?.label || "משלוח רגיל", cost: SHIP_OPTIONS[shipping]?.cost ?? 20 },
+            shipping: {
+              method: shipping,
+              label: SHIP_OPTIONS[shipping]?.label || "משלוח רגיל",
+              cost: SHIP_OPTIONS[shipping]?.cost ?? 20,
+              address: normalizeAddress(shippingAddress)
+            },
             updatedAt: serverTimestamp(),
           }, { merge: true });
           // לא מוחקים LS
@@ -117,7 +159,11 @@ export default function Cart() {
           // גם FS וגם LS ריקים
           setItems([]);
           setShipping(fsShipping);
-          try { localStorage.setItem(LS_SHIP_KEY, fsShipping); } catch {}
+          setShippingAddress(fsAddress);
+          try {
+            localStorage.setItem(LS_SHIP_KEY, fsShipping);
+            writeAddressToLS(fsAddress);
+          } catch {}
         }
       } else {
         // אין מסמך עגלה בענן → קדם את LS אם יש
@@ -126,7 +172,12 @@ export default function Cart() {
           setItems(lsItems);
           await setDoc(cartDocRef(userId), {
             items: lsItems,
-            shipping: { method: shipping, label: SHIP_OPTIONS[shipping]?.label || "משלוח רגיל", cost: SHIP_OPTIONS[shipping]?.cost ?? 20 },
+            shipping: {
+              method: shipping,
+              label: SHIP_OPTIONS[shipping]?.label || "משלוח רגיל",
+              cost: SHIP_OPTIONS[shipping]?.cost ?? 20,
+              address: normalizeAddress(shippingAddress)
+            },
             updatedAt: serverTimestamp(),
           }, { merge: true });
         } else {
@@ -139,7 +190,7 @@ export default function Cart() {
     }
   }
 
-  function scheduleSaveToFirestore(userId, nextItems, nextShipping) {
+  function scheduleSaveToFirestore(userId, nextItems, nextShipping, nextAddress) {
     if (!userId) return; // אורח: לא שומר ל-FS
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
@@ -147,7 +198,12 @@ export default function Cart() {
         const opt = SHIP_OPTIONS[nextShipping] || SHIP_OPTIONS.standard;
         await setDoc(cartDocRef(userId), {
           items: nextItems,
-          shipping: { method: nextShipping, label: opt.label, cost: opt.cost },
+          shipping: {
+            method: nextShipping,
+            label: opt.label,
+            cost: opt.cost,
+            address: normalizeAddress(nextAddress)
+          },
           updatedAt: serverTimestamp(),
         }, { merge: true });
       } catch (e) {
@@ -182,7 +238,7 @@ export default function Cart() {
       status: "initiated",                // או "pending_payment"
       customer,                           // { uid, name, phone, email }
       items: payload.items,               // כולל previews
-      shipping: payload.shipping,         // { method, label, cost }
+      shipping: payload.shipping,         // { method, label, cost, address:{} }
       totals: payload.clientTotals,       // { merchandiseTotal, shippingCost, grandTotal }
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -233,6 +289,9 @@ export default function Cart() {
       if (e.key === LS_SHIP_KEY) {
         try { setShipping(localStorage.getItem(LS_SHIP_KEY) || "standard"); } catch {}
       }
+      if (e.key === LS_ADDR_KEY) {
+        try { setShippingAddress(readAddressFromLS()); } catch {}
+      }
     }
     function onCustom() {
       setItems(readCartFromLS());
@@ -245,19 +304,20 @@ export default function Cart() {
     };
   }, []);
 
-  // שמירת בחירת משלוח ב-LS וב-FS
+  // שמירת בחירת משלוח וכתובת ב-LS וב-FS
   useEffect(() => {
     try { localStorage.setItem(LS_SHIP_KEY, shipping); } catch {}
-    scheduleSaveToFirestore(uid, items, shipping);
+    writeAddressToLS(shippingAddress);
+    scheduleSaveToFirestore(uid, items, shipping, shippingAddress);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shipping]);
+  }, [shipping, shippingAddress]);
 
   function updateQty(id, newQty) {
     const qty = Math.max(1, Number(newQty) || 1);
     setItems((prev) => {
       const next = prev.map((it) => (it.id === id ? { ...it, qty } : it));
       saveCartToLS(next);
-      scheduleSaveToFirestore(uid, next, shipping);
+      scheduleSaveToFirestore(uid, next, shipping, shippingAddress);
       return next;
     });
   }
@@ -266,7 +326,7 @@ export default function Cart() {
     setItems((prev) => {
       const next = prev.filter((it) => it.id !== id);
       saveCartToLS(next);
-      scheduleSaveToFirestore(uid, next, shipping);
+      scheduleSaveToFirestore(uid, next, shipping, shippingAddress);
       return next;
     });
   }
@@ -314,109 +374,127 @@ export default function Cart() {
     }
   }
 
-  // התחלת תשלום: שולחים גם הדמיות וגם משלוח + שמירת הזמנה במסד
-async function startCheckout() {
-  try {
-    setLoading(true);
-
-    // 1) ודא שיש orderId מוקדם כדי לשמור תמונות תחתיו
-    const customer = uid ? await getCustomerProfile(uid) : null;
-    let orderId = null;
-
-    // מכין payload בסיסי (ללא קישורים עדיין)
-    const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
-    const basePayload = {
-      items: [], // נמלא אחרי העלאות
-      shipping: { method: shipping, label: shipOpt.label, cost: shipOpt.cost },
-      clientTotals: { merchandiseTotal, shippingCost, grandTotal },
-    };
-
-    if (customer?.uid) {
-      // צור מסמך הזמנה ריק כדי לקבל orderId
-      orderId = await createOrderDocument(customer, basePayload);
-      try { localStorage.setItem("karina:lastOrderId", orderId); } catch {}
-    }
-
-    // 2) העלאת הדמיות ל-Storage והחלפתן ב-URL
-    const itemsWithUrls = [];
-    for (const { slug, qty, color, size, name, price } of items) {
-      const { front, back } = getPreviewsForItem({ slug });
-      let frontUrl = null, backUrl = null;
-
-      if (customer?.uid && front?.startsWith?.("data:")) {
-        try {
-          const up = await uploadPreview({ uid: customer.uid, orderId, slug, side: "front", source: front });
-          frontUrl = up.url;
-        } catch (e) { console.warn("upload front failed", e); }
-      } else if (front && /^https?:\/\//.test(front)) {
-        frontUrl = front; // כבר URL
-      }
-
-      if (customer?.uid && back?.startsWith?.("data:")) {
-        try {
-          const up = await uploadPreview({ uid: customer.uid, orderId, slug, side: "back", source: back });
-          backUrl = up.url;
-        } catch (e) { console.warn("upload back failed", e); }
-      } else if (back && /^https?:\/\//.test(back)) {
-        backUrl = back;
-      }
-
-      itemsWithUrls.push({
-        slug, qty, color, size, name, price,
-        previews: { frontUrl: frontUrl || null, backUrl: backUrl || null },
-      });
-    }
-
-    // 3) עדכן את ההזמנה במסד עם ה-URLs החדשים
-    const payload = { ...basePayload, items: itemsWithUrls };
-
-    if (uid) {
-      // דרפט אישי תחת המשתמש
-      await upsertDraftOrder(uid, payload, customer);
-    }
-    if (customer?.uid && orderId) {
-      // עדכון מסמך ההזמנה הטופ-לבל
-      await setDoc(
-        doc(db, "orders", orderId),
-        { items: itemsWithUrls, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-    }
-
-    // 4) יצירת סשן תשלום
-    let checkoutUrl = null;
-    try {
-      const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
-      const { data } = await createCheckoutSession({
-        ...payload,
-        orderId,
-        customer,
-      });
-      checkoutUrl = data?.checkoutUrl || null;
-    } catch (e) {
-      console.info("Callable function failed/absent, trying /api/checkout/session…", e);
-    }
-
-    if (!checkoutUrl) {
-      const res = await fetch("/api/checkout/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, orderId, customer }),
-      });
-      if (!res.ok) throw new Error("Checkout request failed");
-      const json = await res.json();
-      checkoutUrl = json?.checkoutUrl;
-    }
-
-    if (!checkoutUrl) throw new Error("Missing checkoutUrl");
-    window.location.href = checkoutUrl;
-  } catch (err) {
-    console.error(err);
-    alert("אירעה שגיאה בהפניה לקופה. נסה שוב.");
-  } finally {
-    setLoading(false);
+  // ולידציה בסיסית לכתובת (אם לא איסוף)
+  function isAddressValid(addr) {
+    const a = normalizeAddress(addr);
+    if (shipping === "pickup") return true;
+    return a.city.trim() && a.street.trim() && a.house.trim();
   }
-}
+
+  // התחלת תשלום: שולחים גם הדמיות וגם משלוח + שמירת הזמנה במסד
+  async function startCheckout() {
+    try {
+      setLoading(true);
+
+      if (items.length > 0 && !isAddressValid(shippingAddress)) {
+        alert("אנא מלא/י עיר, רחוב ומספר בית או בחר/י 'איסוף מהמפעל'.");
+        setLoading(false);
+        return;
+      }
+
+      // 1) ודא שיש orderId מוקדם כדי לשמור תמונות תחתיו
+      const customer = uid ? await getCustomerProfile(uid) : null;
+      let orderId = null;
+
+      // מכין payload בסיסי (ללא קישורים עדיין)
+      const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
+      const basePayload = {
+        items: [], // נמלא אחרי העלאות
+        shipping: {
+          method: shipping,
+          label: shipOpt.label,
+          cost: shipOpt.cost,
+          address: normalizeAddress(shippingAddress)
+        },
+        clientTotals: { merchandiseTotal, shippingCost, grandTotal },
+      };
+
+      if (customer?.uid) {
+        // צור מסמך הזמנה ריק כדי לקבל orderId
+        orderId = await createOrderDocument(customer, basePayload);
+        try { localStorage.setItem("karina:lastOrderId", orderId); } catch {}
+      }
+
+      // 2) העלאת הדמיות ל-Storage והחלפתן ב-URL
+      const itemsWithUrls = [];
+      for (const { slug, qty, color, size, name, price } of items) {
+        const { front, back } = getPreviewsForItem({ slug });
+        let frontUrl = null, backUrl = null;
+
+        if (customer?.uid && front?.startsWith?.("data:")) {
+          try {
+            const up = await uploadPreview({ uid: customer.uid, orderId, slug, side: "front", source: front });
+            frontUrl = up.url;
+          } catch (e) { console.warn("upload front failed", e); }
+        } else if (front && /^https?:\/\//.test(front)) {
+          frontUrl = front; // כבר URL
+        }
+
+        if (customer?.uid && back?.startsWith?.("data:")) {
+          try {
+            const up = await uploadPreview({ uid: customer.uid, orderId, slug, side: "back", source: back });
+            backUrl = up.url;
+          } catch (e) { console.warn("upload back failed", e); }
+        } else if (back && /^https?:\/\//.test(back)) {
+          backUrl = back;
+        }
+
+        itemsWithUrls.push({
+          slug, qty, color, size, name, price,
+          previews: { frontUrl: frontUrl || null, backUrl: backUrl || null },
+        });
+      }
+
+      // 3) עדכן את ההזמנה במסד עם ה-URLs החדשים
+      const payload = { ...basePayload, items: itemsWithUrls };
+
+      if (uid) {
+        // דרפט אישי תחת המשתמש
+        await upsertDraftOrder(uid, payload, customer);
+      }
+      if (customer?.uid && orderId) {
+        // עדכון מסמך ההזמנה הטופ-לבל
+        await setDoc(
+          doc(db, "orders", orderId),
+          { items: itemsWithUrls, updatedAt: serverTimestamp() },
+          { merge: true }
+        );
+      }
+
+      // 4) יצירת סשן תשלום
+      let checkoutUrl = null;
+      try {
+        const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
+        const { data } = await createCheckoutSession({
+          ...payload,
+          orderId,
+          customer,
+        });
+        checkoutUrl = data?.checkoutUrl || null;
+      } catch (e) {
+        console.info("Callable function failed/absent, trying /api/checkout/session…", e);
+      }
+
+      if (!checkoutUrl) {
+        const res = await fetch("/api/checkout/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, orderId, customer }),
+        });
+        if (!res.ok) throw new Error("Checkout request failed");
+        const json = await res.json();
+        checkoutUrl = json?.checkoutUrl;
+      }
+
+      if (!checkoutUrl) throw new Error("Missing checkoutUrl");
+      window.location.href = checkoutUrl;
+    } catch (err) {
+      console.error(err);
+      alert("אירעה שגיאה בהפניה לקופה. נסה שוב.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="container py-4">
@@ -534,6 +612,70 @@ async function startCheckout() {
                   </label>
                 </div>
               ))}
+            </div>
+
+            <hr className="my-3" />
+            <div className="mb-2">
+              <label className="form-label fw-semibold">כתובת למשלוח</label>
+              <div className="row g-2">
+                <div className="col-md-6">
+                  <label className="form-label">עיר</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={shippingAddress.city}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
+                  />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">רחוב</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={shippingAddress.street}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, street: e.target.value })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label">מספר בית</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={shippingAddress.house}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, house: e.target.value })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label">דירה</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={shippingAddress.apt}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, apt: e.target.value })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label">מיקוד</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={shippingAddress.zip}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, zip: e.target.value })}
+                  />
+                </div>
+                <div className="col-12">
+                  <label className="form-label">הערות לשליח</label>
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    value={shippingAddress.notes}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, notes: e.target.value })}
+                  />
+                </div>
+              </div>
+              <small className="text-muted d-block mt-1">
+                נדרש עיר, רחוב ומספר בית למשלוח (או בחר/י "איסוף מהמפעל").
+              </small>
             </div>
           </div>
 

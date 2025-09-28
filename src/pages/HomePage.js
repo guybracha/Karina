@@ -6,7 +6,7 @@ import { PRODUCTS } from "../lib/products";
 
 const CATEGORY_LABELS = {
   workwear: "ביגוד עבודה",
-  safety: "בטיחות / זוהר",
+  safety: "בטיחות",
   // אפשר להוסיף כאן מיפויים עתידיים:
   // hoodies: "קפוצ'ונים",
   // tshirts: "טי-שירטים",

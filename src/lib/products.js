@@ -27,7 +27,6 @@ export const PRODUCTS = [
     name: "קפוצ׳ון נייבי",
     price: 120,
     img: hoodieUrl,
-    backImg: hoodiePocket,
     colors: ["נייבי", "שחור", "אפור"],
     sizes: ["S", "M", "L", "XL"],
     category: "workwear",

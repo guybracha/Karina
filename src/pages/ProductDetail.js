@@ -1,6 +1,6 @@
 // src/pages/ProductDetail.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, Link, useLocation } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 
 import LogoPlacementModal from "../components/LogoPlacementModal";
@@ -9,17 +9,65 @@ import ColorSwatches from "../components/ColorSwatches";
 import SizePicker from "../components/SizePicker";
 import { PRODUCTS } from "../lib/products";
 
-// LS keys — לפי מוצר+צד
-const LS_USER_LOGO_KEY = (side) => `karina:userLogo:${side}`;                 // לוגו גלובלי לפי צד
-const LS_PREVIEW_KEY   = (slug, side) => `karina:preview:${slug}:${side}`;     // הדמיה למוצר/צד
+// LS keys
+const LS_USER_LOGO_KEY = (side) => `karina:userLogo:${side}`;
+const LS_PREVIEW_KEY   = (slug, side) => `karina:preview:${slug}:${side}`;
 const LS_CART_KEY = "karina:cart";
+// ⭐ RATING: מפתח לשמירת דירוג המשתמש למוצר ספציפי
+const LS_RATING_KEY = (slug) => `karina:rating:${slug}`;
+
+// ⭐ RATING: קומפוננטת כוכבים נגישה
+function StarRater({ value, onChange, size = 24, ariaLabel = "דירוג" }) {
+  const [hover, setHover] = useState(0);
+  const stars = [1, 2, 3, 4, 5];
+  return (
+    <div
+      className="d-inline-flex align-items-center"
+      role="radiogroup"
+      aria-label={ariaLabel}
+      onMouseLeave={() => setHover(0)}
+    >
+      {stars.map((s) => {
+        const active = (hover || value) >= s;
+        return (
+          <button
+            key={s}
+            type="button"
+            className="btn p-0 border-0 bg-transparent"
+            role="radio"
+            aria-checked={value === s}
+            aria-label={`${s} מתוך 5`}
+            onMouseEnter={() => setHover(s)}
+            onClick={() => onChange(s)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(s); }
+            }}
+            style={{ lineHeight: 1, width: size, height: size, cursor: "pointer" }}
+            title={`${s} כוכבים`}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                width: size,
+                height: size,
+                color: active ? "#f59f00" : "#e5e7eb",
+                fontSize: size * 0.9,
+              }}
+            >
+              ★
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function ProductDetail() {
   const [showUpload, setShowUpload] = useState(false);
   const [showLogoModal, setShowLogoModal] = useState(false);
 
   const { slug } = useParams();
-  const location = useLocation();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
 
   // בחירות מוצר
@@ -29,14 +77,21 @@ export default function ProductDetail() {
 
   // ===== הזמנה מרוכזת (Bulk) =====
   const [bulkMode, setBulkMode] = useState(false);
-  const [bulkByColor, setBulkByColor] = useState({}); // { [color]: { [size]: number } }
+  const [bulkByColor, setBulkByColor] = useState({});
 
-  // צד מוצג: 'front' | 'back'
+  // צד
   const [side, setSide] = useState("front");
 
-  // לוגו והדמיה — לפי צד
+  // לוגו/הדמיה
   const [logoBySide, setLogoBySide]       = useState({ front: null, back: null });
   const [previewBySide, setPreviewBySide] = useState({ front: null, back: null });
+
+  // ⭐ RATING: בסיס סטטיסטיקות (מהדאטה) + דירוג משתמש
+  const baseAvg = Number(product?.rating ?? 4.5);
+  const baseCount = Number(product?.reviews ?? 120);
+  const [userRating, setUserRating] = useState(0); // 1..5 או 0 אם עדיין לא דירג
+  const [displayAvg, setDisplayAvg] = useState(baseAvg);
+  const [displayCount, setDisplayCount] = useState(baseCount);
 
   // SEO
   const origin = typeof window !== "undefined" ? window.location.origin : "https://example.com";
@@ -47,11 +102,9 @@ export default function ProductDetail() {
     ? `חולצת ${product.name} להדפסה אישית. צבעים: ${colorsList}. מידות: ${sizesList}.`
     : "המוצר לא נמצא.";
 
-  // תמונת בסיס לכל צד
   const baseImageForSide = side === "front" ? product?.img : (product?.backImg || product?.img);
   const shownImage = previewBySide[side] || baseImageForSide;
 
-  // מוצרים דומים
   const currentKey = product?.type ?? product?.category ?? null;
   const similarProducts = useMemo(
     () =>
@@ -61,94 +114,89 @@ export default function ProductDetail() {
     [product, currentKey]
   );
 
-  // עגלה (LS)
   function readCartFromLS() {
-    try {
-      const raw = localStorage.getItem(LS_CART_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr : [];
-    } catch {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem(LS_CART_KEY) || "[]") ?? []; } catch { return []; }
   }
   function saveCartToLS(next) {
-    try {
-      localStorage.setItem(LS_CART_KEY, JSON.stringify(next));
-      window.dispatchEvent(new Event("karina:cartUpdated"));
-    } catch {}
+    try { localStorage.setItem(LS_CART_KEY, JSON.stringify(next)); window.dispatchEvent(new Event("karina:cartUpdated")); } catch {}
   }
 
-  // בעת טעינת/החלפת מוצר — טען לוגו/הדמיות לשני הצדדים, אתחל bulk לצבעים
+  // טעינת הדמיות/לוגו + אתחול bulk + טעינת דירוג משתמש
   useEffect(() => {
     setColor(product?.colors?.[0] || "");
     setSize(product?.sizes?.[0] || "");
     setQty(1);
     setSide("front");
     setBulkMode(false);
-    setBulkByColor({}); // אתחול עבור מוצר חדש
+    setBulkByColor({});
 
     try {
       const frontPreview = localStorage.getItem(LS_PREVIEW_KEY(product?.slug || "", "front"));
       const backPreview  = localStorage.getItem(LS_PREVIEW_KEY(product?.slug || "", "back"));
       setPreviewBySide({ front: frontPreview || null, back: backPreview || null });
-    } catch {
-      setPreviewBySide({ front: null, back: null });
-    }
+    } catch { setPreviewBySide({ front: null, back: null }); }
 
     try {
       const frontLogo = localStorage.getItem(LS_USER_LOGO_KEY("front"));
       const backLogo  = localStorage.getItem(LS_USER_LOGO_KEY("back"));
       setLogoBySide({ front: frontLogo || null, back: backLogo || null });
+    } catch { setLogoBySide({ front: null, back: null }); }
+
+    // ⭐ RATING: קריאה מ־LS + חישוב תצוגה
+    try {
+      const ur = Number(localStorage.getItem(LS_RATING_KEY(product?.slug || "")) || 0);
+      setUserRating(ur || 0);
+      if (ur > 0) {
+        setDisplayAvg(((baseAvg * baseCount) + ur) / (baseCount + 1));
+        setDisplayCount(baseCount + 1);
+      } else {
+        setDisplayAvg(baseAvg);
+        setDisplayCount(baseCount);
+      }
     } catch {
-      setLogoBySide({ front: null, back: null });
+      setUserRating(0);
+      setDisplayAvg(baseAvg);
+      setDisplayCount(baseCount);
     }
 
     setShowUpload(false);
     setShowLogoModal(false);
-  }, [product]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.slug]);
 
-  // ודא שלכל צבע יהיה אובייקט מידות ב-bulkByColor
+  // ודא אובייקט bulk לכל צבע
   useEffect(() => {
     if (!product?.sizes || !color) return;
     setBulkByColor((prev) => {
       if (prev[color]) {
         const copy = { ...prev[color] };
-        product.sizes.forEach((s) => {
-          if (typeof copy[s] !== "number") copy[s] = 0;
-        });
+        product.sizes.forEach((s) => { if (typeof copy[s] !== "number") copy[s] = 0; });
         return { ...prev, [color]: copy };
       } else {
-        const init = {};
-        product.sizes.forEach((s) => (init[s] = 0));
+        const init = {}; product.sizes.forEach((s) => (init[s] = 0));
         return { ...prev, [color]: init };
       }
     });
   }, [color, product?.sizes]);
 
-  // ===== לוגיקת הדמיות ולוגו =====
+  // הדמיות/לוגו
   function onSavePlacement({ dataUrl }) {
     setPreviewBySide((prev) => {
       const next = { ...prev, [side]: dataUrl };
-      try {
-        if (product?.slug) localStorage.setItem(LS_PREVIEW_KEY(product.slug, side), dataUrl);
-      } catch {}
+      try { if (product?.slug) localStorage.setItem(LS_PREVIEW_KEY(product.slug, side), dataUrl); } catch {}
       return next;
     });
     setShowLogoModal(false);
   }
-
   function onLogoUploaded(dataUrl) {
     setLogoBySide((prev) => {
       const next = { ...prev, [side]: dataUrl };
-      try {
-        localStorage.setItem(LS_USER_LOGO_KEY(side), dataUrl);
-      } catch {}
+      try { localStorage.setItem(LS_USER_LOGO_KEY(side), dataUrl); } catch {}
       return next;
     });
     setShowUpload(false);
     setShowLogoModal(true);
   }
-
   function resetSaved() {
     try {
       localStorage.removeItem(LS_USER_LOGO_KEY("front"));
@@ -162,95 +210,69 @@ export default function ProductDetail() {
     setPreviewBySide({ front: null, back: null });
   }
 
-  // ===== הוספה רגילה לעגלה =====
+  // עגלה
   function addToCart() {
     if (!product) return;
     const lineId = `${product.slug}__${color}__${size}`;
     const current = readCartFromLS();
-
-    const existingIdx = current.findIndex((it) => it.id === lineId);
-    if (existingIdx >= 0) {
+    const idx = current.findIndex((it) => it.id === lineId);
+    if (idx >= 0) {
       const next = [...current];
-      const prevQty = Number(next[existingIdx].qty || 0);
-      next[existingIdx] = { ...next[existingIdx], qty: prevQty + Number(qty || 1) };
+      const prevQty = Number(next[idx].qty || 0);
+      next[idx] = { ...next[idx], qty: prevQty + Number(qty || 1) };
       saveCartToLS(next);
     } else {
-      const newItem = {
-        id: lineId,
-        slug: product.slug,
-        name: product.name,
-        price: Number(product.price) || 0,
-        qty: Number(qty || 1),
-        color,
-        size,
-        addedAt: Date.now()
-      };
-      saveCartToLS([newItem, ...current]);
+      saveCartToLS([{ id: lineId, slug: product.slug, name: product.name, price: Number(product.price) || 0, qty: Number(qty || 1), color, size, addedAt: Date.now() }, ...current]);
     }
     alert(`נוסף לעגלה: ${product.name} - ${color} / ${size} x${qty}`);
   }
 
-  // ===== לוגיקת הזמנה מרוכזת =====
+  // Bulk
   const bulkForCurrentColor = bulkByColor[color] || {};
   const bulkTotalForCurrentColor = useMemo(
     () => Object.values(bulkForCurrentColor).reduce((s, n) => s + (Number(n) || 0), 0),
     [bulkForCurrentColor]
   );
-
   function setBulkQty(sizeKey, value) {
     const num = Math.max(0, Number(value) || 0);
-    setBulkByColor((prev) => ({
-      ...prev,
-      [color]: { ...(prev[color] || {}), [sizeKey]: num },
-    }));
+    setBulkByColor((prev) => ({ ...prev, [color]: { ...(prev[color] || {}), [sizeKey]: num } }));
   }
-
   function clearBulkForColor() {
     if (!product?.sizes) return;
-    const cleared = {};
-    product.sizes.forEach((s) => (cleared[s] = 0));
+    const cleared = {}; product.sizes.forEach((s) => (cleared[s] = 0));
     setBulkByColor((prev) => ({ ...prev, [color]: cleared }));
   }
-
   function addBulkToCart() {
     if (!product) return;
-    const current = readCartFromLS();
-    const next = [...current];
-
+    const current = readCartFromLS(); const next = [...current];
     Object.entries(bulkForCurrentColor).forEach(([sizeKey, q]) => {
-      const addQty = Math.max(0, Number(q) || 0);
-      if (!addQty) return;
-
+      const addQty = Math.max(0, Number(q) || 0); if (!addQty) return;
       const lineId = `${product.slug}__${color}__${sizeKey}`;
-      const existingIdx = next.findIndex((it) => it.id === lineId);
-      if (existingIdx >= 0) {
-        const prevQty = Number(next[existingIdx].qty || 0);
-        next[existingIdx] = { ...next[existingIdx], qty: prevQty + addQty };
+      const idx = next.findIndex((it) => it.id === lineId);
+      if (idx >= 0) {
+        const prevQty = Number(next[idx].qty || 0);
+        next[idx] = { ...next[idx], qty: prevQty + addQty };
       } else {
-        next.unshift({
-          id: lineId,
-          slug: product.slug,
-          name: product.name,
-          price: Number(product.price) || 0,
-          qty: addQty,
-          color,
-          size: sizeKey,
-          addedAt: Date.now(),
-        });
+        next.unshift({ id: lineId, slug: product.slug, name: product.name, price: Number(product.price) || 0, qty: addQty, color, size: sizeKey, addedAt: Date.now() });
       }
     });
-
     saveCartToLS(next);
-    alert(
-      bulkTotalForCurrentColor > 0
-        ? `נוספו לעגלה ${bulkTotalForCurrentColor} יח' של ${product.name} בצבע ${color} במידות שונות.`
-        : `לא הוזנו כמויות להזמנה מרוכזת.`
-    );
+    alert(bulkTotalForCurrentColor > 0 ? `נוספו לעגלה ${bulkTotalForCurrentColor} יח' של ${product.name} בצבע ${color}.` : `לא הוזנו כמויות להזמנה מרוכזת.`);
   }
 
   const canAdd = Boolean(color) && Boolean(size) && qty > 0;
 
-  // JSON-LD
+  // ⭐ RATING: כשהמשתמש מדרג/מעודכן — שומרים ומחשבים ממוצע תצוגה
+  function handleRate(stars) {
+    const clamped = Math.max(1, Math.min(5, Number(stars) || 0));
+    try { localStorage.setItem(LS_RATING_KEY(product.slug), String(clamped)); } catch {}
+    setUserRating(clamped);
+    // תצוגה תמיד = בסיס + דירוג משתמש אחד
+    setDisplayAvg(((baseAvg * baseCount) + clamped) / (baseCount + 1));
+    setDisplayCount(baseCount + 1);
+  }
+
+  // JSON-LD (כולל aggregateRating מעודכן לתצוגה)
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -259,7 +281,20 @@ export default function ProductDetail() {
     description,
     sku: product?.slug || "",
     brand: { "@type": "Brand", name: "Karina" },
-    offers: { "@type": "Offer", url: canonical, priceCurrency: "ILS", price: String(product?.price ?? ""), availability: "https://schema.org/InStock" },
+    aggregateRating: {
+      "@type": "AggregateRating",
+      ratingValue: Number(displayAvg.toFixed(2)),
+      reviewCount: displayCount,
+      bestRating: 5,
+      worstRating: 1
+    },
+    offers: {
+      "@type": "Offer",
+      url: canonical,
+      priceCurrency: "ILS",
+      price: String(product?.price ?? ""),
+      availability: "https://schema.org/InStock"
+    },
   };
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -271,13 +306,11 @@ export default function ProductDetail() {
     ],
   };
 
-  // אזור הדפסה לפי צד
   const shownPrintArea =
     side === "front" ? product?.printArea : (product?.backPrintArea || product?.printArea);
 
   return (
     <div className="container py-4">
-      {/* SEO */}
       <Helmet prioritizeSeoTags>
         <title>{product ? `${product.name} | קארינה - הדפסה על חולצות` : "המוצר לא נמצא | קארינה"}</title>
         <meta name="description" content={description} />
@@ -288,12 +321,10 @@ export default function ProductDetail() {
         <meta property="og:description" content={description} />
         {shownImage && <meta property="og:image" content={shownImage} />}
         <meta property="og:url" content={canonical} />
-        {product && (
-          <>
-            <meta property="product:price:amount" content={String(product.price)} />
-            <meta property="product:price:currency" content="ILS" />
-          </>
-        )}
+        {product && <>
+          <meta property="product:price:amount" content={String(product.price)} />
+          <meta property="product:price:currency" content="ILS" />
+        </>}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={product ? `${product.name} | קארינה` : "המוצר לא נמצא | קארינה"} />
         <meta name="twitter:description" content={description} />
@@ -302,7 +333,6 @@ export default function ProductDetail() {
         <script type="application/ld+json">{JSON.stringify(breadcrumbJsonLd)}</script>
       </Helmet>
 
-      {/* אם אין מוצר — מציגים הודעה, בלי early return */}
       {!product ? (
         <>
           <div className="alert alert-warning">המוצר לא נמצא</div>
@@ -315,177 +345,91 @@ export default function ProductDetail() {
             <div className="col-12 col-lg-6">
               {(product.img || product.backImg) && (
                 <div className="btn-group mb-2" role="group" aria-label="בחר צד">
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${side === "front" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setSide("front")}
-                  >
-                    צד קדמי
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${side === "back" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setSide("back")}
-                    disabled={!product.backImg}
-                    title={product.backImg ? "" : "אין תמונת צד אחורי"}
-                  >
-                    צד אחורי
-                  </button>
+                  <button type="button" className={`btn btn-sm ${side === "front" ? "btn-primary" : "btn-outline-primary"}`} onClick={() => setSide("front")}>צד קדמי</button>
+                  <button type="button" className={`btn btn-sm ${side === "back" ? "btn-primary" : "btn-outline-primary"}`} onClick={() => setSide("back")} disabled={!product.backImg} title={product.backImg ? "" : "אין תמונת צד אחורי"}>צד אחורי</button>
                 </div>
               )}
 
               <div className="border rounded-4 p-2 bg-white" style={{ minHeight: 480 }}>
-                <img
-                  src={shownImage}
-                  alt={product.name}
-                  className="img-fluid d-block mx-auto"
-                  style={{ maxHeight: 520, objectFit: "contain" }}
-                />
+                <img src={shownImage} alt={product.name} className="img-fluid d-block mx-auto" style={{ maxHeight: 520, objectFit: "contain" }} />
               </div>
 
-              {/* סטטוס שמירה */}
               <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
                 <span className="badge text-bg-light">תצוגה: {side === "front" ? "קדמי" : "אחורי"}</span>
-                {logoBySide[side] ? (
-                  <span className="badge text-bg-success">לוגו שמור לצד הזה</span>
-                ) : (
-                  <span className="badge text-bg-secondary">אין לוגו שמור לצד הזה</span>
-                )}
+                {logoBySide[side] ? <span className="badge text-bg-success">לוגו שמור לצד הזה</span> : <span className="badge text-bg-secondary">אין לוגו שמור לצד הזה</span>}
                 {previewBySide[side] && <span className="badge text-bg-primary">הדמיה שמורה לצד הזה</span>}
-
                 {(logoBySide.front || logoBySide.back || previewBySide.front || previewBySide.back) && (
-                  <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>
-                    איפוס כל הלוגואים/הדמיות
-                  </button>
+                  <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>איפוס כל הלוגואים/הדמיות</button>
                 )}
               </div>
             </div>
 
             {/* פרטים ובחירות */}
             <div className="col-12 col-lg-6">
-              <h1 className="h3">{product.name}</h1>
-              <p className="lead">{product.price} ₪</p>
+              <h1 className="h3 mb-1">{product.name}</h1>
+
+              <p className="lead mb-1">{product.price} ₪</p>
               <small className="text-muted d-block mb-3">לא כולל משלוח</small>
 
               <div className="mb-3">
                 <ColorSwatches colors={product.colors} value={color} onChange={setColor} />
               </div>
 
-              {/* מתג הזמנה מרוכזת */}
               <div className="form-check form-switch mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="bulkToggle"
-                  checked={bulkMode}
-                  onChange={(e) => setBulkMode(e.target.checked)}
-                />
-                <label className="form-check-label" htmlFor="bulkToggle">
-                  הזמנה מרוכזת לפי מידות (לצבע הנוכחי)
-                </label>
+                <input className="form-check-input" type="checkbox" id="bulkToggle" checked={bulkMode} onChange={(e) => setBulkMode(e.target.checked)} />
+                <label className="form-check-label" htmlFor="bulkToggle">הזמנה מרוכזת לפי מידות (לצבע הנוכחי)</label>
               </div>
 
               {!bulkMode ? (
                 <>
-                  <div className="mb-3">
-                    <SizePicker sizes={product.sizes} value={size} onChange={setSize} />
-                  </div>
-
+                  <div className="mb-3"><SizePicker sizes={product.sizes} value={size} onChange={setSize} /></div>
                   <div className="mb-3">
                     <label className="form-label fw-semibold">כמות</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={qty}
-                      onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-                      className="form-control w-auto"
-                    />
+                    <input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} className="form-control w-auto" />
                   </div>
 
-                  {/* העלאת לוגו/הצבה — לפי צד נוכחי */}
                   <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary"
-                      onClick={() => setShowUpload(true)}
-                    >
-                      העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-outline-primary"
-                      disabled={!logoBySide[side]}
-                      onClick={() => setShowLogoModal(true)}
-                      title={logoBySide[side] ? "" : "אין לוגו שמור לצד הזה"}
-                    >
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})</button>
+                    <button type="button" className="btn btn-outline-primary" disabled={!logoBySide[side]} onClick={() => setShowLogoModal(true)} title={logoBySide[side] ? "" : "אין לוגו שמור לצד הזה"}>
                       פתח הצבה לצד {side === "front" ? "קדמי" : "אחורי"}
                     </button>
-
                     {previewBySide[side] && <span className="small text-success">יש הדמיה שמורה לצד הזה</span>}
                   </div>
 
-                  <button
-                    className="btn btn-primary btn-lg"
-                    onClick={addToCart}
-                    disabled={!(Boolean(color) && Boolean(size) && qty > 0)}
-                    title={!(Boolean(color) && Boolean(size) && qty > 0) ? "בחר צבע ומידה" : undefined}
-                  >
+                  <button className="btn btn-primary btn-lg" onClick={addToCart} disabled={!canAdd} title={!canAdd ? "בחר צבע ומידה" : undefined}>
                     הוסף לעגלה
                   </button>
                 </>
               ) : (
                 <>
-                  {/* מצב הזמנה מרוכזת */}
                   <div className="card mb-3">
                     <div className="card-body">
                       <div className="d-flex justify-content-between align-items-center mb-2">
                         <h6 className="mb-0">כמויות לפי מידה — צבע: <span className="fw-semibold">{color}</span></h6>
-                        <button className="btn btn-sm btn-outline-secondary" onClick={clearBulkForColor}>
-                          איפוס כמויות לצבע זה
-                        </button>
+                        <button className="btn btn-sm btn-outline-secondary" onClick={clearBulkForColor}>איפוס כמויות לצבע זה</button>
                       </div>
-
                       <div className="table-responsive">
                         <table className="table table-sm align-middle">
-                          <thead>
-                            <tr>
-                              {(product.sizes || []).map((s) => (
-                                <th key={s} className="text-center">{s}</th>
-                              ))}
-                            </tr>
-                          </thead>
+                          <thead><tr>{(product.sizes || []).map((s) => (<th key={s} className="text-center">{s}</th>))}</tr></thead>
                           <tbody>
                             <tr>
                               {(product.sizes || []).map((s) => (
                                 <td key={s} className="text-center">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={bulkForCurrentColor[s] ?? 0}
+                                  <input type="number" min={0} value={bulkForCurrentColor[s] ?? 0}
                                     onChange={(e) => setBulkQty(s, e.target.value)}
                                     className="form-control form-control-sm text-center"
-                                    style={{ width: 90, marginInline: "auto" }}
-                                  />
+                                    style={{ width: 90, marginInline: "auto" }} />
                                 </td>
                               ))}
                             </tr>
                           </tbody>
                         </table>
                       </div>
-
                       <div className="d-flex justify-content-between align-items-center">
-                        <div className="text-muted small">
-                          ניתן לעבור לצבע אחר, למלא כמויות, ולהוסיף לעגלה בנפרד.
-                        </div>
+                        <div className="text-muted small">ניתן לעבור לצבע אחר, למלא כמויות, ולהוסיף לעגלה בנפרד.</div>
                         <div>
                           <span className="me-3">סה״כ יחידות לצבע זה: <strong>{bulkTotalForCurrentColor}</strong></span>
-                          <button
-                            className="btn btn-primary"
-                            onClick={addBulkToCart}
-                            disabled={bulkTotalForCurrentColor === 0}
-                            title={bulkTotalForCurrentColor === 0 ? "לא הוזנו כמויות" : undefined}
-                          >
+                          <button className="btn btn-primary" onClick={addBulkToCart} disabled={bulkTotalForCurrentColor === 0} title={bulkTotalForCurrentColor === 0 ? "לא הוזנו כמויות" : undefined}>
                             הוסף לעגלה (מרוכז)
                           </button>
                         </div>
@@ -493,26 +437,11 @@ export default function ProductDetail() {
                     </div>
                   </div>
 
-                  {/* העלאת לוגו/הצבה — רלוונטי גם במצב מרוכז */}
                   <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary"
-                      onClick={() => setShowUpload(true)}
-                    >
-                      העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-outline-primary"
-                      disabled={!logoBySide[side]}
-                      onClick={() => setShowLogoModal(true)}
-                      title={logoBySide[side] ? "" : "אין לוגו שמור לצד הזה"}
-                    >
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})</button>
+                    <button type="button" className="btn btn-outline-primary" disabled={!logoBySide[side]} onClick={() => setShowLogoModal(true)} title={logoBySide[side] ? "" : "אין לוגו שמור לצד הזה"}>
                       פתח הצבה לצד {side === "front" ? "קדמי" : "אחורי"}
                     </button>
-
                     {previewBySide[side] && <span className="small text-success">יש הדמיה שמורה לצד הזה</span>}
                   </div>
                 </>
@@ -529,15 +458,17 @@ export default function ProductDetail() {
               </div>
             </div>
           </div>
-
-          {/* מודאל העלאת לוגו (לפי צד נוכחי) */}
-          <LogoUploadModal
-            show={showUpload}
-            onClose={() => setShowUpload(false)}
-            onConfirm={onLogoUploaded}
-          />
-
-          {/* מודאל הצבת לוגו על המוצר (לפי צד נוכחי) */}
+            <LogoUploadModal
+              show={showUpload}
+              onClose={() => setShowUpload(false)}
+              onConfirm={(dataUrl, file, uploaded) => {
+                // 1) dataUrl — לשימוש בקנבס/הצבה
+                // 2) uploaded — { logoId, path, url, contentType, bytes } לשמירה ב-Firestore/State אם תרצה
+                onLogoUploaded(dataUrl); // הפונקציה הקיימת שלך ששומרת ב-LS ומעבירה למודאל ההצבה
+                // דוגמה: לשמור reference ללוגו המקורי במסד נתונים של המשתמש
+                // await setDoc(doc(db, `users/${uid}/logos/${uploaded.logoId}`), uploaded)
+              }}
+            />
           <LogoPlacementModal
             show={showLogoModal}
             onClose={() => setShowLogoModal(false)}
@@ -547,7 +478,6 @@ export default function ProductDetail() {
             logoDataUrl={logoBySide[side]}
           />
 
-          {/* מוצרים דומים */}
           <div className="mt-5">
             <h5 className="mb-3">מוצרים דומים</h5>
             {similarProducts.length === 0 ? (
