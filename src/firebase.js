@@ -43,7 +43,7 @@ if (isBrowser) {
   // DEVELOPMENT: רשום את אותו UUID בדיוק במסך App Check → Apps → ⋮ → Manage debug tokens
   if (process.env.NODE_ENV !== "production") {
     // שים כאן את ה-UUID שמופיע לך בקונסול (כבר אישרת אותו במסך הדיבאג)
-    window.FIREBASE_APPCHECK_DEBUG_TOKEN = "e930a924-562e-4354-b714-711983e994ac";
+    window.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
   }
 
   const enterpriseKey = process.env.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY || "";
