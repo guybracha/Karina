@@ -1,15 +1,27 @@
 // src/components/LogoUploadModal.jsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { auth, storage } from "../firebase";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { addPending, blobToDataUrl } from "../utils/pendingLogos.ts";
+import { useLogosQueue } from "../contexts/LogosQueueContext.tsx";
 
 /**
- * פרמטרים ברירת מחדל (ניתן לכוון לפי הפרויקט)
+ * פרמטרים כלליים
  */
-const MAX_SIZE_MB = 10;             // גודל קובץ נכנס
-const PREVIEW_MAX_SIDE = 1500;      // פיקסלים בצד הארוך להדמיה (לתמונות)
-const PREVIEW_QUALITY = 0.85;       // 0..1 לאיכות WebP
-const ALLOW_ORIGINAL_UPLOAD = true; // האם לשמור גם מקור (חשוב להדפסה)
+const MAX_SIZE_MB = 10;          // גודל קובץ מקסימלי לקליטה
+const PREVIEW_MAX_SIDE = 1500;   // צד ארוך של preview (פיקסלים)
+const PREVIEW_QUALITY = 0.85;    // איכות WebP
+const LOCAL_ORIGINAL_LIMIT = 2 * 1024 * 1024; // קבצים מעל 2MB לא יישמרו ב-localStorage
+
+/**
+ * ברירת מחדל לתבנית הדמיה (אפשר לעדכן ע"י prop)
+ * imageUrl – כתובת תמונת החולצה
+ * rect – המיקום/גודל שבו מציבים את הלוגו על הבד
+ * rotationDeg – רוטציה קלה אם צריך
+ */
+const DEFAULT_MOCKUP_TEMPLATE = {
+  imageUrl: "/img/mockups/tshirt-front.png",
+  rect: { x: 0.32, y: 0.26, w: 0.36, h: 0.36 }, // יחסי לרוחב/גובה התבנית
+  rotationDeg: 0,
+};
 
 export default function LogoUploadModal({
   show,
@@ -17,28 +29,25 @@ export default function LogoUploadModal({
   onConfirm,
   accept = "image/*,application/pdf",
   maxSizeMB = MAX_SIZE_MB,
-  uid,
+  uid,                           // אופציונלי: אם יש user מראש
+  mockupTemplate = DEFAULT_MOCKUP_TEMPLATE, // תבנית הדמיה של מוצר נוכחי
 }) {
-  const [dataUrl, setDataUrl] = useState(null);     // preview לתמונות בלבד
+  const [dataUrl, setDataUrl] = useState(null);   // preview מקומי לתמונה
   const [fileObj, setFileObj] = useState(null);
   const [isImage, setIsImage] = useState(false);
   const [isPdf, setIsPdf] = useState(false);
 
   const [error, setError] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [busyText, setBusyText] = useState("");  // טקסט התקדמות (עיבוד/שמירה)
 
   const inputRef = useRef(null);
   const dropRef = useRef(null);
-  const currentTaskRef = useRef(null);
 
-  const effectiveUid = uid || auth.currentUser?.uid || null;
-  const isAuthed = Boolean(effectiveUid);
+  const { setOriginalInMemory } = useLogosQueue();
+  const isAuthed = Boolean(uid); // במודל הזה לא נדרש Auth להעלאה (כי לא מעלים), אבל נשמור בדיקה אם תרצה לחסום
 
   useEffect(() => {
-    if (!show) {
-      resetState();
-    }
+    if (!show) resetState();
   }, [show]);
 
   function resetState() {
@@ -47,21 +56,18 @@ export default function LogoUploadModal({
     setIsImage(false);
     setIsPdf(false);
     setError("");
-    setIsUploading(false);
-    setProgress(0);
-    try { currentTaskRef.current?.cancel?.(); } catch {}
-    currentTaskRef.current = null;
+    setBusyText("");
   }
 
   const newId = () => Math.random().toString(36).slice(2, 10);
 
-  /** קריאה לקובץ, ולידציה + יצירת preview מיידית לתמונה */
+  /** קריאת קובץ + ולידציה + preview מיידי לתמונה */
   const readFile = useCallback(
     (file) => {
       if (!file) return;
 
-      if (!isAuthed) {
-        setError("יש להתחבר למערכת לפני העלאת לוגו.");
+      if (file.size > maxSizeMB * 1024 * 1024) {
+        setError(`קובץ גדול מדי. מגבלה: ${maxSizeMB}MB`);
         return;
       }
 
@@ -70,11 +76,6 @@ export default function LogoUploadModal({
 
       if (!_isImage && !_isPdf) {
         setError("יש לבחור קובץ תמונה (PNG/JPG/SVG) או PDF.");
-        return;
-      }
-
-      if (file.size > maxSizeMB * 1024 * 1024) {
-        setError(`קובץ גדול מדי. מגבלה: ${maxSizeMB}MB`);
         return;
       }
 
@@ -88,48 +89,39 @@ export default function LogoUploadModal({
         reader.onload = () => setDataUrl(reader.result);
         reader.readAsDataURL(file);
       } else {
-        // PDF – אין preview תמונה מצד לקוח
         setDataUrl(null);
       }
     },
-    [isAuthed, maxSizeMB]
+    [maxSizeMB]
   );
 
-  const onInputChange = (e) => {
-    const file = e.target.files?.[0];
-    readFile(file);
-  };
+  const onInputChange = (e) => readFile(e.target.files?.[0]);
 
-  // DnD
+  // Drag & Drop
   useEffect(() => {
     if (!show) return;
     const area = dropRef.current;
     if (!area) return;
 
     const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
-    const onDrop = (e) => {
-      prevent(e);
-      const file = e.dataTransfer.files?.[0];
-      readFile(file);
-      area.classList.remove("border-primary");
-    };
-    const onDragEnter = (e) => { prevent(e); area.classList.add("border-primary"); };
-    const onDragLeave = (e) => { prevent(e); area.classList.remove("border-primary"); };
+    const onDrop = (e) => { prevent(e); readFile(e.dataTransfer.files?.[0]); area.classList.remove("border-primary"); };
+    const onEnter = (e) => { prevent(e); area.classList.add("border-primary"); };
+    const onLeave = (e) => { prevent(e); area.classList.remove("border-primary"); };
 
-    area.addEventListener("dragenter", onDragEnter);
+    area.addEventListener("dragenter", onEnter);
     area.addEventListener("dragover", prevent);
-    area.addEventListener("dragleave", onDragLeave);
+    area.addEventListener("dragleave", onLeave);
     area.addEventListener("drop", onDrop);
     return () => {
-      area.removeEventListener("dragenter", onDragEnter);
+      area.removeEventListener("dragenter", onEnter);
       area.removeEventListener("dragover", prevent);
-      area.removeEventListener("dragleave", onDragLeave);
+      area.removeEventListener("dragleave", onLeave);
       area.removeEventListener("drop", onDrop);
     };
   }, [show, readFile]);
 
   /**
-   * ייצור Blob ל-preview כ-WebP – לתמונות בלבד (עבור PDF נחזיר null).
+   * יצירת Blob ל-preview כ-WebP – לתמונות בלבד
    */
   async function makePreviewBlob(file, maxSide = PREVIEW_MAX_SIDE, quality = PREVIEW_QUALITY) {
     if (!file.type.startsWith("image/")) return null;
@@ -149,13 +141,8 @@ export default function LogoUploadModal({
       const ratio = w / h;
       let targetW = w, targetH = h;
       if (Math.max(w, h) > maxSide) {
-        if (ratio >= 1) {
-          targetW = maxSide;
-          targetH = Math.round(maxSide / ratio);
-        } else {
-          targetH = maxSide;
-          targetW = Math.round(maxSide * ratio);
-        }
+        if (ratio >= 1) { targetW = maxSide; targetH = Math.round(maxSide / ratio); }
+        else { targetH = maxSide; targetW = Math.round(maxSide * ratio); }
       }
 
       const canvas = (typeof OffscreenCanvas !== "undefined")
@@ -163,7 +150,7 @@ export default function LogoUploadModal({
         : Object.assign(document.createElement("canvas"), { width: targetW, height: targetH });
 
       const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
-      if (ctx.imageSmoothingEnabled !== undefined) {
+      if (ctx && "imageSmoothingEnabled" in ctx) {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
       }
@@ -173,147 +160,168 @@ export default function LogoUploadModal({
       const mime = "image/webp";
       const blob = await (canvas.convertToBlob
         ? canvas.convertToBlob({ type: mime, quality })
-        : new Promise((resolve) => (canvas.toBlob(resolve, mime, quality))));
+        : new Promise((resolve) => canvas.toBlob(resolve, mime, quality)));
       if (blob) return blob;
 
-      const blobJpeg = await new Promise((resolve) => (canvas.toBlob(resolve, "image/jpeg", quality)));
-      if (!blobJpeg) throw new Error("failed to create preview blob");
-      return blobJpeg;
+      // fallback
+      return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
     } finally {
       URL.revokeObjectURL(url);
     }
   }
 
-  /** העלאת קובץ יחיד (resumable) */
-  function uploadWithProgress(path, fileOrBlob, contentType, meta = {}) {
-    const r = ref(storage, path);
-    const task = uploadBytesResumable(r, fileOrBlob, {
-      contentType,
-      customMetadata: meta,
-    });
-    currentTaskRef.current = task;
+  /**
+   * יצירת הדמיה: מצייר לוגו (blob/tImage) על תבנית חולצה.
+   * אם רוצים שליטה – מעבירים prop mockupTemplate עם imageUrl ו-rect יחסיים.
+   */
+  async function makeMockupBlob(logoBlob, template = DEFAULT_MOCKUP_TEMPLATE, outWidth = 1600) {
+    const { imageUrl, rect, rotationDeg = 0 } = template;
+
+    // טען את תמונת התבנית
+    const baseImg = await loadImage(imageUrl);
+
+    const ratio = baseImg.naturalWidth / baseImg.naturalHeight;
+    const W = outWidth;
+    const H = Math.round(W / ratio);
+
+    // קנבס הדמיה
+    const canvas = (typeof OffscreenCanvas !== "undefined")
+      ? new OffscreenCanvas(W, H)
+      : Object.assign(document.createElement("canvas"), { width: W, height: H });
+    const ctx = canvas.getContext("2d", { alpha: true });
+
+    // צייר בסיס
+    ctx.drawImage(baseImg, 0, 0, W, H);
+
+    // טען לוגו
+    const logoUrl = URL.createObjectURL(logoBlob);
+    const logoImg = await loadImage(logoUrl);
+
+    // תיבת הצבה (פיקסלים)
+    const box = {
+      x: Math.round(rect.x * W),
+      y: Math.round(rect.y * H),
+      w: Math.round(rect.w * W),
+      h: Math.round(rect.h * H),
+    };
+
+    // מדמה יחס – ממלא את התיבה מבלי לעוות
+    const scale = Math.min(box.w / logoImg.naturalWidth, box.h / logoImg.naturalHeight);
+    const drawW = Math.round(logoImg.naturalWidth * scale);
+    const drawH = Math.round(logoImg.naturalHeight * scale);
+    const drawX = Math.round(box.x + (box.w - drawW) / 2);
+    const drawY = Math.round(box.y + (box.h - drawH) / 2);
+
+    // רוטציה אופציונלית
+    if (rotationDeg) {
+      ctx.save();
+      const cx = drawX + drawW / 2;
+      const cy = drawY + drawH / 2;
+      ctx.translate(cx, cy);
+      ctx.rotate((rotationDeg * Math.PI) / 180);
+      ctx.translate(-cx, -cy);
+      ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
+      ctx.restore();
+    } else {
+      ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
+    }
+
+    URL.revokeObjectURL(logoUrl);
+
+    // יציאה: WebP
+    const blob = await (canvas.convertToBlob
+      ? canvas.convertToBlob({ type: "image/webp", quality: 0.92 })
+      : new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.92)));
+
+    return blob;
+  }
+
+  function loadImage(src) {
     return new Promise((resolve, reject) => {
-      task.on(
-        "state_changed",
-        (snap) => {
-          const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-          setProgress(pct);
-        },
-        (err) => reject(err),
-        async () => {
-          const url = await getDownloadURL(task.snapshot.ref);
-          resolve({ path, url, bytes: task.snapshot.totalBytes, contentType });
-        }
-      );
+      const i = new Image();
+      i.crossOrigin = "anonymous";
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = src;
     });
   }
 
   /**
-   * העלאה:
-   * - תמונה: מעלה preview.webp דחוס + (אם מוגדר) original.{ext}
-   * - PDF: מעלה רק original.pdf (אין preview תמונה בצד לקוח)
+   * שמירה מקומית (localStorage + זיכרון למקור גדול).
+   * מחזיר { id, previewDataUrl, mockupDataUrl } לשימוש מיידי.
    */
-  async function uploadLogoAndPreview(file) {
-    if (!isAuthed) throw new Error("not_authed");
+  async function saveLogoLocally(file) {
+    const id = newId();
+    const isPdf = file.type === "application/pdf";
+    const isImg = file.type.startsWith("image/");
 
-    const userId = effectiveUid;
-    const ext = (file.name.split(".").pop() || "bin").toLowerCase();
-    const logoId = newId();
-
-    if (isPdf) {
-      // PDF – רק מקור
-      const origPath = `users/${userId}/logos/${logoId}/original/original.pdf`;
-      const originalUp = await uploadWithProgress(origPath, file, "application/pdf", {
-        kind: "original",
-        originalName: file.name || "",
-        source: "user-upload",
-      });
-      return {
-        logoId,
-        preview: null,
-        original: originalUp,
-      };
+    setBusyText("יוצר תצוגה מקדימה…");
+    let previewDataUrl = "";
+    if (isImg) {
+      const previewBlob = await makePreviewBlob(file);
+      previewDataUrl = previewBlob ? await blobToDataUrl(previewBlob) : "";
     }
 
-    // תמונות
-    const previewBlob = await makePreviewBlob(file);
-    let previewUp = null;
-    if (previewBlob) {
-      const previewPath = `users/${userId}/logos/${logoId}/previews/preview.webp`;
-      previewUp = await uploadWithProgress(previewPath, previewBlob, previewBlob.type || "image/webp", {
-        kind: "preview",
-        originalName: file.name || "",
-        source: "user-upload",
-      });
+    setBusyText("מייצר הדמיה…");
+    let mockupDataUrl = "";
+    if (isImg && previewDataUrl) {
+      // כדי לשפר איכות, נעדיף להשתמש ב-blob של preview ולא ב-dataURL
+      const previewBlob = await (await fetch(previewDataUrl)).blob();
+      const mockupBlob = await makeMockupBlob(previewBlob, mockupTemplate);
+      mockupDataUrl = await blobToDataUrl(mockupBlob);
     }
 
-    let originalUp = null;
-    if (ALLOW_ORIGINAL_UPLOAD) {
-      const origPath = `users/${userId}/logos/${logoId}/original/original.${ext}`;
-      originalUp = await uploadWithProgress(origPath, file, file.type || "application/octet-stream", {
-        kind: "original",
-        originalName: file.name || "",
-        source: "user-upload",
-      });
+    setBusyText("שומר מקומית…");
+    let originalDataUrl = "";
+    let originalDeferred = false;
+
+    if (file.size <= LOCAL_ORIGINAL_LIMIT) {
+      originalDataUrl = await blobToDataUrl(file);
+    } else {
+      originalDeferred = true;
+      // נשמור את הקובץ הגולמי רק בזיכרון עד שלב ההזמנה
+      setOriginalInMemory(id, file);
     }
 
-    return { logoId, preview: previewUp, original: originalUp };
+    addPending({
+      id,
+      name: file.name || "logo",
+      mime: file.type || "application/octet-stream",
+      size: file.size || 0,
+      previewDataUrl,
+      mockupDataUrl,
+      originalDataUrl: isPdf ? originalDataUrl : (originalDataUrl || undefined),
+      originalDeferred,
+      createdAt: Date.now(),
+      // product: { slug, variantId } // אם תרצה לקשר למוצר
+    });
+
+    setBusyText("");
+    return { id, previewDataUrl, mockupDataUrl };
   }
 
+  /** שמירה + החזרה ל-caller */
   const handleConfirm = async () => {
-    if (!isAuthed) {
-      setError("יש להתחבר למערכת לפני העלאת לוגו.");
-      return;
-    }
     if (!fileObj) {
       setError("נא לבחור קובץ לוגו תחילה");
       return;
     }
     setError("");
-    setIsUploading(true);
-    setProgress(0);
-
     try {
-      const uploaded = await uploadLogoAndPreview(fileObj);
-      setIsUploading(false);
-
-      // נשלח ל-caller:
-      // - עבור תמונות: dataUrl (preview ל-canvas), ופרטי ההעלאות
-      // - עבור PDF: dataUrl=null, original בלבד
+      const saved = await saveLogoLocally(fileObj);
+      // נחזיר לקורא preview מקומי לשילוב בקנבס + מזהה מקומי
       onConfirm?.(
-        isImage ? dataUrl : null,
+        isImage ? (saved.previewDataUrl || dataUrl) : null,
         fileObj,
-        uploaded.preview
-          ? {
-              logoId: uploaded.logoId,
-              path: uploaded.preview.path,
-              url: uploaded.preview.url,
-              contentType: uploaded.preview.contentType,
-              bytes: uploaded.preview.bytes,
-              original: uploaded.original || undefined,
-            }
-          : {
-              logoId: uploaded.logoId,
-              // ל-PDF/למקרה שאין preview תמונה
-              path: uploaded.original?.path,
-              url: uploaded.original?.url,
-              contentType: uploaded.original?.contentType,
-              bytes: uploaded.original?.bytes,
-            }
+        { logoId: saved.id, local: true, mockup: saved.mockupDataUrl || null }
       );
+      // לא נסגור אוטומטית – תחליטו לפי UX; אם כן:
+      // onClose?.();
     } catch (e) {
-      console.error("upload failed:", e);
-      setIsUploading(false);
-      setError(e?.message === "not_authed" ? "יש להתחבר למערכת לפני העלאת לוגו." : "העלאת הלוגו נכשלה. נסו שוב.");
-    } finally {
-      currentTaskRef.current = null;
+      console.error(e);
+      setError("שמירת הלוגו נכשלה. נסו שוב.");
+      setBusyText("");
     }
-  };
-
-  const cancelUpload = () => {
-    try { currentTaskRef.current?.cancel?.(); } catch {}
-    setIsUploading(false);
-    setProgress(0);
   };
 
   if (!show) return null;
@@ -322,31 +330,22 @@ export default function LogoUploadModal({
     <div
       className="position-fixed top-0 start-0 w-100 h-100"
       style={{ background: "rgba(0,0,0,.5)", zIndex: 1050 }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="logoUploadTitle"
+      role="dialog" aria-modal="true" aria-labelledby="logoUploadTitle"
     >
       <div className="container h-100 d-flex align-items-center">
         <div className="bg-white rounded-4 shadow p-3 w-100" style={{ maxWidth: 720, margin: "0 auto" }}>
           <div className="d-flex justify-content-between align-items-center mb-2">
             <h5 id="logoUploadTitle" className="m-0">העלאת לוגו</h5>
-            <button className="btn btn-sm btn-outline-secondary" onClick={onClose} aria-label="סגור" disabled={isUploading}>
+            <button className="btn btn-sm btn-outline-secondary" onClick={onClose} aria-label="סגור" disabled={!!busyText}>
               סגור
             </button>
           </div>
 
-          {!isAuthed && (
-            <div className="alert alert-warning">
-              יש להתחבר למערכת כדי להעלות לוגו.
-            </div>
-          )}
-
-          {/* אזור DnD / בחירת קובץ */}
           <div
             ref={dropRef}
-            className={`border border-2 border-dashed rounded-3 p-4 text-center ${!isAuthed ? "opacity-75" : ""}`}
-            style={{ borderStyle: "dashed" }}
-            aria-disabled={!isAuthed}
+            className={`border border-2 border-dashed rounded-3 p-4 text-center`}
+            style={{ borderStyle: "dashed", opacity: busyText ? 0.6 : 1 }}
+            aria-disabled={!!busyText}
           >
             {!fileObj ? (
               <>
@@ -354,11 +353,7 @@ export default function LogoUploadModal({
                   גררו לכאן קובץ <strong>PNG/JPG/SVG</strong> או <strong>PDF</strong>, או בחרו ידנית
                 </p>
                 <div className="d-flex justify-content-center gap-2">
-                  <button
-                    className="btn btn-outline-primary"
-                    onClick={() => isAuthed && inputRef.current?.click()}
-                    disabled={!isAuthed}
-                  >
+                  <button className="btn btn-outline-primary" onClick={() => inputRef.current?.click()} disabled={!!busyText}>
                     בחר קובץ
                   </button>
                   <input
@@ -367,11 +362,11 @@ export default function LogoUploadModal({
                     accept={accept}
                     className="d-none"
                     onChange={onInputChange}
-                    disabled={!isAuthed}
+                    disabled={!!busyText}
                   />
                 </div>
                 <div className="text-muted small mt-2">
-                  מומלץ לתמונות: עד {PREVIEW_MAX_SIDE}px בצד הארוך (WebP). מגבלה כללית: {maxSizeMB}MB
+                  מומלץ לתמונות: עד {PREVIEW_MAX_SIDE}px בצד הארוך (WebP). מגבלה כללית: {MAX_SIZE_MB}MB
                 </div>
               </>
             ) : (
@@ -383,7 +378,6 @@ export default function LogoUploadModal({
                         <img src={dataUrl} alt="תצוגת לוגו" style={{ objectFit: "contain" }} />
                       </div>
                     ) : (
-                      // PDF – תצוגה טקסטואלית פשוטה
                       <div className="d-flex align-items-center justify-content-center" style={{ minHeight: 160 }}>
                         <div>
                           <div style={{ fontSize: 48, lineHeight: 1 }}>📄</div>
@@ -401,36 +395,19 @@ export default function LogoUploadModal({
                     <strong>גודל:</strong> {(fileObj?.size / (1024 * 1024)).toFixed(2)}MB
                   </div>
 
-                  {isUploading && (
+                  {busyText && (
                     <div className="mb-2">
-                      <div className="progress" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100">
-                        <div className="progress-bar" style={{ width: `${progress}%` }}>
-                          {progress}%
+                      <div className="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                        <div className="progress-bar" style={{ width: `100%` }}>
+                          {busyText}
                         </div>
                       </div>
-                      <div className="d-flex justify-content-end gap-2 mt-2">
-                        <button className="btn btn-sm btn-outline-danger" onClick={cancelUpload}>
-                          בטל העלאה
-                        </button>
-                      </div>
-                      <div className="text-muted small mt-1">מעלה לוגו ל-Storage…</div>
                     </div>
                   )}
 
                   <div className="d-flex gap-2 justify-content-md-end">
-                    <button
-                      className="btn btn-light"
-                      onClick={resetState}
-                      disabled={isUploading}
-                    >
-                      נקה
-                    </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleConfirm}
-                      disabled={isUploading || !isAuthed}
-                      title={!isAuthed ? "יש להתחבר למערכת" : undefined}
-                    >
+                    <button className="btn btn-light" onClick={resetState} disabled={!!busyText}>נקה</button>
+                    <button className="btn btn-primary" onClick={handleConfirm} disabled={!!busyText}>
                       המשך להצבה
                     </button>
                   </div>

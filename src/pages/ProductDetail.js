@@ -13,14 +13,20 @@ import { PRODUCTS } from "../lib/products";
 const LS_USER_LOGO_KEY = (side) => `karina:userLogo:${side}`;
 const LS_PREVIEW_KEY   = (slug, side) => `karina:preview:${slug}:${side}`;
 const LS_CART_KEY = "karina:cart";
-// ⭐ RATING
+// ⭐ RATING: מפתח לשמירת דירוג המשתמש למוצר ספציפי
 const LS_RATING_KEY = (slug) => `karina:rating:${slug}`;
 
+// ⭐ RATING: קומפוננטת כוכבים נגישה
 function StarRater({ value, onChange, size = 24, ariaLabel = "דירוג" }) {
   const [hover, setHover] = useState(0);
   const stars = [1, 2, 3, 4, 5];
   return (
-    <div className="d-inline-flex align-items-center" role="radiogroup" aria-label={ariaLabel} onMouseLeave={() => setHover(0)}>
+    <div
+      className="d-inline-flex align-items-center"
+      role="radiogroup"
+      aria-label={ariaLabel}
+      onMouseLeave={() => setHover(0)}
+    >
       {stars.map((s) => {
         const active = (hover || value) >= s;
         return (
@@ -33,11 +39,23 @@ function StarRater({ value, onChange, size = 24, ariaLabel = "דירוג" }) {
             aria-label={`${s} מתוך 5`}
             onMouseEnter={() => setHover(s)}
             onClick={() => onChange(s)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(s); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(s); }
+            }}
             style={{ lineHeight: 1, width: size, height: size, cursor: "pointer" }}
             title={`${s} כוכבים`}
           >
-            <span style={{ display: "inline-block", width: size, height: size, color: active ? "#f59f00" : "#e5e7eb", fontSize: size * 0.9 }}>★</span>
+            <span
+              style={{
+                display: "inline-block",
+                width: size,
+                height: size,
+                color: active ? "#f59f00" : "#e5e7eb",
+                fontSize: size * 0.9,
+              }}
+            >
+              ★
+            </span>
           </button>
         );
       })}
@@ -51,10 +69,6 @@ export default function ProductDetail() {
 
   const { slug } = useParams();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
-
-  // ✨ האם מותר לוגו על מוצר זה (חוסם קסדות ומכנסי דגמ"ח)
-  const logoAllowed = !!product && !["helmet", "pants"].includes(product.type);
-  const logoBlockMsg = !logoAllowed ? "לא ניתן להציב/להדביק לוגו על מוצר זה." : "";
 
   // בחירות מוצר
   const [color, setColor] = useState(product?.colors?.[0] || "");
@@ -75,7 +89,7 @@ export default function ProductDetail() {
   // ⭐ RATING: בסיס סטטיסטיקות (מהדאטה) + דירוג משתמש
   const baseAvg = Number(product?.rating ?? 4.5);
   const baseCount = Number(product?.reviews ?? 120);
-  const [userRating, setUserRating] = useState(0);
+  const [userRating, setUserRating] = useState(0); // 1..5 או 0 אם עדיין לא דירג
   const [displayAvg, setDisplayAvg] = useState(baseAvg);
   const [displayCount, setDisplayCount] = useState(baseCount);
 
@@ -107,7 +121,7 @@ export default function ProductDetail() {
     try { localStorage.setItem(LS_CART_KEY, JSON.stringify(next)); window.dispatchEvent(new Event("karina:cartUpdated")); } catch {}
   }
 
-  // טעינות/אתחולים
+  // טעינת הדמיות/לוגו + אתחול bulk + טעינת דירוג משתמש
   useEffect(() => {
     setColor(product?.colors?.[0] || "");
     setSize(product?.sizes?.[0] || "");
@@ -128,7 +142,7 @@ export default function ProductDetail() {
       setLogoBySide({ front: frontLogo || null, back: backLogo || null });
     } catch { setLogoBySide({ front: null, back: null }); }
 
-    // ⭐ RATING
+    // ⭐ RATING: קריאה מ־LS + חישוב תצוגה
     try {
       const ur = Number(localStorage.getItem(LS_RATING_KEY(product?.slug || "")) || 0);
       setUserRating(ur || 0);
@@ -167,7 +181,6 @@ export default function ProductDetail() {
 
   // הדמיות/לוגו
   function onSavePlacement({ dataUrl }) {
-    if (!logoAllowed) return; // 🔒 חסימה
     setPreviewBySide((prev) => {
       const next = { ...prev, [side]: dataUrl };
       try { if (product?.slug) localStorage.setItem(LS_PREVIEW_KEY(product.slug, side), dataUrl); } catch {}
@@ -176,7 +189,6 @@ export default function ProductDetail() {
     setShowLogoModal(false);
   }
   function onLogoUploaded(dataUrl) {
-    if (!logoAllowed) return; // 🔒 חסימה
     setLogoBySide((prev) => {
       const next = { ...prev, [side]: dataUrl };
       try { localStorage.setItem(LS_USER_LOGO_KEY(side), dataUrl); } catch {}
@@ -250,15 +262,17 @@ export default function ProductDetail() {
 
   const canAdd = Boolean(color) && Boolean(size) && qty > 0;
 
-  // ⭐ RATING
+  // ⭐ RATING: כשהמשתמש מדרג/מעודכן — שומרים ומחשבים ממוצע תצוגה
   function handleRate(stars) {
     const clamped = Math.max(1, Math.min(5, Number(stars) || 0));
     try { localStorage.setItem(LS_RATING_KEY(product.slug), String(clamped)); } catch {}
     setUserRating(clamped);
+    // תצוגה תמיד = בסיס + דירוג משתמש אחד
     setDisplayAvg(((baseAvg * baseCount) + clamped) / (baseCount + 1));
     setDisplayCount(baseCount + 1);
   }
 
+  // JSON-LD (כולל aggregateRating מעודכן לתצוגה)
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -342,16 +356,10 @@ export default function ProductDetail() {
 
               <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
                 <span className="badge text-bg-light">תצוגה: {side === "front" ? "קדמי" : "אחורי"}</span>
-                {logoAllowed ? (
-                  <>
-                    {logoBySide[side] ? <span className="badge text-bg-success">לוגו שמור לצד הזה</span> : <span className="badge text-bg-secondary">אין לוגו שמור לצד הזה</span>}
-                    {previewBySide[side] && <span className="badge text-bg-primary">הדמיה שמורה לצד הזה</span>}
-                    {(logoBySide.front || logoBySide.back || previewBySide.front || previewBySide.back) && (
-                      <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>איפוס כל הלוגואים/הדמיות</button>
-                    )}
-                  </>
-                ) : (
-                  <span className="badge text-bg-secondary">{logoBlockMsg}</span>
+                {logoBySide[side] ? <span className="badge text-bg-success">לוגו שמור לצד הזה</span> : <span className="badge text-bg-secondary">אין לוגו שמור לצד הזה</span>}
+                {previewBySide[side] && <span className="badge text-bg-primary">הדמיה שמורה לצד הזה</span>}
+                {(logoBySide.front || logoBySide.back || previewBySide.front || previewBySide.back) && (
+                  <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>איפוס כל הלוגואים/הדמיות</button>
                 )}
               </div>
             </div>
@@ -380,18 +388,13 @@ export default function ProductDetail() {
                     <input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} className="form-control w-auto" />
                   </div>
 
-                  {/* כפתורי לוגו — יוצגו רק אם מותר */}
-                  {logoAllowed ? (
-                    <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                      <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})</button>
-                      <button type="button" className="btn btn-outline-primary" disabled={!logoBySide[side]} onClick={() => setShowLogoModal(true)} title={logoBySide[side] ? "" : "אין לוגו שמור לצד הזה"}>
-                        פתח הצבה לצד {side === "front" ? "קדמי" : "אחורי"}
-                      </button>
-                      {previewBySide[side] && <span className="small text-success">יש הדמיה שמורה לצד הזה</span>}
-                    </div>
-                  ) : (
-                    <div className="alert alert-secondary py-2" role="note">{logoBlockMsg}</div>
-                  )}
+                  <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})</button>
+                    <button type="button" className="btn btn-outline-primary" disabled={!logoBySide[side]} onClick={() => setShowLogoModal(true)} title={logoBySide[side] ? "" : "אין לוגו שמור לצד הזה"}>
+                      פתח הצבה לצד {side === "front" ? "קדמי" : "אחורי"}
+                    </button>
+                    {previewBySide[side] && <span className="small text-success">יש הדמיה שמורה לצד הזה</span>}
+                  </div>
 
                   <button className="btn btn-primary btn-lg" onClick={addToCart} disabled={!canAdd} title={!canAdd ? "בחר צבע ומידה" : undefined}>
                     הוסף לעגלה
@@ -434,18 +437,13 @@ export default function ProductDetail() {
                     </div>
                   </div>
 
-                  {/* כפתורי לוגו — רק אם מותר */}
-                  {logoAllowed ? (
-                    <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                      <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})</button>
-                      <button type="button" className="btn btn-outline-primary" disabled={!logoBySide[side]} onClick={() => setShowLogoModal(true)} title={logoBySide[side] ? "" : "אין לוגו שמור לצד הזה"}>
-                        פתח הצבה לצד {side === "front" ? "קדמי" : "אחורי"}
-                      </button>
-                      {previewBySide[side] && <span className="small text-success">יש הדמיה שמורה לצד הזה</span>}
-                    </div>
-                  ) : (
-                    <div className="alert alert-secondary py-2" role="note">{logoBlockMsg}</div>
-                  )}
+                  <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})</button>
+                    <button type="button" className="btn btn-outline-primary" disabled={!logoBySide[side]} onClick={() => setShowLogoModal(true)} title={logoBySide[side] ? "" : "אין לוגו שמור לצד הזה"}>
+                      פתח הצבה לצד {side === "front" ? "קדמי" : "אחורי"}
+                    </button>
+                    {previewBySide[side] && <span className="small text-success">יש הדמיה שמורה לצד הזה</span>}
+                  </div>
                 </>
               )}
 
@@ -460,27 +458,25 @@ export default function ProductDetail() {
               </div>
             </div>
           </div>
-
-          {/* מודאלים — נטענים רק אם מותר לוגו */}
-          {logoAllowed && (
-            <>
-              <LogoUploadModal
-                show={showUpload}
-                onClose={() => setShowUpload(false)}
-                onConfirm={(dataUrl/*, file, uploaded*/) => {
-                  onLogoUploaded(dataUrl);
-                }}
-              />
-              <LogoPlacementModal
-                show={showLogoModal}
-                onClose={() => setShowLogoModal(false)}
-                onSave={onSavePlacement}
-                baseImageUrl={side === "front" ? product.img : (product.backImg || product.img)}
-                printArea={side === "front" ? product.printArea : (product.backPrintArea || product.printArea)}
-                logoDataUrl={logoBySide[side]}
-              />
-            </>
-          )}
+            <LogoUploadModal
+              show={showUpload}
+              onClose={() => setShowUpload(false)}
+              onConfirm={(dataUrl, file, uploaded) => {
+                // 1) dataUrl — לשימוש בקנבס/הצבה
+                // 2) uploaded — { logoId, path, url, contentType, bytes } לשמירה ב-Firestore/State אם תרצה
+                onLogoUploaded(dataUrl); // הפונקציה הקיימת שלך ששומרת ב-LS ומעבירה למודאל ההצבה
+                // דוגמה: לשמור reference ללוגו המקורי במסד נתונים של המשתמש
+                // await setDoc(doc(db, `users/${uid}/logos/${uploaded.logoId}`), uploaded)
+              }}
+            />
+          <LogoPlacementModal
+            show={showLogoModal}
+            onClose={() => setShowLogoModal(false)}
+            onSave={onSavePlacement}
+            baseImageUrl={side === "front" ? product.img : (product.backImg || product.img)}
+            printArea={side === "front" ? product.printArea : (product.backPrintArea || product.printArea)}
+            logoDataUrl={logoBySide[side]}
+          />
 
           <div className="mt-5">
             <h5 className="mb-3">מוצרים דומים</h5>
