@@ -19,15 +19,16 @@ const firebaseConfig = {
   apiKey: process.env.REACT_APP_FB_API_KEY,
   authDomain: process.env.REACT_APP_FB_AUTH_DOMAIN,
   projectId: process.env.REACT_APP_FB_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FB_STORAGE_BUCKET,
+  storageBucket: process.env.REACT_APP_FB_STORAGE_BUCKET, // ← קרא מהסביבה
   messagingSenderId: process.env.REACT_APP_FB_MESSAGING_SENDER_ID,
   appId: process.env.REACT_APP_FB_APP_ID,
   measurementId: process.env.REACT_APP_FB_MEASUREMENT_ID,
 };
 
 const isBrowser = typeof window !== "undefined";
+const isDev = process.env.NODE_ENV !== "production";
 
-if (process.env.NODE_ENV !== "production") {
+if (isDev) {
   console.log("Firebase config:", firebaseConfig);
   if (!firebaseConfig.projectId) {
     console.warn("⚠️ Missing REACT_APP_FB_PROJECT_ID (בדקו .env).");
@@ -40,14 +41,24 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 // ===== App Check (reCAPTCHA Enterprise) =====
 // חייב לרוץ *לפני* יצירת Auth/Firestore/Storage/Functions
 if (isBrowser) {
-  // DEVELOPMENT: רשום את אותו UUID בדיוק במסך App Check → Apps → ⋮ → Manage debug tokens
-  if (process.env.NODE_ENV !== "production") {
-    // שים כאן את ה-UUID שמופיע לך בקונסול (כבר אישרת אותו במסך הדיבאג)
-    window.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
+  // DEV: ניהול Debug Token דרך .env
+  // REACT_APP_APPCHECK_DEBUG_TOKEN=<uuid>  → השתמש בטוקן שאישרת בקונסול
+  // REACT_APP_APPCHECK_DEBUG_TOKEN=auto    → הפק טוקן חדש והדפס אותו לקונסול
+  if (isDev) {
+    const raw = process.env.REACT_APP_APPCHECK_DEBUG_TOKEN;
+    if (raw === "auto") {
+      window.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // יפיק וידפיס לקונסול
+      console.info("AppCheck: debug token = auto (see console for generated token)");
+    } else if (raw && raw.trim()) {
+      window.FIREBASE_APPCHECK_DEBUG_TOKEN = raw.trim();
+      console.info("AppCheck: using debug token from .env");
+    } else {
+      console.info("AppCheck: no debug token provided");
+    }
   }
 
   const enterpriseKey = process.env.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY || "";
-  if (!enterpriseKey && process.env.NODE_ENV !== "production") {
+  if (!enterpriseKey && isDev) {
     console.warn("⚠️ Missing REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY (App Check).");
   }
 
@@ -74,7 +85,12 @@ export const db = initializeFirestore(app, {
 
 // ===== Services נוספים
 export const auth = getAuth(app);
-export const storage = getStorage(app, "gs://karina-web.firebasestorage.app");
+
+// בחר את הבאקט מ־config (ברירת מחדל: מה־project)
+// אם יש storageBucket בקונפיג – נשתמש בו; אחרת getStorage(app) לבאקט ברירת מחדל.
+const bucket = firebaseConfig.storageBucket;
+export const storage = bucket ? getStorage(app, `gs://${bucket}`) : getStorage(app);
+
 const FUNCTIONS_REGION = "europe-west1";
 export const functions = getFunctions(app, FUNCTIONS_REGION);
 
@@ -88,7 +104,7 @@ if (isBrowser) {
 }
 
 // ===== אמולטורים (אופציונלי)
-const wantEmulators = String(process.env.REACT_APP_USE_EMULATORS).toLowerCase() === "true";
+const wantEmulators = String(process.env.REACT_APP_USE_EMULATORS || "false").toLowerCase() === "true";
 if (wantEmulators) {
   try {
     console.log("🔌 Using Firebase Emulators");

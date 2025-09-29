@@ -6,6 +6,7 @@ import { Helmet, HelmetProvider } from "react-helmet-async";
 // Providers
 import { AuthProvider } from "./contexts/AuthContext";
 import { OrdersProvider } from "./contexts/OrdersContext";
+import { LogosQueueProvider } from "./contexts/LogosQueueContext.tsx"; // ⬅️ חדש
 
 // קומפוננטות משותפות
 import Navbar from "./components/Navbar";
@@ -71,84 +72,87 @@ export default function AppAlt() {
     <HelmetProvider>
       <AuthProvider>
         <OrdersProvider>
-          <BrowserRouter>
-            <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
-              <title>קארינה חולצות מודפסות</title>
-              <meta
-                name="description"
-                content="תצוגת פיתוח לדפים החדשים של קארינה: קטלוג, מוצר, עגלה, תשלום ועוד."
-              />
-              <link rel="canonical" href="https://karina.co.il/preview" />
-              <meta property="og:type" content="website" />
-              <meta property="og:title" content="קארינה חולצות מודפסות" />
-              <meta
-                property="og:description"
-                content="תצוגת פיתוח לדפים החדשים של האתר."
-              />
-              <meta property="og:image" content="/img/logo.png" />
-              <meta property="og:locale" content="he_IL" />
-            </Helmet>
-
-            <Navbar />
-
-            <main className="min-vh-100">
-              <ScrollToTop />
-              <Routes>
-                {/* ציבורי */}
-                <Route path="/" element={<HomePage />} />
-                <Route path="/catalog" element={<Catalog />} />
-                <Route path="/product/:slug" element={<ProductDetail />} />
-                <Route path="/cart" element={<Cart />} />
-                <Route path="/contact" element={<Contact />} />
-                <Route path="/faq" element={<FAQ />} />
-                <Route path="/about" element={<About />} />
-                <Route path="/auth" element={<AuthPage />} /> {/* ✅ דף כניסה */}
-
-                {/* מוגן למשתמש מחובר */}
-                <Route
-                  path="/checkout"
-                  element={
-                    <ProtectedRoute>
-                      <Checkout />
-                    </ProtectedRoute>
-                  }
+          {/* ⬇️ עטיפה גלובלית לכל העץ כדי ש־useLogosQueue יעבוד בכל הדפים */}
+          <LogosQueueProvider>
+            <BrowserRouter>
+              <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
+                <title>קארינה חולצות מודפסות</title>
+                <meta
+                  name="description"
+                  content="תצוגת פיתוח לדפים החדשים של קארינה: קטלוג, מוצר, עגלה, תשלום ועוד."
                 />
-                <Route
-                  path="/account"
-                  element={
-                    <ProtectedRoute>
-                      <Account />
-                    </ProtectedRoute>
-                  }
+                <link rel="canonical" href="https://karina.co.il/preview" />
+                <meta property="og:type" content="website" />
+                <meta property="og:title" content="קארינה חולצות מודפסות" />
+                <meta
+                  property="og:description"
+                  content="תצוגת פיתוח לדפים החדשים של האתר."
                 />
-                <Route
-                  path="/orders"
-                  element={
-                    <ProtectedRoute>
-                      <Orders />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/orders/:orderId"
-                  element={
-                    <ProtectedRoute>
-                      <OrderDetail />
-                    </ProtectedRoute>
-                  }
-                />
+                <meta property="og:image" content="/img/logo.png" />
+                <meta property="og:locale" content="he_IL" />
+              </Helmet>
 
-                {/* 404 */}
-                <Route path="*" element={<NotFound />} />
-                <Route path="/legal" element={<Legal />} />
-              </Routes>
-            </main>
+              <Navbar />
 
-            <Footer />
-            {/*
-              <ChatWidget onSend={handleChatSend} />
-             */}
-          </BrowserRouter>
+              <main className="min-vh-100">
+                <ScrollToTop />
+                <Routes>
+                  {/* ציבורי */}
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/catalog" element={<Catalog />} />
+                  <Route path="/product/:slug" element={<ProductDetail />} />
+                  <Route path="/cart" element={<Cart />} />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/faq" element={<FAQ />} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/auth" element={<AuthPage />} /> {/* ✅ דף כניסה */}
+
+                  {/* מוגן למשתמש מחובר */}
+                  <Route
+                    path="/checkout"
+                    element={
+                      <ProtectedRoute>
+                        <Checkout />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/account"
+                    element={
+                      <ProtectedRoute>
+                        <Account />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/orders"
+                    element={
+                      <ProtectedRoute>
+                        <Orders />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/orders/:orderId"
+                    element={
+                      <ProtectedRoute>
+                        <OrderDetail />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* 404 */}
+                  <Route path="*" element={<NotFound />} />
+                  <Route path="/legal" element={<Legal />} />
+                </Routes>
+              </main>
+
+              <Footer />
+              {/*
+                <ChatWidget onSend={handleChatSend} />
+               */}
+            </BrowserRouter>
+          </LogosQueueProvider>
         </OrdersProvider>
       </AuthProvider>
     </HelmetProvider>
