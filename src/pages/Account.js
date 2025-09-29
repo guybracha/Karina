@@ -1,9 +1,10 @@
 // src/pages/Account.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserProfile, updateUserProfile } from "../services/users";
-import { listenMyOrders } from "../services/orders";
+// ⬇️ מחליפים את listenMyOrders בטעינה מדורגת
+import { getMyOrders /*, listenMyOrders */ } from "../services/orders";
 import { logout } from "../services/auth";
 import CreateDemoOrderButton from "../components/CreateDemoOrderButton";
 
@@ -35,9 +36,14 @@ export default function Account() {
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState(null);
+
+  // ⬇️ הזמנות + עימוד
   const [orders, setOrders] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE_SIZE = 20;
 
   // modal state
   const [showEdit, setShowEdit] = useState(false);
@@ -61,7 +67,6 @@ export default function Account() {
         const p = await getUserProfile(user.uid);
         if (mounted) {
           setProfile(p || {});
-          // initialize modal fields
           setEditName(p?.displayName || user.displayName || user.email?.split("@")[0] || "");
           setEditPhoneNumber(p?.phoneNumber || "");
           setEditCompany(p?.company || "");
@@ -74,17 +79,48 @@ export default function Account() {
     return () => { mounted = false; };
   }, [user]);
 
-  // הזמנות בזמן אמת
+  // ⬇️ טעינת כל ההזמנות של המשתמש לפי UID (ממויין בירידה לפי createdAt) + עימוד
   useEffect(() => {
-    if (!user) return;
-    setLoadingOrders(true);
-    const unsub = listenMyOrders(user.uid, (list) => {
-      setOrders(list);
-      setLoadingOrders(false);
-    });
-    return () => unsub && unsub();
+    let cancelled = false;
+    async function loadFirstPage() {
+      if (!user) return;
+      setLoadingOrders(true);
+      try {
+        const { data, nextCursor } = await getMyOrders(user.uid, PAGE_SIZE, null);
+        if (!cancelled) {
+          setOrders(data);
+          setNextCursor(nextCursor);
+        }
+      } finally {
+        if (!cancelled) setLoadingOrders(false);
+      }
+    }
+    loadFirstPage();
+    return () => { cancelled = true; };
   }, [user]);
 
+  const loadMore = useCallback(async () => {
+    if (!user || !nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const res = await getMyOrders(user.uid, PAGE_SIZE, nextCursor);
+      setOrders((prev) => [...prev, ...res.data]);
+      setNextCursor(res.nextCursor);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [user, nextCursor]);
+
+  // אם תרצה האזנה חיה במקום טעינה ידנית, אפשר להחליף ל-listenMyOrders:
+  // useEffect(() => {
+  //   if (!user) return;
+  //   setLoadingOrders(true);
+  //   const unsub = listenMyOrders(user.uid, (list) => {
+  //     setOrders(list);
+  //     setLoadingOrders(false);
+  //   });
+  //   return () => unsub && unsub();
+  // }, [user]);
 
   const displayName = profile?.displayName || user?.displayName || (user?.email?.split("@")[0]) || "Customer";
   const email = profile?.email || user?.email || "";
@@ -92,10 +128,7 @@ export default function Account() {
   function toDateString(tsOrIso) {
     if (!tsOrIso) return "";
     try {
-      const d =
-        typeof tsOrIso?.toDate === "function"
-          ? tsOrIso.toDate()
-          : new Date(tsOrIso);
+      const d = typeof tsOrIso?.toDate === "function" ? tsOrIso.toDate() : new Date(tsOrIso);
       return d.toLocaleDateString("he-IL");
     } catch {
       return "";
@@ -128,11 +161,10 @@ export default function Account() {
       setSaving(true);
       await updateUserProfile(user.uid, {
         displayName: nameTrim,
-        phoneNumber: phoneTrim,       // ✅ נשמר כ-phoneNumber
+        phoneNumber: phoneTrim,
         company: (editCompany || "").trim(),
       });
 
-      // עדכון לוקאלי
       setProfile((prev) => ({
         ...prev,
         displayName: nameTrim,
@@ -140,14 +172,12 @@ export default function Account() {
         company: (editCompany || "").trim(),
       }));
       setSaveMsg("השינויים נשמרו בהצלחה.");
-      // סגירת המודאל אחרי שנייה קטנה
       setTimeout(() => setShowEdit(false), 600);
     } catch (err) {
       console.error(err);
       setSaveErr("שמירה נכשלה. נסו שוב.");
     } finally {
       setSaving(false);
-      // העלם הודעות אחרי כמה שניות
       window.setTimeout(() => { setSaveMsg(null); setSaveErr(null); }, 4000);
     }
   }
@@ -156,8 +186,8 @@ export default function Account() {
     <div className="container py-5">
       <h1 className="mb-4">החשבון שלי</h1>
 
-      {/* פרטי משתמש - תצוגה */}
-       <div className="card mb-4 shadow-sm">
+      {/* פרטי משתמש */}
+      <div className="card mb-4 shadow-sm">
         <div className="card-body d-flex align-items-center gap-3">
           <div className="flex-grow-1">
             <h5 className="mb-1">{loadingProfile ? "..." : displayName}</h5>
@@ -169,19 +199,14 @@ export default function Account() {
             </div>
           </div>
           <div>
-            <button
-              className="btn btn-outline-primary"
-              onClick={() => setShowEdit(true)}
-              disabled={loadingProfile}
-            >
+            <button className="btn btn-outline-primary" onClick={() => setShowEdit(true)} disabled={loadingProfile}>
               עריכת פרטים
             </button>
           </div>
         </div>
       </div>
 
-
-      {/* מודאל עריכת פרטים */}
+      {/* מודאל עריכה */}
       {showEdit && (
         <div
           className="modal fade show"
@@ -190,7 +215,6 @@ export default function Account() {
           aria-modal="true"
           aria-labelledby="editProfileTitle"
           onClick={(e) => {
-            // סגירה בלחיצה על הרקע
             if (e.target === e.currentTarget && !saving) setShowEdit(false);
           }}
         >
@@ -199,12 +223,7 @@ export default function Account() {
               <form onSubmit={handleSaveProfile}>
                 <div className="modal-header">
                   <h5 className="modal-title" id="editProfileTitle">עריכת פרטים</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => !saving && setShowEdit(false)}
-                    aria-label="Close"
-                  />
+                  <button type="button" className="btn-close" onClick={() => !saving && setShowEdit(false)} aria-label="Close" />
                 </div>
                 <div className="modal-body">
                   {saveErr && <div className="alert alert-danger py-2">{saveErr}</div>}
@@ -212,49 +231,22 @@ export default function Account() {
 
                   <div className="mb-3">
                     <label className="form-label fw-semibold">שם מלא</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      placeholder="לדוגמה: יעל כהן"
-                      required
-                      disabled={saving}
-                    />
+                    <input type="text" className="form-control" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="לדוגמה: יעל כהן" required disabled={saving} />
                   </div>
 
                   <div className="mb-3">
                     <label className="form-label fw-semibold">מספר טלפון</label>
-                    <input
-                      type="tel"
-                      className="form-control"
-                      value={editPhoneNumber}
-                      onChange={(e) => setEditPhoneNumber(e.target.value)}
-                      placeholder="לדוגמה: 050-1234567"
-                      disabled={saving}
-                    />
+                    <input type="tel" className="form-control" value={editPhoneNumber} onChange={(e) => setEditPhoneNumber(e.target.value)} placeholder="לדוגמה: 050-1234567" disabled={saving} />
                   </div>
 
                   <div className="mb-0">
                     <label className="form-label fw-semibold">שם חברה</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={editCompany}
-                      onChange={(e) => setEditCompany(e.target.value)}
-                      placeholder="לדוגמה: קארינה בע״מ"
-                      disabled={saving}
-                    />
+                    <input type="text" className="form-control" value={editCompany} onChange={(e) => setEditCompany(e.target.value)} placeholder="לדוגמה: קארינה בע״מ" disabled={saving} />
                   </div>
                 </div>
 
                 <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary"
-                    onClick={() => !saving && setShowEdit(false)}
-                    disabled={saving}
-                  >
+                  <button type="button" className="btn btn-outline-secondary" onClick={() => !saving && setShowEdit(false)} disabled={saving}>
                     ביטול
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={saving}>
@@ -266,59 +258,65 @@ export default function Account() {
           </div>
         </div>
       )}
+
       {/* הזמנות אחרונות */}
       <h5 className="mb-3">הזמנות אחרונות</h5>
       {loadingOrders ? (
         <div className="text-muted">טוען הזמנות…</div>
       ) : orders.length > 0 ? (
-        <div className="table-responsive mb-4">
-          <table className="table align-middle">
-            <thead>
-              <tr>
-                <th>מס׳ הזמנה</th>
-                <th>תאריך</th>
-                <th>סה״כ</th>
-                <th>סטטוס</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id}>
-                  <td className="fw-semibold">
-                    <Link to={`/orders/${o.id}`} className="link-primary text-decoration-none">
-                      {o.id}
-                    </Link>
-                  </td>
-                  <td>{toDateString(o.createdAt)}</td>
-                  <td>
-                    {typeof o.amountCents !== "undefined"
-                      ? shekels(o.amountCents)
-                      : shekels(o.amount)}
-                  </td>
-                  <td><span className={statusBadgeClass(o.status)}>{o.status}</span></td>
-                  <td className="text-end">
-                    <Link to={`/orders/${o.id}`} className="btn btn-sm btn-outline-primary">
-                      פרטי הזמנה
-                    </Link>
-                  </td>
+        <>
+          <div className="table-responsive mb-3">
+            <table className="table align-middle">
+              <thead>
+                <tr>
+                  <th>מס׳ הזמנה</th>
+                  <th>תאריך</th>
+                  <th>סה״כ</th>
+                  <th>סטטוס</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td className="fw-semibold">
+                      <Link to={`/orders/${o.id}`} className="link-primary text-decoration-none">
+                        {o.id}
+                      </Link>
+                    </td>
+                    <td>{toDateString(o.createdAt)}</td>
+                    <td>{typeof o.amountCents !== "undefined" ? shekels(o.amountCents) : shekels(o.amount)}</td>
+                    <td><span className={statusBadgeClass(o.status)}>{o.status}</span></td>
+                    <td className="text-end">
+                      <Link to={`/orders/${o.id}`} className="btn btn-sm btn-outline-primary">
+                        פרטי הזמנה
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* טען עוד */}
+          {nextCursor ? (
+            <div className="d-flex">
+              <button className="btn btn-outline-secondary ms-auto" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? "טוען…" : "טען עוד"}
+              </button>
+            </div>
+          ) : (
+            <div className="text-muted small">הצגת כל ההזמנות.</div>
+          )}
+        </>
       ) : (
         <p className="text-muted">לא נמצאו הזמנות.</p>
       )}
 
       {/* פעולות */}
-      <div className="d-flex gap-2">
-        <Link to="/catalog" className="btn btn-outline-primary">
-          המשך בקניות
-        </Link>
-        <button className="btn btn-danger" onClick={handleLogout}>
-          התנתק
-        </button>
+      <div className="d-flex gap-2 mt-4">
+        <Link to="/catalog" className="btn btn-outline-primary">המשך בקניות</Link>
+        <button className="btn btn-danger" onClick={handleLogout}>התנתק</button>
       </div>
     </div>
   );
