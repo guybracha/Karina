@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { uploadItemLogoAssets } from "../lib/uploadItemLogoAssets"; // ↑ משתמשים רק בזה
 import { auth, ensureAuthTokenFresh } from "../firebase";           // רענון טוקן לפני העלאה
+import { useLogosQueue } from "../contexts/LogosQueueContext.tsx";
 
 export default function LogoUploadModal({
   show,
@@ -11,7 +12,7 @@ export default function LogoUploadModal({
   orderId,           // מזהה הזמנה פעילה
   itemSlug,          // למשל "tshirt-gray"
   side = "front",    // "front" | "back"
-  accept = "image/*,application/pdf,application/svg+xml",
+  accept = "image/*,application/pdf,image/svg+xml",
   maxSizeMB = 10,
 }) {
   const [fileObj, setFileObj] = useState(null);
@@ -21,6 +22,7 @@ export default function LogoUploadModal({
 
   const inputRef = useRef(null);
   const dropRef = useRef(null);
+  const { setOriginalInMemory } = useLogosQueue(); // ← לשמירה בזיכרון
 
   useEffect(() => { if (!show) resetState(); }, [show]);
 
@@ -73,49 +75,101 @@ export default function LogoUploadModal({
   }, [show, readFile]);
 
   const handleConfirm = async () => {
-    try {
-      if (!fileObj) {
-        setError("נא לבחור קובץ לוגו תחילה");
-        return;
-      }
-      if (!orderId || !itemSlug) {
-        setError("חסרים orderId או itemSlug למיקום הקובץ ב-Storage");
-        return;
-      }
-      setError("");
-      setBusyText("מעלה ל-Storage…");
-
-      // מבטיחים טוקן טרי לפני ההעלאה (App Check/Rules)
-      await ensureAuthTokenFresh(); // ראה firebase.js
-
-      const user = auth.currentUser;
-      if (!user) throw new Error("לא מחובר");
-
-      // מעלה את קובץ המקור; אין preview ואין mockup
-      const storageMeta = await uploadItemLogoAssets({
-        uid: user.uid,
-        orderId,
-        slug: itemSlug,
-        side,
-        logoId: "logo",      // מזהה פשוט; אפשר לשלב timestamp אם רוצים
-        file: fileObj,
-        dataUrlFallback: null,
-      });
-      // storageMeta: { originalUrl, webpUrl, pathOriginal, pathWebp, bytes, contentType }
-
-      // מחזירים להורה רק מטא-דאטה של ההעלאה (לשמירה במסמך ההזמנה)
-      onConfirm?.(
-        null,                 // אין preview
-        fileObj,              // המקור שנבחר
-        { storage: storageMeta, local: false }
-      );
-    } catch (e) {
-      console.error(e);
-      setError("העלאת הלוגו נכשלה");
-    } finally {
-      setBusyText("");
+  try {
+    if (!fileObj) {
+      setError("נא לבחור קובץ לוגו תחילה");
+      return;
     }
-  };
+    if (!orderId || !itemSlug) {
+      setError("חסרים orderId או itemSlug למיקום הקובץ ב-Storage");
+      return;
+    }
+    setError("");
+    setBusyText("מעלה ל-Storage…");
+
+    // רענון טוקן לפני העלאה
+    await ensureAuthTokenFresh();
+    const user = auth.currentUser;
+    if (!user) throw new Error("לא מחובר");
+
+    // 1) העלאה ל-Storage
+    const storageMeta = await uploadItemLogoAssets({
+      uid: user.uid,
+      orderId,
+      slug: itemSlug,
+      side,                // "front" | "back"
+      logoId: "logo",      // אפשר לשנות למזהה ייחודי אם תרצה
+      file: fileObj,
+      dataUrlFallback: null,
+    });
+    // storageMeta: { originalUrl, webpUrl, pathOriginal, pathWebp, bytes, contentType }
+
+    // 2) שמירה מקומית (Context + LocalStorage) כדי להבטיח שהלוגו יהיה זמין גם בלי העלאה נוספת
+    setBusyText("שומר מקומית…");
+
+    // הופך את הקובץ ל-dataURL לשמירה ב-LS (לשחזור אחרי רענון/לוגים)
+    const fileToDataURL = (file) =>
+      new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onerror = reject;
+        fr.onload = () => resolve(fr.result);
+        fr.readAsDataURL(file);
+      });
+    const dataUrl = await fileToDataURL(fileObj);
+
+    // מזהה ייחודי ללוגו הזה (לפי צד)
+    const id = `${side}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // 2a) שומר את ה-File בזיכרון (Context)
+    try {
+      setOriginalInMemory?.(id, fileObj);
+    } catch (e) {
+      console.warn("[LogoUploadModal] setOriginalInMemory failed:", e);
+    }
+
+    // 2b) שומר רשומה ב-LocalStorage
+    try {
+      const LS_PENDING_LOGOS = "karina:pendingLogos";
+      const raw = localStorage.getItem(LS_PENDING_LOGOS);
+      const arr = raw ? JSON.parse(raw) : [];
+      const rec = {
+        id,
+        side,                         // front/back
+        originalDataUrl: dataUrl,     // המקור כ-dataURL
+        name: fileObj.name,
+        type: fileObj.type,
+        bytes: fileObj.size,
+        itemSlug: itemSlug || null,
+        orderId: orderId || null,
+        ts: Date.now(),
+      };
+      arr.push(rec);
+      localStorage.setItem(LS_PENDING_LOGOS, JSON.stringify(arr));
+
+      // נשמור גם את מזהה הצד שנבחר לצורך שליפה מהירה ב-Cart (collectLogoSource)
+      localStorage.setItem(`karina:logoId:${side}`, id);
+    } catch (e) {
+      console.warn("[LogoUploadModal] failed to write pending logos to LS:", e);
+    }
+
+    // 3) מחזירים להורה גם Storage וגם סימון מקומי
+    onConfirm?.(
+      null,                        // אין preview שנוצר כאן
+      fileObj,                     // ה-File המקורי (אם ההורה רוצה להציג/לוג)
+      { storage: storageMeta, local: true, id, side }
+    );
+
+    // אופציונלי: סגור את המודל לאחר שמירה
+    // onClose?.();
+
+  } catch (e) {
+    console.error(e);
+    setError("העלאת הלוגו/שמירה מקומית נכשלה");
+  } finally {
+    setBusyText("");
+  }
+};
+
 
   if (!show) return null;
 

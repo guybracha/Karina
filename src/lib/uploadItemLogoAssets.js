@@ -1,136 +1,125 @@
-// src/lib/uploadItemLogoAssets.js
-import { ref, uploadBytes, uploadString, getDownloadURL } from "firebase/storage";
-import { storage } from "../firebase";
+/* eslint "object-curly-spacing": ["error","never"] */
+
+import {getStorage,ref,uploadBytes,getDownloadURL} from "firebase/storage";
+const storage = getStorage();
+
+function mimeToExt(type = "", fallback = "bin") {
+  const t = String(type).toLowerCase();
+  if (/image\/png/.test(t)) return "png";
+  if (/image\/jpe?g/.test(t)) return "jpg";
+  if (/image\/webp/.test(t)) return "webp";
+  if (/image\/svg\+xml/.test(t)) return "svg";
+  if (/application\/pdf/.test(t)) return "pdf";
+  return fallback;
+}
+
+async function toWebp(file, quality = 0.92) {
+  try {
+    if (!/^image\/(png|jpe?g)$/i.test(file.type)) return null;
+    const bmp = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bmp, 0, 0);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", quality));
+    if (!blob) return null;
+    // שומרים שם סביר ל-webp גם אם לקובץ המקורי אין שם
+    const base = (file.name || "logo").replace(/\.[^.]+$/,"");
+    return new File([blob], `${base}.webp`, {type:"image/webp"});
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeName(s = "") {
+  return String(s).normalize("NFKD").replace(/[^\w.\-]+/g, "_").slice(0, 120);
+}
 
 /**
- * מעלה לוגו לצד מסוים של פריט בתוך הזמנה:
- * PRIVATE (תואם לכללים):
- * users/{uid}/orders/{orderId}/assets/{slug}/{side}/original_*.(ext)
- * ובמידה וזה תמונה – יוצר גם original_*.webp
+ * מעלה לוגו לנתיב:
+ * users/{uid}/orders/{orderId}/draft/assets/{slug}/{side}/original_{slug}_{logoId}.ext
+ * ואם אפשר – גם WEBP:
+ * users/{uid}/orders/{orderId}/draft/assets/{slug}/{side}/webp_{slug}_{logoId}.webp
  *
- * @returns {
- *   originalUrl, webpUrl, pathOriginal, pathWebp, bytes, contentType
- * }
+ * מחזיר גם:
+ *  - originalUrl (https) אם אפשר, וגם gsUriOriginal (gs://)
+ *  - pathOriginal / pathWebp (נתיב יחסי בבאקט)
+ *  - url alias -> originalUrl לנוחות קוד אחר
  */
 export async function uploadItemLogoAssets({
   uid,
   orderId,
   slug,
-  side,            // "front" | "back"
-  logoId,          // מזהה לוגו/שם
-  file,            // File | null
-  dataUrlFallback, // string | null (dataURL)
+  side,
+  logoId,
+  file,
+  dataUrlFallback = null,
 }) {
-  if (!uid || !orderId || !slug || !side) return null;
+  if (!uid || !orderId || !slug || !side || !logoId || !file) {
+    throw new Error("[uploadItemLogoAssets] missing params");
+  }
 
-  // —— נתיב פרטי תואם כללים (assets) ——
-  const baseDir = `users/${uid}/orders/${orderId}/assets/${slug}/${side}`;
-
-  // עוזרות
+  const safeSlug = sanitizeName(slug);
+  const safeId = sanitizeName(logoId);
   const ts = Date.now();
-  const safeId = String(logoId || "logo").replace(/[^\w\-]+/g, "_");
-  const cleanSlug = String(slug || "item").replace(/[^\w\-]+/g, "_");
 
-  const extFromMime = (mime = "") => {
-    if (/svg/i.test(mime)) return "svg";
-    if (/webp/i.test(mime)) return "webp";
-    if (/png/i.test(mime))  return "png";
-    if (/jpeg/i.test(mime)) return "jpg";
-    if (/jpg/i.test(mime))  return "jpg";
-    if (/pdf/i.test(mime))  return "pdf";
-    return "bin";
+  // סיומת: קודם מהשם אם יש, אחרת מהמימ־טייפ
+  const nameHasExt = typeof file.name === "string" && /\.[^.]+$/.test(file.name);
+  const extFromName = nameHasExt ? file.name.split(".").pop() : null;
+  const ext = sanitizeName((extFromName || mimeToExt(file.type || "", "bin")).toLowerCase());
+
+  const baseDir = `users/${uid}/orders/${orderId}/draft/assets/${safeSlug}/${side}`;
+  const baseName = `_${safeSlug}_${safeId}_${ts}`;
+  const pathOriginal = `${baseDir}/original${baseName}.${ext}`;
+
+  // מטא-דאטה
+  const meta = {
+    contentType: file.type || "application/octet-stream",
+    cacheControl: "public,max-age=31536000,immutable",
+    contentDisposition: `inline; filename="${sanitizeName(file.name || `logo.${ext}`)}"`,
   };
 
-  // —————————— 1) העלאת המקור ——————————
-  let contentType = "application/octet-stream";
-  let pathOriginal = null;
+  // העלאת מקור
+  const refOriginal = ref(storage, pathOriginal);
+  const snapOriginal = await uploadBytes(refOriginal, file, meta);
+
   let originalUrl = null;
-  let bytes = 0;
-
-  if (file) {
-    contentType = file.type || "application/octet-stream";
-    const safeExt = (file.name?.split(".").pop() || extFromMime(contentType)).toLowerCase();
-    const fileName = `original_${cleanSlug}_${safeId}_${ts}.${safeExt}`.replace(/[^\w.\-]+/g, "_");
-    pathOriginal = `${baseDir}/${fileName}`;
-
-    const r = ref(storage, pathOriginal);
-    const snap = await uploadBytes(r, file, {
-      contentType,
-      // קבצים פרטיים – cacheControl לא הכרחי; אם תרצה קבצים “קבועים” בצד לקוח, אפשר להוסיף:
-      // cacheControl: "private, max-age=0, no-transform",
-    });
-    originalUrl = await getDownloadURL(snap.ref);
-    bytes = file.size || 0;
-  } else if (typeof dataUrlFallback === "string" && dataUrlFallback.startsWith("data:")) {
-    const m = /^data:([^;]+);/i.exec(dataUrlFallback);
-    contentType = m?.[1] || "application/octet-stream";
-    const ext = extFromMime(contentType);
-    const fileName = `original_${cleanSlug}_${safeId}_${ts}.${ext}`;
-    pathOriginal = `${baseDir}/${fileName}`;
-
-    const r = ref(storage, pathOriginal);
-    const snap = await uploadString(r, dataUrlFallback, "data_url", {
-      contentType,
-      // cacheControl: "private, max-age=0, no-transform",
-    });
-    originalUrl = await getDownloadURL(snap.ref);
-
-    try {
-      const b64 = dataUrlFallback.split(",")[1] || "";
-      bytes = Math.floor((b64.length * 3) / 4);
-    } catch { /* noop */ }
-  } else {
-    return null; // אין מקור להעלות
+  try {
+    originalUrl = await getDownloadURL(refOriginal);
+  } catch {
+    originalUrl = null; // ייתכן שזמין רק מאוחר יותר/לפי רולז; זה בסדר כי אצלנו יש gsUri/path
   }
+  const gsUriOriginal = refOriginal.toString(); // gs://<bucket>/<path>
 
-  // —————————— 2) יצירת WEBP (רק אם זה תמונה) ——————————
-  let webpUrl = null;
+  // WEBP אם רלוונטי
   let pathWebp = null;
+  let webpUrl = null;
+  let gsUriWebp = null;
 
-  if (contentType.startsWith("image/") && !/svg|pdf/i.test(contentType)) {
-    try {
-      const dataUrlFromFile = (blobOrFile) =>
-        new Promise((resolve, reject) => {
-          const fr = new FileReader();
-          fr.onload = () => resolve(fr.result);
-          fr.onerror = reject;
-          fr.readAsDataURL(blobOrFile);
-        });
-
-      // מקור לציור על קנבס
-      const sourceDataUrl = file
-        ? await dataUrlFromFile(file)
-        : dataUrlFallback;
-
-      if (typeof sourceDataUrl === "string") {
-        const webpDataUrl = await new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => {
-            const c = document.createElement("canvas");
-            c.width = img.width;
-            c.height = img.height;
-            const ctx = c.getContext("2d");
-            ctx.drawImage(img, 0, 0);
-            // איכות 0.95 – אפשר לשנות
-            const out = c.toDataURL("image/webp", 0.95);
-            resolve(out);
-          };
-          img.onerror = reject;
-          img.src = sourceDataUrl;
-        });
-
-        pathWebp = `${baseDir}/original_${cleanSlug}_${safeId}_${ts}.webp`;
-        const rWebp = ref(storage, pathWebp);
-        await uploadString(rWebp, webpDataUrl, "data_url", {
-          contentType: "image/webp",
-          // cacheControl: "private, max-age=0, no-transform",
-        });
-        webpUrl = await getDownloadURL(rWebp);
-      }
-    } catch (e) {
-      console.warn("[uploadItemLogoAssets] WEBP conversion failed:", e);
-    }
+  const webpFile = await toWebp(file);
+  if (webpFile) {
+    pathWebp = `${baseDir}/webp${baseName}.webp`;
+    const refWebp = ref(storage, pathWebp);
+    await uploadBytes(refWebp, webpFile, {
+      contentType: "image/webp",
+      cacheControl: "public,max-age=31536000,immutable",
+      contentDisposition: `inline; filename="${sanitizeName(webpFile.name)}"`,
+    });
+    try { webpUrl = await getDownloadURL(refWebp); } catch { webpUrl = null; }
+    gsUriWebp = refWebp.toString();
   }
 
-  return { originalUrl, webpUrl, pathOriginal, pathWebp, bytes, contentType };
+  // נחזיר גם alias בשם url לנוחות, וגם שדות gs/path כדי שהשרת יוכל למשוך ישירות מהבאקט
+  return {
+    pathOriginal,
+    originalUrl,
+    gsUriOriginal,
+    url: originalUrl || gsUriOriginal,           // alias נוח
+    contentType: snapOriginal.metadata.contentType || meta.contentType,
+    bytes: snapOriginal.totalBytes,
+    pathWebp,
+    webpUrl,
+    gsUriWebp,
+  };
 }

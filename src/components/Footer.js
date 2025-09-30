@@ -27,7 +27,7 @@ export default function Footer() {
             <h6 className="fw-bold mb-3">צור קשר</h6>
             <ul className="list-unstyled small">
               <li>טלפון: <a href="tel:0545042443" className="link-light">0545042443</a></li>
-              <li>אימייל: <a href="mailto:karina.official.israel@gmail.com" className="link-light">karina.official.israel@gmail.com</a></li>
+              <li>אימייל: <a href="mailto:karina.offical.israel@gmail.com" className="link-light">karina.offical.israel@gmail.com</a></li>
               <li>כתובת: צבי הנחל 4, אזור תעשייה עמק חפר</li>
             </ul>
           </div>

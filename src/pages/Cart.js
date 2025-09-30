@@ -16,7 +16,18 @@ import { uploadItemLogoAssets } from "../lib/uploadItemLogoAssets";
 import { useLogosQueue } from "../contexts/LogosQueueContext.tsx";
 import { saveDraftAssets } from "../lib/saveDraftAssets";
 
-// ---------- helpers for previews/logos sources ----------
+/* =========================================================================
+   Helpers: preview/logo sources
+============================================================================ */
+
+// ---- safe number formatting ----
+const LOCALE_HE = (Intl.NumberFormat.supportedLocalesOf?.(["he-IL"])?.length ? "he-IL" : undefined);
+const dashFix = (s) => (typeof s === "string" ? s.replace(/\u2011|\u2010|\u2013|\u2014/g, "-") : s); // אם פעם יסתנן מקף לא רגיל
+function fmt(n) {
+  try { return Number(n || 0).toLocaleString(LOCALE_HE); }
+  catch { return Number(n || 0).toLocaleString(); }
+}
+
 
 // fetch blob: URL to Blob
 async function fetchBlob(blobUrl) {
@@ -72,7 +83,9 @@ async function normalizeLogoSourceForUpload({ file, dataUrl }) {
   return { file: null, dataUrl: null };
 }
 
-/* --------------------- LS keys & constants --------------------- */
+/* =========================================================================
+   LocalStorage keys & constants
+============================================================================ */
 const LS_CART_KEY = "karina:cart";
 const LS_SHIP_KEY = "karina:shipping";
 const LS_ADDR_KEY = "karina:shippingAddress";
@@ -86,7 +99,9 @@ const SHIP_OPTIONS = {
   pickup: { label: "איסוף מהמפעל", cost: 0 },
 };
 
-/* --------------------- helpers --------------------- */
+/* =========================================================================
+   Generic helpers
+============================================================================ */
 function defaultAddress() {
   return { city: "", street: "", house: "", apt: "", zip: "", notes: "" };
 }
@@ -179,7 +194,35 @@ function collectLogoSource(side, takeOriginalFromMemory) {
   return { logoId, file, dataUrl: pendingDataUrl || altDataUrl || null };
 }
 
-/* --------------------- Firestore refs --------------------- */
+/* =========================================================================
+   Callable utils (logging + retry)
+============================================================================ */
+function logCallableError(tag, e) {
+  const code = e?.code || e?.error?.code || "unknown";
+  const message = e?.message || e?.error?.message || String(e);
+  const details = e?.details || e?.error?.details || null;
+  console.error(`[${tag}]`, { code, message, details, raw: e });
+}
+async function withRetry(fn, { tries = 2, delayMs = 500, tag = "call" } = {}) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      logCallableError(`${tag}#${i + 1}/${tries}`, e);
+      const code = e?.code || "";
+      // רטריי רק על שגיאות רגעיות
+      if (!/resource-exhausted|unavailable|deadline-exceeded|internal|unknown|aborted|cancelled/i.test(code)) break;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
+/* =========================================================================
+   Firestore refs
+============================================================================ */
 function cartDocRef(userId) {
   return doc(db, "users", userId, "carts", "current");
 }
@@ -187,7 +230,9 @@ function orderDraftDocRef(userId) {
   return doc(db, "users", userId, "orders", "draft");
 }
 
-/* --------------------- merge local <-> cloud --------------------- */
+/* =========================================================================
+   merge local <-> cloud
+============================================================================ */
 function mergeCartArrays(cloudArr = [], localArr = []) {
   const cloud = normalizeCartArray(cloudArr);
   const local = normalizeCartArray(localArr);
@@ -202,19 +247,53 @@ function mergeCartArrays(cloudArr = [], localArr = []) {
     if (!prev) {
       byId.set(it.id, it);
     } else {
-      byId.set(it.id, {
-        ...prev,
-        ...it,
-        qty: Math.max(1, (Number(prev.qty) || 0) + (Number(it.qty) || 0)),
-      });
+      byId.set(
+        it.id,
+        {
+          ...prev,
+          ...it,
+          qty: Math.max(1, (Number(prev.qty) || 0) + (Number(it.qty) || 0)),
+        }
+      );
     }
   }
   return Array.from(byId.values());
 }
 
-/* ===========================================================
+/* =========================================================================
+   Robust order-level logo aggregation
+============================================================================ */
+function firstHttp(...vals) {
+  return vals.find((v) => typeof v === "string" && /^https?:\/\//i.test(v)) || null;
+}
+function aggregateOrderLogos(itemsWithUrls = []) {
+  let front = null, back = null;
+  for (const row of itemsWithUrls) {
+    const L = row?.logos || {};
+    if (!front) {
+      front = firstHttp(
+        L.front?.originalUrl,
+        L.front?.url,
+        L.frontUrl,
+        L.front?.original?.url
+      );
+    }
+    if (!back) {
+      back = firstHttp(
+        L.back?.originalUrl,
+        L.back?.url,
+        L.backUrl,
+        L.back?.original?.url
+      );
+    }
+    if (front && back) break;
+  }
+  return { frontUrl: front || null, backUrl: back || null };
+}
+
+/* =========================================================================
    Component
-=========================================================== */
+============================================================================ */
 export default function Cart() {
   const [items, setItems] = useState([]);
   const [shipping, setShipping] = useState(() => {
@@ -228,6 +307,7 @@ export default function Cart() {
   const [loading, setLoading] = useState(false);
   const [uid, setUid] = useState(null);
   const saveTimer = useRef(null);
+  const busyRef = useRef(false); // הגנה מכפילות לחיצה
   const { takeOriginalFromMemory } = useLogosQueue();
 
   /* ---------- Firestore ops ---------- */
@@ -242,7 +322,9 @@ export default function Cart() {
         const merged = mergeCartArrays(cloudItems, local);
 
         setItems(merged);
-        try { localStorage.setItem(LS_CART_KEY, JSON.stringify(merged)); } catch {}
+        try {
+          localStorage.setItem(LS_CART_KEY, JSON.stringify(merged));
+        } catch {}
 
         if (data.shipping) setShipping(data.shipping);
         if (data.address) setShippingAddress(normalizeAddress(data.address));
@@ -257,7 +339,9 @@ export default function Cart() {
       } else {
         const merged = normalizeCartArray(local);
         setItems(merged);
-        try { localStorage.setItem(LS_CART_KEY, JSON.stringify(merged)); } catch {}
+        try {
+          localStorage.setItem(LS_CART_KEY, JSON.stringify(merged));
+        } catch {}
         if (merged.length > 0) {
           await setDoc(
             cartDocRef(userId),
@@ -329,7 +413,10 @@ export default function Cart() {
     const ordersCol = collection(db, "users", customer.uid, "orders");
     const newOrderRef = doc(ordersCol);
     const order = {
-      status: "initiated",
+      status: "pending",
+      userId: customer.uid,
+      currency: "ILS",
+      amountCents: Math.round(Number(payload.clientTotals.grandTotal || 0) * 100),
       customer,
       items: payload.items,
       shipping: payload.shipping,
@@ -369,17 +456,39 @@ export default function Cart() {
     return () => unsub();
   }, []);
 
+  // מאזינים גלובליים לשגיאות "חולפות" שלא נלכדות
+  useEffect(() => {
+    const onRejection = (ev) => {
+      console.error("[unhandledrejection]", ev?.reason || ev);
+    };
+    const onError = (ev) => {
+      console.error("[window.error]", ev?.message || ev);
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    window.addEventListener("error", onError);
+    return () => {
+      window.removeEventListener("unhandledrejection", onRejection);
+      window.removeEventListener("error", onError);
+    };
+  }, []);
+
   useEffect(() => {
     function onStorage(e) {
       if (e.key === LS_CART_KEY) setItems(readCartFromLS());
       if (e.key === LS_SHIP_KEY) {
-        try { setShipping(localStorage.getItem(LS_SHIP_KEY) || "standard"); } catch {}
+        try {
+          setShipping(localStorage.getItem(LS_SHIP_KEY) || "standard");
+        } catch {}
       }
       if (e.key === LS_ADDR_KEY) {
-        try { setShippingAddress(readAddressFromLS()); } catch {}
+        try {
+          setShippingAddress(readAddressFromLS());
+        } catch {}
       }
     }
-    function onCustom() { setItems(readCartFromLS()); }
+    function onCustom() {
+      setItems(readCartFromLS());
+    }
     window.addEventListener("storage", onStorage);
     window.addEventListener("karina:cartUpdated", onCustom);
     return () => {
@@ -389,7 +498,9 @@ export default function Cart() {
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem(LS_SHIP_KEY, shipping); } catch {}
+    try {
+      localStorage.setItem(LS_SHIP_KEY, shipping);
+    } catch {}
     writeAddressToLS(shippingAddress);
     scheduleSaveToFirestore(uid, items, shipping, shippingAddress);
     // eslint-disable-next-line
@@ -442,18 +553,25 @@ export default function Cart() {
     return customer;
   }
 
-  // upload mockups + logos for one line
+  // upload mockups + logos for one line (used by manual "שמור קבצים")
   async function saveAssetsForItem(it) {
     if (!uid) {
       alert("עליך להתחבר כדי לשמור קבצים.");
       return;
     }
-    try { await ensureAuthTokenFresh(); } catch (e) { console.error("ensureAuthTokenFresh failed", e); }
+    try {
+      await ensureAuthTokenFresh();
+    } catch (e) {
+      console.error("ensureAuthTokenFresh failed", e);
+    }
 
     const customer = await ensureDraft(uid);
     const orderId = "draft";
     const slug = it.slug;
-    if (!slug) { alert("לפריט חסר slug — לא ניתן לשמור קבצים."); return; }
+    if (!slug) {
+      alert("לפריט חסר slug — לא ניתן לשמור קבצים.");
+      return;
+    }
 
     const { front, back } = getPreviewsForItem({ slug });
 
@@ -507,12 +625,7 @@ export default function Cart() {
 
     const existed = nextItems.some((r) => keyOf(r) === meKey);
     const completedRow = {
-      slug: it.slug,
-      name: it.name,
-      price: it.price,
-      qty: it.qty,
-      color: it.color,
-      size: it.size,
+      slug: it.slug, name: it.name, price: it.price, qty: it.qty, color: it.color, size: it.size,
       previews: { frontUrl: frontUrl || null, backUrl: backUrl || null },
       logos:    { front: frontLogo || null,   back: backLogo || null },
     };
@@ -569,8 +682,7 @@ export default function Cart() {
           frontLogo = await uploadItemLogoAssets({
             uid: customer.uid, orderId, slug, side: "front",
             logoId: sf.logoId || "front",
-            file: nf.file || null,
-            dataUrlFallback: nf.dataUrl || null,
+            file: nf.file || null, dataUrlFallback: nf.dataUrl || null,
           });
         } catch (e) { console.error("upload front logo failed", e); }
       }
@@ -579,8 +691,7 @@ export default function Cart() {
           backLogo = await uploadItemLogoAssets({
             uid: customer.uid, orderId, slug, side: "back",
             logoId: sb.logoId || "back",
-            file: nb.file || null,
-            dataUrlFallback: nb.dataUrl || null,
+            file: nb.file || null, dataUrlFallback: nb.dataUrl || null,
           });
         } catch (e) { console.error("upload back logo failed", e); }
       }
@@ -610,6 +721,9 @@ export default function Cart() {
 
   /* ---------- checkout ---------- */
   async function startCheckout() {
+    if (busyRef.current) return; // הגנה מכפילות לחיצה
+    busyRef.current = true;
+
     try {
       setLoading(true);
 
@@ -645,7 +759,10 @@ export default function Cart() {
       await setDoc(
         doc(db, "orders", orderId),
         {
-          status: "initiated",
+          status: "pending",
+          userId: customer.uid,
+          currency: "ILS",
+          amountCents: Math.round(Number(basePayload.clientTotals.grandTotal || 0) * 100),
           customer,
           items: [],
           shipping: basePayload.shipping,
@@ -657,51 +774,54 @@ export default function Cart() {
         { merge: true }
       );
 
-      // uploads per item
+      // ---------------- Upload previews (if any) + logos ALWAYS ----------------
       const sourceFront = collectLogoSource("front", takeOriginalFromMemory);
       const sourceBack  = collectLogoSource("back",  takeOriginalFromMemory);
 
       const itemsWithUrls = [];
       for (const { slug, qty, color, size, name, price } of items) {
         const { front, back } = getPreviewsForItem({ slug });
+
         let frontUrl = null, backUrl = null;
         let frontLogo = null, backLogo = null;
 
-        if (front) {
-          try { frontUrl = await ensurePreviewUploadedSmart({ uid: customer.uid, orderId, slug, side: "front", source: front }); }
-          catch (e) { console.error("upload front mockup failed", e); }
-          if (orderId && (sourceFront.file || sourceFront.dataUrl)) {
-            const nf = await normalizeLogoSourceForUpload({ file: sourceFront.file, dataUrl: sourceFront.dataUrl });
-            if (nf.file || nf.dataUrl) {
-              try {
-                frontLogo = await uploadItemLogoAssets({
-                  uid: customer.uid, orderId, slug, side: "front",
-                  logoId: sourceFront.logoId || "front",
-                  file: nf.file || null,
-                  dataUrlFallback: nf.dataUrl || null
-                });
-              } catch (e) { console.error("upload front logo failed", e); }
-            }
+        try {
+          if (front) {
+            frontUrl = await ensurePreviewUploadedSmart({
+              uid: customer.uid, orderId, slug, side: "front", source: front
+            });
           }
-        }
+        } catch (e) { console.error("upload front mockup failed", e); }
 
-        if (back) {
-          try { backUrl = await ensurePreviewUploadedSmart({ uid: customer.uid, orderId, slug, side: "back", source: back }); }
-          catch (e) { console.error("upload back mockup failed", e); }
-          if (orderId && (sourceBack.file || sourceBack.dataUrl)) {
-            const nb = await normalizeLogoSourceForUpload({ file: sourceBack.file, dataUrl: sourceBack.dataUrl });
-            if (nb.file || nb.dataUrl) {
-              try {
-                backLogo = await uploadItemLogoAssets({
-                  uid: customer.uid, orderId, slug, side: "back",
-                  logoId: sourceBack.logoId || "back",
-                  file: nb.file || null,
-                  dataUrlFallback: nb.dataUrl || null
-                });
-              } catch (e) { console.error("upload back logo failed", e); }
-            }
+        try {
+          if (back) {
+            backUrl = await ensurePreviewUploadedSmart({
+              uid: customer.uid, orderId, slug, side: "back", source: back
+            });
           }
-        }
+        } catch (e) { console.error("upload back mockup failed", e); }
+
+        try {
+          const nf = await normalizeLogoSourceForUpload({ file: sourceFront.file, dataUrl: sourceFront.dataUrl });
+          if (nf.file || nf.dataUrl) {
+            frontLogo = await uploadItemLogoAssets({
+              uid: customer.uid, orderId, slug, side: "front",
+              logoId: sourceFront.logoId || "front",
+              file: nf.file || null, dataUrlFallback: nf.dataUrl || null
+            });
+          }
+        } catch (e) { console.error("upload front logo failed", e); }
+
+        try {
+          const nb = await normalizeLogoSourceForUpload({ file: sourceBack.file, dataUrl: sourceBack.dataUrl });
+          if (nb.file || nb.dataUrl) {
+            backLogo = await uploadItemLogoAssets({
+              uid: customer.uid, orderId, slug, side: "back",
+              logoId: sourceBack.logoId || "back",
+              file: nb.file || null, dataUrlFallback: nb.dataUrl || null
+            });
+          }
+        } catch (e) { console.error("upload back logo failed", e); }
 
         itemsWithUrls.push({
           slug, qty, color, size, name, price,
@@ -709,33 +829,57 @@ export default function Cart() {
           logos:    { front: frontLogo || null,   back: backLogo || null }
         });
       }
+      // ---------------- END loop ----------------
 
       const payload = { ...basePayload, items: itemsWithUrls };
 
-      // write summaries
+      // write summaries to draft mirror
       await upsertDraftOrder(uid, payload, customer);
 
+      // ---- Aggregate order-level logos for email (pick first available per side) ----
+      const { frontUrl: orderFrontLogoUrl, backUrl: orderBackLogoUrl } = aggregateOrderLogos(itemsWithUrls);
+      const orderLogosPatch = {
+        logos: { frontUrl: orderFrontLogoUrl, backUrl: orderBackLogoUrl },
+        autoEmailOnCreate: false,
+      };
+
+      // persist items + order-level logos to both docs
       await setDoc(
         doc(db, "users", customer.uid, "orders", orderId),
-        { items: itemsWithUrls, updatedAt: serverTimestamp() },
+        { items: itemsWithUrls, ...orderLogosPatch, updatedAt: serverTimestamp() },
         { merge: true }
       );
 
       await setDoc(
         doc(db, "orders", orderId),
-        { items: itemsWithUrls, updatedAt: serverTimestamp() },
+        { items: itemsWithUrls, ...orderLogosPatch, updatedAt: serverTimestamp() },
         { merge: true }
       );
 
-      // checkout session
+      // ---- Send PDF + logos email now (with retry & rich logs) ----
+      try {
+        await ensureAuthTokenFresh();
+        const gen = httpsCallable(functions, "generateOrderSummary");
+        await withRetry(() => gen({ pathType: "sub", uid: customer.uid, orderId }), {
+          tag: "generateOrderSummary",
+        });
+      } catch (e) {
+        // לא עוצרים את התשלום — רק לוג ברור
+        logCallableError("generateOrderSummary(final)", e);
+      }
+
+      // checkout session (with retry & logs)
       let checkoutUrl = null;
       try {
         const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
-        const { data } = await createCheckoutSession({ ...payload, orderId, customer });
+        const { data } = await withRetry(
+          () => createCheckoutSession({ ...payload, orderId, customer }),
+          { tag: "createCheckoutSession" }
+        );
         checkoutUrl = data?.checkoutUrl || null;
       } catch (e) {
-        console.error("[createCheckoutSession] failed", e);
-        checkoutUrl = `/checkout?order=${orderId}`;
+        logCallableError("createCheckoutSession(final)", e);
+        checkoutUrl = `/checkout?order=${orderId}`; // פולבק ידידותי
       }
 
       if (!checkoutUrl) throw new Error("Missing checkoutUrl");
@@ -745,6 +889,7 @@ export default function Cart() {
       alert("אירעה שגיאה בהפניה לקופה. נסה שוב.");
     } finally {
       setLoading(false);
+      busyRef.current = false;
     }
   }
 
@@ -753,10 +898,10 @@ export default function Cart() {
     <div className="container py-4">
       <h1 className="h3 mb-4">העגלה שלי</h1>
       <div className="d-flex justify-content-end mb-3 gap-2">
-        <button className="btn btn-outline-primary" onClick={saveAllAssets} disabled={!uid || items.length===0}>
+        <button className="btn btn-outline-primary" onClick={saveAllAssets} disabled={!uid || items.length === 0}>
           שמור את כל ההדמיות + הלוגואים
         </button>
-        <button className="btn btn-outline-success" onClick={saveLogosOnly} disabled={!uid || items.length===0}>
+        <button className="btn btn-outline-success" onClick={saveLogosOnly} disabled={!uid || items.length === 0}>
           שמור לוגואים בלבד
         </button>
       </div>
@@ -822,8 +967,8 @@ export default function Cart() {
                           className="form-control form-control-sm w-auto"
                         />
                       </td>
-                      <td>{Number(it.price).toLocaleString("he-IL")} ₪</td>
-                      <td>{(Number(it.price) * Number(it.qty)).toLocaleString("he-IL")} ₪</td>
+                      <td>{fmt(it.price)} ₪</td>
+                      <td>{fmt(Number(it.price) * Number(it.qty))} ₪</td>
                       <td>
                         <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(it.id)}>
                           הסר
@@ -938,19 +1083,21 @@ export default function Cart() {
 
           {/* סיכום ותשלום */}
           <div className="d-flex justify-content-between align-items-end mt-4 flex-wrap gap-3">
-            <Link to="/catalog" className="btn btn-outline-secondary">המשך בקנייה</Link>
+            <Link to="/catalog" className="btn btn-outline-secondary">
+              המשך בקנייה
+            </Link>
             <div className="ms-auto">
               <div className="text-end">
                 <div className="d-flex justify-content-between" style={{ minWidth: 260 }}>
                   <span className="text-muted">סה״כ מוצרים:</span>
-                  <strong>{merchandiseTotal.toLocaleString("he-IL")} ₪</strong>
+                  <strong>{fmt(merchandiseTotal)} ₪</strong>
                 </div>
                 <div className="d-flex justify-content-between" style={{ minWidth: 260 }}>
-                  <span className="text-muted">משלוח ({(SHIP_OPTIONS[shipping]?.label) || "—"}):</span>
-                  <strong>{shippingCost.toLocaleString("he-IL")} ₪</strong>
+                  <span className="text-muted">משלוח ({SHIP_OPTIONS[shipping]?.label || "—"}):</span>
+                  <strong>{fmt(shippingCost)} ₪</strong>
                 </div>
                 <hr className="my-2" />
-                <h5 className="mb-0">סה״כ לתשלום: {grandTotal.toLocaleString("he-IL")} ₪</h5>
+                <h5 className="mb-0">סה״כ לתשלום: {fmt(grandTotal)} ₪</h5>
               </div>
               <button
                 className="btn btn-primary btn-lg mt-3 w-100"

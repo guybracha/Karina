@@ -3,10 +3,13 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserProfile, updateUserProfile } from "../services/users";
-// ⬇️ מחליפים את listenMyOrders בטעינה מדורגת
 import { getMyOrders /*, listenMyOrders */ } from "../services/orders";
 import { logout } from "../services/auth";
 import CreateDemoOrderButton from "../components/CreateDemoOrderButton";
+
+// ⬇️ NEW: קריאה לפונקציה testSendEmail
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { app } from "../firebase"; // וודא שקיים export של ה-App מאותחל
 
 function shekels(amountCentsOrFloat) {
   let n = Number(amountCentsOrFloat || 0);
@@ -37,7 +40,7 @@ export default function Account() {
 
   const [profile, setProfile] = useState(null);
 
-  // ⬇️ הזמנות + עימוד
+  // הזמנות + עימוד
   const [orders, setOrders] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -56,6 +59,11 @@ export default function Account() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   const [saveErr, setSaveErr] = useState(null);
+
+  // ⬇️ NEW: מצב לכפתור המייל
+  const [mailBusy, setMailBusy] = useState(false);
+  const [mailMsg, setMailMsg] = useState(null);
+  const [mailErr, setMailErr] = useState(null);
 
   // פרטי משתמש
   useEffect(() => {
@@ -79,7 +87,7 @@ export default function Account() {
     return () => { mounted = false; };
   }, [user]);
 
-  // ⬇️ טעינת כל ההזמנות של המשתמש לפי UID (ממויין בירידה לפי createdAt) + עימוד
+  // טעינת ההזמנות הראשונות
   useEffect(() => {
     let cancelled = false;
     async function loadFirstPage() {
@@ -110,17 +118,6 @@ export default function Account() {
       setLoadingMore(false);
     }
   }, [user, nextCursor]);
-
-  // אם תרצה האזנה חיה במקום טעינה ידנית, אפשר להחליף ל-listenMyOrders:
-  // useEffect(() => {
-  //   if (!user) return;
-  //   setLoadingOrders(true);
-  //   const unsub = listenMyOrders(user.uid, (list) => {
-  //     setOrders(list);
-  //     setLoadingOrders(false);
-  //   });
-  //   return () => unsub && unsub();
-  // }, [user]);
 
   const displayName = profile?.displayName || user?.displayName || (user?.email?.split("@")[0]) || "Customer";
   const email = profile?.email || user?.email || "";
@@ -182,6 +179,31 @@ export default function Account() {
     }
   }
 
+  // ⬇️ NEW: שליחת מייל בדיקה דרך פונקציה עננית
+  async function handleSendTestEmail() {
+    setMailErr(null);
+    setMailMsg(null);
+    try {
+      setMailBusy(true);
+      const functions = getFunctions(app, "europe-west1");
+      const testSendEmail = httpsCallable(functions, "testSendEmail");
+      // ננסה לשלוח גם למשתמש (אם יש אימייל), ותמיד יישלח אל מייל החברה
+      const res = await testSendEmail({
+        to: email || undefined,
+        subject: "Karina — בדיקת מייל",
+        text: `שלום ${displayName}, זהו מייל בדיקה ממערכת Karina.`,
+      });
+      const data = res?.data || {};
+      setMailMsg(`המייל נשלח בהצלחה אל: ${data.sentTo || "מייל החברה"}`);
+    } catch (e) {
+      console.error(e);
+      setMailErr(e?.message || "שליחת המייל נכשלה");
+    } finally {
+      setMailBusy(false);
+      window.setTimeout(() => { setMailMsg(null); setMailErr(null); }, 6000);
+    }
+  }
+
   return (
     <div className="container py-5">
       <h1 className="mb-4">החשבון שלי</h1>
@@ -198,10 +220,22 @@ export default function Account() {
               {profile?.company && <span>חברה: {profile.company}</span>}
             </div>
           </div>
-          <div>
+          <div className="d-flex flex-column align-items-end gap-2">
             <button className="btn btn-outline-primary" onClick={() => setShowEdit(true)} disabled={loadingProfile}>
               עריכת פרטים
             </button>
+
+            {/* ⬇️ NEW: כפתור בדיקת מייל + חיווי */}
+            <button
+              className="btn btn-outline-secondary"
+              onClick={handleSendTestEmail}
+              disabled={mailBusy}
+              title="שליחת מייל בדיקה דרך פונקציית הענן"
+            >
+              {mailBusy ? "שולח מייל..." : "שלח מייל בדיקה"}
+            </button>
+            {mailMsg && <div className="text-success small">{mailMsg}</div>}
+            {mailErr && <div className="text-danger small">{mailErr}</div>}
           </div>
         </div>
       </div>
