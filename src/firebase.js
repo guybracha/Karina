@@ -9,17 +9,25 @@ import {
   enableNetwork,
   disableNetwork,
   connectFirestoreEmulator,
+  // helpers for console debugging
+  doc, getDoc, setDoc
 } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
+import {
+  initializeAppCheck,
+  ReCaptchaEnterpriseProvider,
+  ReCaptchaV3Provider,
+} from "firebase/app-check";
 
-// ----------------------------------------------------
+/* =========================
+   Config & Environment
+   ========================= */
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FB_API_KEY,
   authDomain: process.env.REACT_APP_FB_AUTH_DOMAIN,
   projectId: process.env.REACT_APP_FB_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FB_STORAGE_BUCKET, // ← קרא מהסביבה
+  storageBucket: process.env.REACT_APP_FB_STORAGE_BUCKET,
   messagingSenderId: process.env.REACT_APP_FB_MESSAGING_SENDER_ID,
   appId: process.env.REACT_APP_FB_APP_ID,
   measurementId: process.env.REACT_APP_FB_MEASUREMENT_ID,
@@ -29,81 +37,146 @@ const isBrowser = typeof window !== "undefined";
 const isDev = process.env.NODE_ENV !== "production";
 
 if (isDev) {
-  console.log("Firebase config:", firebaseConfig);
+  console.log("[Firebase] config:", {
+    ...firebaseConfig,
+    apiKey: firebaseConfig.apiKey ? "<set>" : "<missing>",
+    appId: firebaseConfig.appId ? "<set>" : "<missing>",
+  });
   if (!firebaseConfig.projectId) {
-    console.warn("⚠️ Missing REACT_APP_FB_PROJECT_ID (בדקו .env).");
+    console.warn("⚠️ Missing REACT_APP_FB_PROJECT_ID (.env).");
   }
 }
 
-// -------- App (singleton)
+/* =========================
+   App (singleton)
+   ========================= */
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// ===== App Check (reCAPTCHA Enterprise) =====
-// חייב לרוץ *לפני* יצירת Auth/Firestore/Storage/Functions
-if (isBrowser) {
-  // DEV: ניהול Debug Token דרך .env
-  // REACT_APP_APPCHECK_DEBUG_TOKEN=<uuid>  → השתמש בטוקן שאישרת בקונסול
-  // REACT_APP_APPCHECK_DEBUG_TOKEN=auto    → הפק טוקן חדש והדפס אותו לקונסול
-  if (isDev) {
-    const raw = process.env.REACT_APP_APPCHECK_DEBUG_TOKEN;
-    if (raw === "auto") {
-      window.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // יפיק וידפיס לקונסול
-      console.info("AppCheck: debug token = auto (see console for generated token)");
-    } else if (raw && raw.trim()) {
-      window.FIREBASE_APPCHECK_DEBUG_TOKEN = raw.trim();
-      console.info("AppCheck: using debug token from .env");
-    } else {
-      console.info("AppCheck: no debug token provided");
-    }
+/* =========================
+   App Check – run only in PRODUCTION
+   ========================= */
+if (isBrowser && !isDev) {
+  // choose provider by env
+  const providerKind = (process.env.REACT_APP_APPCHECK_PROVIDER || "enterprise").toLowerCase();
+  let provider;
+
+  if (providerKind === "v3") {
+    const siteKey = process.env.REACT_APP_RECAPTCHA_V3_SITE_KEY || "";
+    provider = new ReCaptchaV3Provider(siteKey);
+    console.log("[AppCheck] Provider: reCAPTCHA v3");
+  } else {
+    const siteKey = process.env.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY || "";
+    provider = new ReCaptchaEnterpriseProvider(siteKey);
+    console.log("[AppCheck] Provider: reCAPTCHA Enterprise");
   }
 
-  const enterpriseKey = process.env.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY || "";
-  if (!enterpriseKey && isDev) {
-    console.warn("⚠️ Missing REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY (App Check).");
+  try {
+    initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true });
+  } catch (e) {
+    console.error("[AppCheck] initializeAppCheck failed:", e?.message || e);
   }
-
-  initializeAppCheck(app, {
-    provider: new ReCaptchaEnterpriseProvider(enterpriseKey || "missing-site-key"),
-    isTokenAutoRefreshEnabled: true,
-  });
+} else if (isBrowser) {
+  console.info("[AppCheck] Skipped (DEV mode)");
 }
 
-// ===== Analytics (רק אם נתמך)
+/* =========================
+   Analytics (optional)
+   ========================= */
 export let analytics = null;
 if (isBrowser) {
   analyticsSupported().then((ok) => {
-    if (ok) analytics = getAnalytics(app);
+    if (ok) {
+      try {
+        analytics = getAnalytics(app);
+      } catch (e) {
+        console.warn("[Analytics] init failed (ignored):", e?.message || e);
+      }
+    }
   });
 }
 
-// ===== Firestore (Cache מתמשך וריבוי טאבס)
+/* =========================
+   Firestore (persistent cache + multi-tab)
+   ========================= */
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager(),
   }),
 });
 
-// ===== Services נוספים
+/* =========================
+   Services
+   ========================= */
 export const auth = getAuth(app);
 
-// בחר את הבאקט מ־config (ברירת מחדל: מה־project)
-// אם יש storageBucket בקונפיג – נשתמש בו; אחרת getStorage(app) לבאקט ברירת מחדל.
+// Storage: respect explicit bucket when provided
 const bucket = firebaseConfig.storageBucket;
 export const storage = bucket ? getStorage(app, `gs://${bucket}`) : getStorage(app);
 
 const FUNCTIONS_REGION = "europe-west1";
 export const functions = getFunctions(app, FUNCTIONS_REGION);
 
-// ===== ניהול רשת (online/offline) ל-Firestore
+/* =========================
+   Online/Offline network toggles for Firestore
+   ========================= */
 if (isBrowser) {
   window.addEventListener("online", () => enableNetwork(db));
   window.addEventListener("offline", () => disableNetwork(db));
   if (!navigator.onLine) {
     disableNetwork(db).catch(() => {});
   }
+
+  /* =========================
+     🔍 Debug helpers (DEV only)
+     expose to window for quick console checks:
+     - auth / db / functions / storage
+     - await fsGet(`users/${auth.currentUser.uid}`)
+     - await fsSet(`users/${auth.currentUser.uid}`, { approved: true }, true)
+     - await fsUserGet()
+     - await fsUserApprove({ role: 'customer' })
+     ========================= */
+  if (isDev) {
+    try {
+      window.auth = auth;
+      window.db = db;
+      window.functions = functions;
+      window.storage = storage;
+
+      window.fsGet = async (path) => {
+        const snap = await getDoc(doc(db, path));
+        console.log("[fsGet]", path, "exists:", snap.exists(), "data:", snap.data());
+        return snap;
+      };
+
+      window.fsSet = async (path, data, merge = true) => {
+        await setDoc(doc(db, path), data, { merge });
+        console.log("[fsSet] wrote", path, data, "(merge:", merge, ")");
+      };
+
+      window.fsUserGet = async () => {
+        const uid = auth.currentUser?.uid;
+        if (!uid) return console.warn("fsUserGet: no current user");
+        return window.fsGet(`users/${uid}`);
+      };
+
+      window.fsUserApprove = async (extra = {}) => {
+        const uid = auth.currentUser?.uid;
+        if (!uid) return console.warn("fsUserApprove: no current user");
+        await window.fsSet(`users/${uid}`, { approved: true, ...extra }, true);
+        await auth.currentUser?.getIdToken(true); // refresh token after change
+        return window.fsUserGet();
+      };
+
+      console.info("[Firebase debug] window.auth/db/functions/storage + fsGet/fsSet/fsUserGet/fsUserApprove available");
+    } catch (e) {
+      console.warn("Debug window attach failed:", e);
+    }
+  }
 }
 
-// ===== אמולטורים (אופציונלי)
+/* =========================
+   Emulators (optional)
+   ========================= */
 const wantEmulators = String(process.env.REACT_APP_USE_EMULATORS || "false").toLowerCase() === "true";
 if (wantEmulators) {
   try {
@@ -117,7 +190,9 @@ if (wantEmulators) {
   }
 }
 
-// ===== Helper: ודא התחברות + רענון טוקן לפני העלאה ל-Storage
+/* =========================
+   Helper: ensureAuthTokenFresh
+   ========================= */
 export async function ensureAuthTokenFresh() {
   const u = auth.currentUser;
   if (!u) throw new Error("not_authed");

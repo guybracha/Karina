@@ -1,0 +1,203 @@
+/* ==============================
+   Catalog – UI Polish
+   ============================== */
+
+:root{
+  --sticky-offset: 70px;        /* מרחק מההדר; עדכן לפי גובה ההדר שלך */
+  --radius-lg: 18px;
+  --shadow-soft: 0 10px 30px rgba(16,24,40,.08);
+  --shadow-soft-hover: 0 14px 36px rgba(16,24,40,.12);
+  --ease: cubic-bezier(.22,.61,.36,1);
+}
+
+/* ===== Toolbar (filters) - sticky with blur ===== */
+.catalog-toolbar{
+  position: sticky;
+  top: var(--sticky-offset);
+  z-index: 20;
+  border-radius: 16px;
+  backdrop-filter: saturate(140%) blur(6px);
+  -webkit-backdrop-filter: saturate(140%) blur(6px);
+  background: color-mix(in oklab, #fff 86%, transparent);
+  box-shadow: var(--shadow-soft);
+}
+@media (max-width: 575.98px){
+  .catalog-toolbar{ border-radius: 14px; }
+}
+
+/* קלט חיפוש – אייקון מיושר RTL */
+.catalog-search{
+  padding-inline-start: 38px !important;
+}
+.catalog-search-icon{
+  position: absolute; inset-inline-start: 10px; bottom: 10px; opacity: .6;
+}
+
+/* ===== Product card ===== */
+.product-card{
+  border: 1px solid #eef2f7;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+  transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+}
+.product-card:hover{
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-soft-hover);
+}
+
+/* מדיה עם יחס-צד קבוע */
+.product-media{
+  position: relative;
+  aspect-ratio: 4 / 3;           /* קבוע ויפה בכל תמונה */
+  background: #f8fafc;
+}
+.product-media img{
+  width: 100%; height: 100%;
+  object-fit: contain;
+  padding: 14px;
+  transition: transform .25s var(--ease);
+}
+.product-card:hover .product-media img{ transform: scale(1.02); }
+
+/* תגיות (חדש/מבצע) */
+.product-badge{
+  position: absolute; inset-inline-start: 10px; top: 10px;
+  border-radius: 999px; padding: 6px 10px; font-weight: 700; font-size: .8rem;
+  color: #111827; background: #fff; box-shadow: 0 6px 18px rgba(16,24,40,.12);
+}
+.product-badge.sale{ background: #fef3f2; color: #b42318; }
+.product-badge.new { background: #ecfdf3; color: #027a48; }
+
+/* מחיר פיל */
+.price-pill{
+  position: absolute; inset-inline-end: 10px; top: 10px;
+  border-radius: 999px; padding: 6px 10px; font-weight: 800; font-size: .85rem;
+  background:#111827; color:#fff;
+}
+
+/* גוף הכרטיס */
+.product-card .card-body{
+  display: flex; flex-direction: column; gap: .4rem;
+}
+
+/* תגיות קטנות מתחת לכותרת */
+.meta-row{
+  display:flex; align-items:center; gap:.5rem; flex-wrap: wrap;
+  color:#64748b; font-size: .85rem;
+}
+
+/* דירוג כוכבים (אופציונלי אם תציג) */
+.stars{
+  --star: "★"; --empty: "☆"; font-size: .95rem; color:#f59e0b;
+}
+.stars [data-fill="0"]::before{ content: var(--empty); color:#cbd5e1; }
+.stars [data-fill="1"]::before{ content: var(--star); }
+
+/* מלאי נמוך */
+.low-stock{
+  display: grid; gap: 6px; margin-top: 2px;
+}
+.low-stock .bar{
+  height:6px; border-radius:999px; background:#f1f5f9; overflow:hidden;
+  position:relative;
+}
+.low-stock .bar > span{
+  display:block; height:100%; background: linear-gradient(90deg, #fde68a, #f59e0b);
+  width: 40%;
+}
+
+/* כפתור */
+.product-card .btn{
+  min-height: 42px; border-radius: 12px;
+}
+
+/* ===== Grid gaps ===== */
+.catalog-grid{ row-gap: 1rem; }
+@media (min-width: 768px){ .catalog-grid{ row-gap: 1.25rem; } }
+@media (min-width: 992px){ .catalog-grid{ row-gap: 1.5rem; } }
+
+/* ===== Empty state ===== */
+.empty-state{
+  background:#fff; border-radius: 18px; padding: 28px;
+  box-shadow: var(--shadow-soft);
+}
+
+/* ===== Focus visible for keyboard users ===== */
+:where(a, button, .btn, select, input).focus-ring:focus-visible,
+:where(.product-card a, .product-card .btn):focus-visible{
+  outline: 3px solid #94a3b8; outline-offset: 2px; box-shadow: none;
+}
+
+/* כיבוד העדפת “בלי אנימציות” */
+@media (prefers-reduced-motion: reduce){
+  *{ transition:none !important; animation:none !important; scroll-behavior:auto !important; }
+}
+
+/* ==============================
+   Mobile Filters Drawer
+   ============================== */
+
+/* כפתור "סנן" יוצג רק במובייל */
+@media (min-width: 768px){
+  .mobile-only{ display: none !important; }
+}
+
+/* Drawer container (fixed full-screen) */
+.filters-drawer{
+  position: fixed; inset: 0; z-index: 1080; /* מעל ה-navbar והכרטיס */
+  display: grid; grid-template-rows: 1fr auto; /* overlay + panel */
+}
+
+/* רקע כהה */
+.filters-drawer__overlay{
+  background: rgba(0,0,0,.45);
+  transition: opacity .2s ease;
+}
+
+/* פנל תחתון (bottom sheet) */
+.filters-drawer__panel{
+  position: fixed; inset-inline: 0; bottom: 0;
+  background: #fff; border-radius: 18px 18px 0 0;
+  box-shadow: 0 -12px 30px rgba(16,24,40,.16);
+  transform: translateY(100%);
+  transition: transform .28s cubic-bezier(.22,.61,.36,1);
+  max-height: min(86vh, 720px);
+  display: flex; flex-direction: column;
+}
+
+/* מצב פתוח */
+.filters-drawer.is-open .filters-drawer__overlay{ opacity: 1; }
+.filters-drawer.is-open .filters-drawer__panel{ transform: translateY(0); }
+
+/* כותרת פנל */
+.filters-drawer__header{
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.filters-drawer__title{ margin: 0; font-weight: 700; }
+
+/* גוף פנל – גלילה נעימה */
+.filters-drawer__body{
+  padding: 14px 16px 6px;
+  overflow: auto;
+}
+
+/* אזור פעולות דביק בתחתית */
+.filters-drawer__actions{
+  position: sticky; bottom: 0;
+  padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  border-top: 1px solid #f1f5f9;
+  background: #fff;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+
+/* נקיון אנימציות למי שמעדיף פחות */
+@media (prefers-reduced-motion: reduce){
+  .filters-drawer__overlay, .filters-drawer__panel{ transition: none !important; }
+}
+
+/* כשה-Drawer פתוח – נטרל גלילה בדף */
+.body-no-scroll{ overflow: hidden !important; touch-action: none; }

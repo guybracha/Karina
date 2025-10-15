@@ -1,0 +1,235 @@
+/* =========================================
+   Tokens & base
+========================================= */
+:root{
+  /* spacing / radius */
+  --container-pad-x: clamp(14px, 3.5vw, 28px);
+  --section-gap-y: clamp(28px, 6vw, 56px);
+  --radius-lg: 20px;
+
+  /* shadows & motion */
+  --shadow-soft: 0 10px 30px rgba(16,24,40,.08);
+  --shadow-soft-hover: 0 14px 36px rgba(16,24,40,.12);
+  --ease: cubic-bezier(.22,.61,.36,1);
+
+  /* type (fluid) */
+  --fs-hero-title: clamp(1.6rem, 4.2vw + .4rem, 3rem);
+  --fs-hero-sub: clamp(.95rem, 1.4vw + .6rem, 1.25rem);
+  --fs-card-title: clamp(.95rem, .6vw + .65rem, 1.1rem);
+
+  /* overlay */
+  --hero-overlay: linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.35) 40%, rgba(0,0,0,.15) 100%);
+}
+
+/* container padding that plays nice with Bootstrap */
+.container{
+  padding-right: var(--container-pad-x) !important;
+  padding-left:  var(--container-pad-x) !important;
+}
+
+/* utilities */
+.shadow-soft{ box-shadow: var(--shadow-soft) !important; }
+.shadow-hover{ transition: transform .25s var(--ease), box-shadow .25s var(--ease); }
+.shadow-hover:hover{ transform: translateY(-4px); box-shadow: var(--shadow-soft-hover); }
+
+/* accessible focus (for keyboard users) */
+:where(a, button, .btn):focus-visible{
+  outline: 3px solid #94a3b8; /* slate-400 */
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* reduce hover effects on touch devices */
+@media (hover: none){
+  .shadow-hover:hover{ transform:none; box-shadow: var(--shadow-soft); }
+}
+
+/* =========================================
+   HERO
+========================================= */
+.hero-wrap{
+  min-height: clamp(420px, 60vh, 680px);
+  padding: clamp(18px, 4vh, 28px) 0;
+  display:flex; align-items:flex-end;
+  position:relative; overflow:hidden;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+}
+@media (min-width: 768px){ .hero-wrap{ align-items:center; } }
+
+.hero-bg{
+  position:absolute; inset:0; width:100%; height:100%;
+  object-fit:cover; object-position:center 30%;
+  filter:brightness(.85);
+}
+.hero-gradient{ position:absolute; inset:0; background: var(--hero-overlay); }
+
+.hero-title{ font-size: var(--fs-hero-title); letter-spacing:.2px; text-shadow: 0 1px 12px rgba(0,0,0,.25); }
+.hero-subtitle{ font-size: var(--fs-hero-sub); max-width:780px; margin-inline:auto; }
+
+.hero-badge{ border-radius:999px; }
+.hero-kpis{ font-size:.9rem; opacity:.95; }
+@media (max-width: 389.98px){ .hero-kpis{ display:none; } }
+
+.hero-wrap .d-flex > .btn{ min-height:44px; }
+@media (max-width: 575.98px){
+  .hero-cta{ gap:10px !important; }
+  .hero-cta .btn{ width:100%; }
+}
+
+/* =========================================
+   USPs (למה קרינה)
+========================================= */
+.usp .usp-icon{
+  width:42px; height:42px; border-radius:12px;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:#eef2ff; color:#3b82f6; font-size:20px;
+}
+@media (max-width: 575.98px){
+  .usp .text-muted{ font-size:.85rem; }
+}
+
+/* =========================================
+   Steps
+========================================= */
+.step-card{
+  border-radius: var(--radius-lg);
+  padding: clamp(16px, 2.5vw, 22px);
+  background:#fff; box-shadow: var(--shadow-soft);
+}
+.step-icon{
+  width:56px; height:56px; border-radius:14px; margin:0 auto 10px;
+  display:grid; place-items:center; background:#f1f5ff; color:#3b82f6; font-size:24px;
+}
+
+/* =========================================
+   Categories strip
+========================================= */
+.cats-row{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: clamp(.6rem, 2.5vw, 1.25rem);
+}
+.cat-tile{ display:block; text-decoration:none; }
+.cat-media-simple{
+  position:relative; height:220px; background:#fff; border:1px solid #eef2f7;
+  border-radius:18px; overflow:hidden; display:grid; place-items:center;
+  box-shadow: var(--shadow-soft); transition: transform .25s var(--ease), box-shadow .25s var(--ease);
+}
+.cat-media-simple img{ width:100%; height:100%; object-fit:contain; padding:12px 18px; }
+.cat-tile:hover .cat-media-simple{ transform: translateY(-3px); box-shadow: var(--shadow-soft-hover); }
+
+.cat-badge{
+  position:absolute; left:12px; bottom:12px; background:rgba(255,255,255,.94);
+  color:#111827; border-radius:999px; padding:6px 10px; font-weight:600; font-size:.85rem;
+  box-shadow:0 6px 18px rgba(16,24,40,.12);
+}
+.cat-hover-cta{
+  position:absolute; left:0; right:0; bottom:0; height:42px; display:grid; place-items:center;
+  background: linear-gradient(180deg,rgba(255,255,255,0) 0%, rgba(255,255,255,.95) 60%);
+  transform: translateY(100%); transition: transform .25s var(--ease); color:#334155; font-weight:500;
+}
+.cat-tile:hover .cat-hover-cta{ transform: translateY(0); }
+
+@media (max-width: 991.98px){
+  .cats-row{
+    display:flex; overflow-x:auto; padding:4px 2px 12px;
+    scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;
+    scrollbar-width:none; overscroll-behavior-x:contain;
+  }
+  .cats-row::-webkit-scrollbar{ display:none; }
+  .cat-tile{ min-width: clamp(180px, 48vw, 240px); scroll-snap-align:start; }
+}
+@media (min-width: 992px){
+  .cats-row.strip-desktop{
+    display:flex; gap: clamp(.6rem, 2vw, 1rem); overflow-x:auto; padding-bottom:6px;
+    scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch;
+  }
+  .cats-row.strip-desktop .cat-tile{ scroll-snap-align:start; flex: 0 0 clamp(320px, 30vw, 520px); }
+}
+
+/* desktop arrows */
+.cats-arrow{ z-index:2; border-radius:14px; }
+.cats-arrow:disabled{ opacity:.35; pointer-events:none; }
+
+/* =========================================
+   Bestsellers
+========================================= */
+/* mobile / tablet – horizontal carousel */
+.best-mobile-row{
+  display:flex; gap:12px; overflow-x:auto; padding:2px 2px 10px;
+  scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+}
+.best-mobile-row::-webkit-scrollbar{ display:none; }
+
+.best-mobile-card{
+  scroll-snap-align:start; min-width: clamp(200px, 60vw, 260px);
+  border-radius:18px; background:#fff; overflow:hidden;
+  box-shadow:var(--shadow-soft); transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+  display:flex; flex-direction:column;
+}
+.best-mobile-card:active{ transform: scale(.99); }
+
+.best-media{ position:relative; aspect-ratio:4/3; background:#f8fafc; display:grid; place-items:center; }
+.best-media img{ width:100%; height:100%; object-fit:contain; padding:14px; }
+.best-price{
+  position:absolute; right:10px; top:10px; background:#111827; color:#fff; border-radius:999px;
+  padding:5px 10px; font-weight:700; font-size:.85rem; z-index:2;
+}
+.best-body{ padding: 10px 12px 12px; }
+.best-title{
+  font-size: var(--fs-card-title); line-height:1.25; margin:0 0 8px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; text-overflow:ellipsis;
+}
+
+/* desktop grid */
+@media (min-width: 992px){
+  .best-desktop-grid{
+    display:grid; gap: clamp(.8rem, 1.2vw, 1.25rem);
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  }
+  .best-card{
+    position:relative; border-radius:18px; background:#fff; overflow:hidden;
+    transition: transform .25s var(--ease), box-shadow .25s var(--ease);
+    display:flex; flex-direction:column;
+  }
+  .best-card:hover{ transform: translateY(-3px); box-shadow: var(--shadow-soft-hover); }
+  .best-body{ padding:10px 12px 12px; min-height:120px; display:flex; flex-direction:column; }
+  .best-actions{ margin-top:auto; height:46px; display:grid; align-items:center; }
+  .best-card .best-actions{ opacity:0; pointer-events:none; transition:opacity .2s var(--ease); }
+  .best-card:hover .best-actions{ opacity:1; pointer-events:auto; }
+}
+
+/* =========================================
+   Clients / quote / final CTA
+========================================= */
+.client-logos{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.client-dot{
+  width:42px; height:42px; border-radius:999px; display:grid; place-items:center;
+  background:#f1f5f9; color:#334155; font-weight:700;
+}
+.quote{ font-size: clamp(1rem, .5vw + .9rem, 1.15rem); }
+.final-cta{ border-radius: var(--radius-lg); padding: clamp(18px, 3.5vw, 40px) !important; }
+
+/* =========================================
+   Global section spacing
+========================================= */
+.py-6{ padding-top: var(--section-gap-y) !important; padding-bottom: var(--section-gap-y) !important; }
+
+/* =========================================
+   Media / images – performance hints
+========================================= */
+img[loading="lazy"]{ content-visibility:auto; }
+
+/* =========================================
+   Motion & accessibility
+========================================= */
+@media (prefers-reduced-motion: reduce){
+  *{ scroll-behavior:auto !important; transition:none !important; animation:none !important; }
+}
+
+/* High-contrast mode tweaks (Windows) */
+@media (forced-colors: active){
+  .best-price, .hero-gradient{ forced-color-adjust:none; }
+  .cat-badge{ background:Canvas; color:CanvasText; }
+}

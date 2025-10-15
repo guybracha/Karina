@@ -9,6 +9,11 @@ import ColorSwatches from "../components/ColorSwatches";
 import SizePicker from "../components/SizePicker";
 import { PRODUCTS } from "../lib/products";
 
+// ✅ NEW: אימפורט ל־Auth/Firestore כדי לבדוק התחברות ותפקיד מוכר
+import { auth, db } from "../firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+
 // LS keys (שומרים רק מטא־דאטה של הלוגו שהועלה ל-Storage)
 const LS_LOGO_STORAGE_KEY = (side) => `karina:logoStorage:${side}`;
 const LS_CART_KEY = "karina:cart";
@@ -49,6 +54,33 @@ export default function ProductDetail() {
 
   const { slug } = useParams();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
+
+  // ✅ NEW: מצב התחברות ותפקיד מוכר
+  const [user, setUser] = useState(null);
+  const [isSeller, setIsSeller] = useState(false);
+  const [checkingRole, setCheckingRole] = useState(true);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setUser(u || null);
+      setIsSeller(false);
+      setCheckingRole(true);
+      try {
+        if (u) {
+          const snap = await getDoc(doc(db, "users", u.uid));
+          const data = snap.exists() ? snap.data() : {};
+          const sellerFlag =
+            data?.isSeller === true ||
+            data?.role === "seller" ||
+            (Array.isArray(data?.roles) && data.roles.includes("seller"));
+          setIsSeller(!!sellerFlag);
+        }
+      } finally {
+        setCheckingRole(false);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // בחירות מוצר
   const [color, setColor] = useState(product?.colors?.[0] || "");
@@ -177,9 +209,28 @@ export default function ProductDetail() {
     setLogoStorageBySide({ front: null, back: null });
   }
 
-  // עגלה
+  // ✅ NEW: גארד כללי לפני הוספה לעגלה
+  function ensureSellerOrExplain() {
+    if (checkingRole) {
+      alert("בודק הרשאות… נסה שוב בעוד רגע.");
+      return false;
+    }
+    if (!user) {
+      alert("עליך להתחבר כדי להוסיף פריטים לעגלה.");
+      return false;
+    }
+    if (!isSeller) {
+      alert("רק מוכרים מורשים יכולים להוסיף פריטים לעגלה.");
+      return false;
+    }
+    return true;
+  }
+
+  // עגלה — רגיל
   function addToCart() {
     if (!product) return;
+    if (!ensureSellerOrExplain()) return; // ✅ NEW
+
     const lineId = `${product.slug}__${color}__${size}`;
     const current = readCartFromLS();
     const idx = current.findIndex((it) => it.id === lineId);
@@ -210,8 +261,11 @@ export default function ProductDetail() {
     const cleared = {}; product.sizes.forEach((s) => (cleared[s] = 0));
     setBulkByColor((prev) => ({ ...prev, [color]: cleared }));
   }
+  // עגלה — הזמנה מרוכזת
   function addBulkToCart() {
     if (!product) return;
+    if (!ensureSellerOrExplain()) return; // ✅ NEW
+
     const current = readCartFromLS(); const next = [...current];
     Object.entries(bulkForCurrentColor).forEach(([sizeKey, q]) => {
       const addQty = Math.max(0, Number(q) || 0); if (!addQty) return;
@@ -276,6 +330,15 @@ export default function ProductDetail() {
   const shownPrintArea =
     side === "front" ? product?.printArea : (product?.backPrintArea || product?.printArea);
 
+  // ✅ NEW: סטטוס הרשאות להצגה ב־UI
+  const roleStatus =
+    checkingRole ? "בודק הרשאות…" :
+    !user ? "עליך להתחבר כדי להוסיף לעגלה." :
+    !isSeller ? "החשבון שלך אינו מוגדר כמוכר. פנה למנהל לקבלת הרשאה." :
+    "";
+
+  const addButtonsDisabled = checkingRole || !user || !isSeller;
+
   return (
     <LogosQueueProvider>
       <div className="container py-4">
@@ -308,6 +371,19 @@ export default function ProductDetail() {
           </>
         ) : (
           <>
+            {/* ✅ NEW: פס מידע על סטטוס הרשאות */}
+            {roleStatus && (
+              <div className="alert alert-info d-flex align-items-center" role="alert">
+                <span className="me-2">ℹ️</span>
+                <span>{roleStatus}</span>
+                {!user && (
+                  <Link className="btn btn-sm btn-primary ms-auto" to="/auth">
+                    התחברות
+                  </Link>
+                )}
+              </div>
+            )}
+
             <div className="row g-4">
               {/* תצוגה */}
               <div className="col-12 col-lg-6">
@@ -365,7 +441,18 @@ export default function ProductDetail() {
                       {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
                     </div>
 
-                    <button className="btn btn-primary btn-lg" onClick={addToCart} disabled={!canAdd} title={!canAdd ? "בחר צבע ומידה" : undefined}>
+                    <button
+                      className="btn btn-primary btn-lg"
+                      onClick={addToCart}
+                      disabled={!canAdd || addButtonsDisabled}
+                      title={
+                        !canAdd ? "בחר צבע ומידה" :
+                        checkingRole ? "בודק הרשאות…" :
+                        !user ? "עליך להתחבר" :
+                        !isSeller ? "רק מוכרים יכולים להוסיף לעגלה" :
+                        undefined
+                      }
+                    >
                       הוסף לעגלה
                     </button>
                   </>
@@ -401,7 +488,17 @@ export default function ProductDetail() {
                           <div className="text-muted small">ניתן לעבור לצבע אחר, למלא כמויות, ולהוסיף לעגלה בנפרד.</div>
                           <div>
                             <span className="me-3">סה״כ יחידות לצבע זה: <strong>{bulkTotalForCurrentColor}</strong></span>
-                            <button className="btn btn-primary" onClick={addBulkToCart} disabled={bulkTotalForCurrentColor === 0}>
+                            <button
+                              className="btn btn-primary"
+                              onClick={addBulkToCart}
+                              disabled={bulkTotalForCurrentColor === 0 || addButtonsDisabled}
+                              title={
+                                checkingRole ? "בודק הרשאות…" :
+                                !user ? "עליך להתחבר" :
+                                !isSeller ? "רק מוכרים יכולים להוסיף לעגלה" :
+                                undefined
+                              }
+                            >
                               הוסף לעגלה (מרוכז)
                             </button>
                           </div>

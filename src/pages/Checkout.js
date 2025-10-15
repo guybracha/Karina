@@ -20,13 +20,15 @@ function useCart() {
   })();
 
   const demo = [
-    // fallback אם אין עגלה ב-LS
     { id: "hoodie__navy__L", slug: "hoodie", name: "קפוצ׳ון נייבי", price: 120, qty: 1, color: "navy", size: "L" },
     { id: "tee__gray__M", slug: "tee", name: "חולצת טריקו אפורה", price: 35, qty: 2, color: "gray", size: "M" },
   ];
 
   const items = lsCart && Array.isArray(lsCart) && lsCart.length ? lsCart : demo;
-  const total = useMemo(() => items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0), [items]);
+  const total = useMemo(
+    () => items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0),
+    [items]
+  );
   return { items, total };
 }
 
@@ -61,15 +63,12 @@ export default function Checkout() {
 
   /** העלאת קובץ לוגו מקורי (File) ל-Storage */
   async function uploadOriginalLogoIfAvailable() {
-    // ניקח את ה-logoId הראשון שמצאנו (קדמי/אחורי)
     const idFront = localStorage.getItem("karina:logoId:front");
     const idBack  = localStorage.getItem("karina:logoId:back");
     const logoId = idFront || idBack;
-    if (!logoId) return null; // אין מזהה
+    if (!logoId) return null;
 
-    // קח את הקובץ מהזיכרון (אם נשמר שם – קבצים מעל 2MB)
     const file = takeOriginalFromMemory(logoId);
-    // ייתכן שהקובץ קטן ונשמר כ-dataURL ב-LS דרך pendingLogos; בדף זה לא נטפל בזה כדי לשמור פשטות.
     if (!file) return null;
 
     const uid = auth.currentUser?.uid;
@@ -88,7 +87,6 @@ export default function Checkout() {
     const uid = auth.currentUser?.uid;
     if (!uid) throw new Error("not_authed");
 
-    // נרכז הדמיות לפי slug וצד (front/back) — גם אם יש כמה שורות של אותו מוצר
     const perProduct = new Map(); // key: `${slug}:${side}` => dataUrl
     for (const it of cartItems) {
       const slug = it.slug;
@@ -104,7 +102,6 @@ export default function Checkout() {
       const [slug, side] = key.split(":");
       const path = `users/${uid}/mockups/${slug}/${side}-${Date.now()}.png`;
       const r = ref(storage, path);
-      // נעלה ישירות כ-data_url (Firebase מזהה ומעדכן מטא)
       const snap = await uploadString(r, dataUrl, "data_url");
       const url = await getDownloadURL(snap.ref);
       results.push({ slug, side, path, url, bytes: approxBytesFromDataUrl(dataUrl), contentType: "image/png" });
@@ -112,51 +109,80 @@ export default function Checkout() {
     return results;
   }
 
+  /** קריאה לפונקציית ענן שמריצה את בקשת ה-SOAP ומחזירה redirectUrl */
+// קריאה לפונקציה בענן שמחזירה redirectUrl
+async function startCredit2000Payment({ amount, orderId, clientName, paymentsNumber = 1, firstPayment }) {
+  const endpoint = "https://europe-west1-karina-web.cloudfunctions.net/credit2000Start";
+
+  const body = {
+    amount,                         // סכום בשקלים (Float). השרת ממיר לאגורות.
+    clientName: clientName || "לקוח/ה",
+    productId: String(orderId || 9999),
+    paymentsNumber,                 // 1 תשלום או יותר
+    firstPayment,                   // אופציונלי: אם לא תשלח – כל הסכום בתשלום ראשון
+    uid: (auth.currentUser?.uid || ""),
+  };
+
+  const r = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || "credit2000_failed");
+
+  // ייתכנו שני מצבים: {redirectUrl} או {raw}
+  if (data.redirectUrl) return data.redirectUrl;
+
+  // אם הספק מחזיר מבנה אחר — נציג הודעה ונרשום לקונסול לבדיקה
+  console.warn("Credit2000 raw response:", data.raw);
+  throw new Error("לא התקבל redirectUrl מהסליקה (ראה קונסול).");
+}
+
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     try {
       setBusy(true);
 
-      // ודא הרשאה
+      // ודא הרשאה (רלוונטי להעלאות)
       await ensureAuthTokenFresh();
 
-      // 1) העלאת הלוגו המקורי (אם יש בזיכרון)
+      // 1) העלאות קבצים
       const uploadedLogo = await uploadOriginalLogoIfAvailable();
-
-      // 2) העלאת ההדמיות שנשמרו ב-LS לכל מוצר/צד שנמצא בעגלה
       const uploadedMockups = await uploadMockupsForCart();
 
-      // 3) כאן תיצור מסמך הזמנה ב-Firestore ותכלול:
-      //    - פרטי הלקוח (form)
-      //    - פריטי העגלה (cartItems)
-      //    - קישורים לקבצים: uploadedLogo, uploadedMockups
-      //
-      //    לדוגמה:
-      //    await setDoc(doc(db, "orders", orderId), {
-      //      userId: auth.currentUser.uid,
-      //      customer: form,
-      //      items: cartItems,
-      //      assets: { logo: uploadedLogo, mockups: uploadedMockups },
-      //      total,
-      //      createdAt: serverTimestamp(),
-      //    });
+      // 2) יצירת הזמנה ב־DB (כאן רק דמה; החלף בשמירה בפועל והחזר orderId)
+      const orderId = Math.floor(Date.now() / 1000); // placeholder
 
-      // 4) ניקוי מקומי אופציונלי
-      // localStorage.removeItem(LS_CART_KEY);
-      // עבור כל מוצר בעגלה ננקה הדמיות:
-      // for (const it of cartItems) {
-      //   if (!it.slug) continue;
-      //   localStorage.removeItem(LS_PREVIEW_KEY(it.slug, "front"));
-      //   localStorage.removeItem(LS_PREVIEW_KEY(it.slug, "back"));
-      // }
-      // localStorage.removeItem("karina:logoId:front");
-      // localStorage.removeItem("karina:logoId:back");
+      // 3) תשלום לפי שיטה
+      if (form.payment === "credit") {
+        const { redirectUrl, raw } = await startCredit2000Payment({
+          amount: total,
+          orderId,
+          clientName: form.fullName?.trim(),
+        });
 
+        if (redirectUrl) {
+          // מעבר לשער התשלום של Credit2000
+          window.location.assign(redirectUrl);
+          return;
+        }
+
+        // אם אין redirectUrl — נציג שגיאה ידידותית ונזרוק raw ללוג
+        console.warn("Credit2000 raw response:", raw);
+        throw new Error("לא התקבל קישור לתשלום מהספק");
+      }
+
+      // PayPal / מזומן – זרימה בסיסית (כאן רק הודעה)
       alert(
         "תודה! ההזמנה נקלטה בהצלחה.\n" +
-        (uploadedLogo ? `קישור ללוגו: ${uploadedLogo.url}\n` : "") +
-        (uploadedMockups.length ? `הועלו ${uploadedMockups.length} קובצי הדמיה.` : "לא נמצאו הדמיות להעלאה.")
+          (uploadedLogo ? `קישור ללוגו: ${uploadedLogo.url}\n` : "") +
+          (uploadedMockups.length
+            ? `הועלו ${uploadedMockups.length} קובצי הדמיה.`
+            : "לא נמצאו הדמיות להעלאה.")
       );
     } catch (err) {
       console.error(err);
@@ -315,7 +341,8 @@ export default function Checkout() {
                     {it.name}{" "}
                     <small className="text-muted">
                       x{it.qty}
-                      {it.color ? ` • ${it.color}` : ""}{it.size ? ` • ${it.size}` : ""}
+                      {it.color ? ` • ${it.color}` : ""}
+                      {it.size ? ` • ${it.size}` : ""}
                     </small>
                   </div>
                   <div>{(Number(it.price) || 0) * (Number(it.qty) || 0)} ₪</div>

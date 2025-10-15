@@ -26,7 +26,7 @@ export default function Contact() {
             <h5 className="mb-3">פרטי החברה</h5>
             <p className="mb-1">📍 צבי הנחל 4, פארק תעשיות עמק חפר</p>
             <p className="mb-1">📞 054-5042443</p>
-            <p className="mb-1">✉️ info@karina.co.il</p>
+            <p className="mb-1">✉️ karina.offical.israel@gmail.com</p>
             <p className="mb-3">🕒 ימים א׳–ה׳, 9:00–17:00</p>
 
             {/* כפתור וואטסאפ */}

@@ -1,33 +1,62 @@
-// src/pages/Orders.jsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { auth, db } from "../firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function Orders() {
-  // דמו – בעתיד תחליף בנתונים מהשרת
-  const [orders] = useState([
-    {
-      id: "ORD1234",
-      date: "2025-09-15",
-      status: "נשלח",
-      total: 290,
-      items: [
-        { name: "קפוצ׳ון נייבי", qty: 1, price: 120 },
-        { name: "חולצת טריקו אפורה", qty: 2, price: 85 },
-      ],
-    },
-    {
-      id: "ORD1235",
-      date: "2025-09-10",
-      status: "בטיפול",
-      total: 150,
-      items: [{ name: "קסדת בטיחות", qty: 3, price: 50 }],
-    },
-  ]);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let unsubscribeAuth;
+    let unsubscribeOrders;
+
+    // מאזין לשינוי מצב ההתחברות
+    unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubscribeOrders) {
+        unsubscribeOrders(); // נתק מאזין קודם אם קיים
+      }
+
+      if (user) {
+        // התחבר → טען הזמנות שלו
+        const ordersRef = collection(db, "users", user.uid, "orders");
+        const q = query(ordersRef, orderBy("createdAt", "desc"));
+
+        unsubscribeOrders = onSnapshot(
+          q,
+          (snapshot) => {
+            const data = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            }));
+            setOrders(data);
+            setLoading(false);
+          },
+          (err) => {
+            console.error("Failed to fetch orders:", err);
+            setLoading(false);
+          }
+        );
+      } else {
+        // לא מחובר → אפס רשימה
+        setOrders([]);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      if (unsubscribeAuth) unsubscribeAuth();
+      if (unsubscribeOrders) unsubscribeOrders();
+    };
+  }, []);
 
   return (
     <div className="container py-4">
       <h1 className="h3 mb-4">ההזמנות שלי</h1>
 
-      {orders.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-4">טוען הזמנות…</div>
+      ) : orders.length === 0 ? (
         <div className="alert alert-info">אין לך הזמנות עדיין.</div>
       ) : (
         <div className="table-responsive">
@@ -45,7 +74,13 @@ export default function Orders() {
               {orders.map((order) => (
                 <tr key={order.id}>
                   <td className="fw-semibold">{order.id}</td>
-                  <td>{new Date(order.date).toLocaleDateString("he-IL")}</td>
+                  <td>
+                    {order.createdAt?.toDate
+                      ? order.createdAt.toDate().toLocaleDateString("he-IL")
+                      : order.createdAt
+                      ? new Date(order.createdAt).toLocaleDateString("he-IL")
+                      : "—"}
+                  </td>
                   <td>
                     <span
                       className={
@@ -57,19 +92,23 @@ export default function Orders() {
                           : "bg-secondary")
                       }
                     >
-                      {order.status}
+                      {order.status || "—"}
                     </span>
                   </td>
                   <td>
                     <ul className="list-unstyled mb-0 small">
-                      {order.items.map((it, idx) => (
+                      {(order.items || []).map((it, idx) => (
                         <li key={idx}>
                           {it.name} × {it.qty}
                         </li>
                       ))}
                     </ul>
                   </td>
-                  <td>{order.total} ₪</td>
+                  <td>
+                    {typeof order.total === "number"
+                      ? `${order.total.toFixed(2)} ₪`
+                      : order.total || "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -1,5 +1,5 @@
 // src/services/orders.js
-import { db } from "../firebase";
+import { db, functions } from "../firebase";
 import {
   addDoc,
   collection,
@@ -14,6 +14,9 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+
+// ✅ חדש: קריאה לפונקציות Callable בלי CORS
+import { httpsCallable } from "firebase/functions";
 
 /** -----------------------------
  * Utilities
@@ -299,4 +302,44 @@ export async function markFulfilled(orderId) {
     fulfilledAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+}
+
+/** -----------------------------
+ * Cloud Functions (Callable)
+ * ------------------------------*/
+
+/**
+ * קריאה לפונקציה callable שמייצרת את ה-PDF, מעלה ל-Storage,
+ * ושולחת אימייל עם קישורים (כפי שהגדרת ב-Cloud Functions).
+ *
+ * @param {Object} params
+ * @param {"top"|"sub"} [params.pathType="top"] - היכן ההזמנה נשמרת (לפי הקוד שלך זה top-level)
+ * @param {string} params.orderId - מזהה ההזמנה
+ * @param {string|null} [params.uid] - נדרש אם pathType="sub"
+ * @returns {Promise<{ok: boolean, summaryUrl?: string|null}>}
+ */
+export async function generateOrderSummaryCallable({ pathType = "top", orderId, uid = null }) {
+  if (!orderId) throw new Error("generateOrderSummaryCallable: orderId is required");
+  const callable = httpsCallable(functions, "generateOrderSummary");
+  const res = await callable({ pathType, orderId, uid });
+  return res.data || { ok: false };
+}
+
+/**
+ * (אופציונלי) בדיקת שליחת מייל ידנית
+ * דורש שהגדרת הסודות (KARINA_MAIL_*) בפרויקט
+ */
+export async function testSendEmailCallable({ to, subject, text }) {
+  const callable = httpsCallable(functions, "testSendEmail");
+  const res = await callable({ to, subject, text });
+  return res.data || { ok: false };
+}
+
+/**
+ * (אופציונלי) יצירת סשן תשלום (שלד)
+ */
+export async function createCheckoutSessionCallable({ items, orderId, customer, shipping, clientTotals }) {
+  const callable = httpsCallable(functions, "createCheckoutSession");
+  const res = await callable({ items, orderId, customer, shipping, clientTotals });
+  return res.data;
 }
