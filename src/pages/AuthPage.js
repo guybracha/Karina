@@ -1,37 +1,56 @@
 // src/pages/AuthPage.js
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
   registerWithEmail,
-  signInWithGoogle,
+  signInWithGoogle, // פונקציה שלך מה services/auth – יכולה להיות popup עם fallback ל-redirect
 } from "../services/auth";
-import { ensureUserDoc } from "../services/users"; // יוצר/מעדכן users/{uid}
+import { ensureUserDoc } from "../services/users";
 import { auth } from "../firebase";
 
-// ✅ חדשות
-import { getAdditionalUserInfo, signOut } from "firebase/auth";
+import {
+  getAdditionalUserInfo,
+  getRedirectResult,
+  signOut,
+} from "firebase/auth";
+
+// נשמור בבאפר קטן את מצב ההסכמה לדיוור בעת התחלת Google (כדי לחזור לאחר redirect)
+const LS_GOOGLE_CONSENT_KEY = "karina:auth:googleConsent";
 
 function friendlyError(e) {
   const code = e?.code || "";
-  if (code.includes("appCheck") || code.includes("app-check") || /fetch-status-error/i.test(e?.message || "")) {
-    return "נראה שיש בעיית App Check (אימות מול reCAPTCHA). רענן את העמוד ונסה שוב. אם הבעיה חוזרת – ודא שהדומיין מאושר ושהאבטחה בדפדפן לא חוסמת.";
+  const msg = e?.message || "";
+
+  // App Check / fetch בעיות נפוצות
+  if (code.includes("appCheck") || /app\-check/i.test(code) || /fetch-status-error/i.test(msg)) {
+    return "נראה שיש בעיית App Check / רשת. רעננו את העמוד ונסו שוב. ודאו שהדומיין מאושר ושהדפדפן לא חוסם.";
   }
+
+  // דפדפן וחלונות קופצים
+  if (code === "auth/popup-blocked") return "הדפדפן חסם את חלון ההתחברות. בטלו חסימה או השתמשו בכניסה בעזרת Redirect.";
   if (code === "auth/popup-closed-by-user") return "חלון Google נסגר לפני השלמת ההתחברות.";
   if (code === "auth/cancelled-popup-request") return "בקשת התחברות קודמת בוטלה.";
-  if (code === "auth/popup-blocked") return "הדפדפן חסם את חלון ההתחברות. בטל חסימה או השתמש במצב Redirect.";
+
+  // הרשאות/קרדנצ'יאל
   if (code === "auth/invalid-credential") return "פרטי ההתחברות שגויים.";
   if (code === "auth/user-not-found") return "לא נמצא משתמש עם האימייל הזה.";
   if (code === "auth/wrong-password") return "הסיסמה שגויה.";
-  if (code === "auth/too-many-requests") return "יותר מדי ניסיונות. נסה שוב מאוחר יותר.";
-  return e?.message || "שגיאה לא צפויה. נסה שוב.";
+  if (code === "auth/too-many-requests") return "יותר מדי ניסיונות. נסו שוב מאוחר יותר.";
+
+  // השגיאה הנפוצה בלוקאל כשיש Redirect URI/דומיין/קאש לא מסונכרן
+  if (code === "auth/internal-error") {
+    return "שגיאה פנימית באימות. נסו לרענן, לנקות אחסון אתר (Application→Clear storage) ולבדוק שה-Redirect URI ו-doman מורשים ל-localhost.";
+  }
+
+  return msg || "שגיאה לא צפויה. נסו שוב.";
 }
 
 export default function AuthPage() {
   const [tab, setTab] = useState("login"); // "login" | "register"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [marketingOptIn, setMarketingOptIn] = useState(false); // ✅ אישור דיוור
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -40,11 +59,52 @@ export default function AuthPage() {
   const from = location.state?.from?.pathname || "/account";
 
   async function afterAuth(user, extra = null) {
-    // צור/עדכן מסמך משתמש ואז נווט
-    await ensureUserDoc(user || auth.currentUser, extra || undefined);
+    const u = user || auth.currentUser;
+    if (!u) return; // הגנה – לא אמור לקרות
+    await ensureUserDoc(u, extra || undefined);
     navigate(from, { replace: true });
   }
 
+  // --- טיפול בתוצאת Redirect (אם popup לא זמין/נחסם) ---
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await getRedirectResult(auth);
+        if (!mounted || !res?.user) return;
+
+        const info = getAdditionalUserInfo(res);
+        const isNew = !!info?.isNewUser;
+
+        const wantConsent = localStorage.getItem(LS_GOOGLE_CONSENT_KEY) === "1";
+        localStorage.removeItem(LS_GOOGLE_CONSENT_KEY);
+
+        if (isNew && !wantConsent) {
+          // משתמש חדש שלא נתן הסכמה – נבטל ונוודא שהטאב הוא "register"
+          try { await signOut(auth); } catch {}
+          setTab("register");
+          setError("נראה שזו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים (ניתן להסרה בכל עת). סמנו את הצ׳קבוקס והמשיכו.");
+          return;
+        }
+
+        const extra = (isNew && wantConsent)
+          ? {
+              marketingConsent: true,
+              marketingConsentAt: new Date().toISOString(),
+              marketingConsentMethod: "google_first_signin_checkbox",
+            }
+          : null;
+
+        await afterAuth(res.user, extra);
+      } catch (e) {
+        // אם אין redirect פעיל, רוב הסיכויים שנקבל null; שגיאה אמיתית – נציג
+        if (e?.code) setError(friendlyError(e));
+      }
+    })();
+    return () => { mounted = false; };
+  }, []); // ריצה פעם אחת
+
+  // --- Email/Password ---
   async function handleLogin(e) {
     e.preventDefault();
     setError(null);
@@ -63,7 +123,6 @@ export default function AuthPage() {
     e.preventDefault();
     setError(null);
 
-    // ✅ חסימה אם אין אישור דיוור
     if (!marketingOptIn) {
       setError("יש לאשר קבלת דיוורים וחומר פרסומי כדי להירשם.");
       return;
@@ -72,9 +131,9 @@ export default function AuthPage() {
     setLoading(true);
     try {
       const user = await registerWithEmail(email.trim(), password);
-      alert("Verification email sent");
+      // אפשר לשלוח אימייל אימות כאן אם לא נעשה בשכבת ה-service
+      // alert("Verification email sent");
 
-      // נעביר את ההסכמה למסמך המשתמש
       await afterAuth(user, {
         marketingConsent: true,
         marketingConsentAt: new Date().toISOString(),
@@ -87,41 +146,45 @@ export default function AuthPage() {
     }
   }
 
+  // --- Google ---
   async function handleGoogle() {
     setError(null);
 
-    // אם אנחנו בטאב הרשמה — גם Google מחייב אישור
-    if (tab === "register" && !marketingOptIn) {
+    // אם אנחנו בטאב הרשמה – מחייבים הסכמה מראש
+    const mustConsent = (tab === "register");
+    if (mustConsent && !marketingOptIn) {
       setError("יש לאשר קבלת דיוורים וחומר פרסומי כדי להירשם.");
       return;
     }
 
+    // נשמור מה המשתמש בחר רגע לפני שנצא ל-redirect (אם זה מה שיהיה)
+    localStorage.setItem(LS_GOOGLE_CONSENT_KEY, (marketingOptIn ? "1" : "0"));
+
     setLoading(true);
     try {
-      const res = await signInWithGoogle();
-
-      // ✅ חדש: נזהה האם המשתמש חדש (first sign-in via Google)
-      const info = getAdditionalUserInfo(res);
-      const isNew = !!info?.isNewUser;
-
-      // אם המשתמש חדש אבל לא אישר דיוור (למשל נכנס מהטאב Login) — נבטל את ההרשמה
-      if (isNew && !marketingOptIn) {
-        try {
-          await signOut(auth);
-        } catch {}
-        setTab("register");
-        setError("נראה שזו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים (ניתן להסרה בכל עת). סמן/י את הצ׳קבוקס והמשך/י.");
+      const res = await signInWithGoogle(); // עשוי להחזיר תוצאה (popup) או לצאת ל-redirect (undefined)
+      if (!res?.user) {
+        // במקרה redirect – נמתין ל-getRedirectResult ב-useEffect
         return;
       }
 
-      const extra =
-        (tab === "register" || isNew) && marketingOptIn
-          ? {
-              marketingConsent: true,
-              marketingConsentAt: new Date().toISOString(),
-              marketingConsentMethod: isNew ? "google_first_signin_checkbox" : "email_checkbox_register_google",
-            }
-          : null;
+      // popup הצליח כאן ועכשיו
+      const info = getAdditionalUserInfo(res);
+      const isNew = !!info?.isNewUser;
+      if (isNew && !marketingOptIn) {
+        try { await signOut(auth); } catch {}
+        setTab("register");
+        setError("נראה שזו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים (ניתן להסרה בכל עת). סמנו את הצ׳קבוקס והמשיכו.");
+        return;
+      }
+
+      const extra = (isNew && marketingOptIn)
+        ? {
+            marketingConsent: true,
+            marketingConsentAt: new Date().toISOString(),
+            marketingConsentMethod: "google_first_signin_checkbox",
+          }
+        : null;
 
       await afterAuth(res.user, extra);
     } catch (err) {
@@ -133,7 +196,7 @@ export default function AuthPage() {
 
   return (
     <div className="container py-5" style={{ maxWidth: 480 }}>
-      <h1 className="mb-4 text-center">Karina</h1>
+      <h1 className="mb-4 text-center">ברוכים הבאים לקארינה חולצות מודפסות</h1>
 
       <div className="btn-group w-100 mb-3" role="tablist" aria-label="Auth tabs">
         <button
@@ -142,7 +205,7 @@ export default function AuthPage() {
           disabled={loading}
           aria-pressed={tab === "login"}
         >
-          Login
+          כניסה
         </button>
         <button
           className={`btn ${tab === "register" ? "btn-primary" : "btn-outline-primary"}`}
@@ -150,11 +213,15 @@ export default function AuthPage() {
           disabled={loading}
           aria-pressed={tab === "register"}
         >
-          Register
+          הרשמה
         </button>
       </div>
 
-      {error && <div className="alert alert-danger" role="alert">{error}</div>}
+      {error && (
+        <div className="alert alert-danger" role="alert">
+          {error}
+        </div>
+      )}
 
       <form
         onSubmit={tab === "login" ? handleLogin : handleRegister}
@@ -191,7 +258,7 @@ export default function AuthPage() {
           />
         </div>
 
-        {/* ✅ צ'קבוקס הסכמה לדיוור – מוצג תמיד; נאכף בהרשמה ובגוגל-משתמש-חדש */}
+        {/* צ'קבוקס הסכמה לדיוור – נאכף בהרשמה וב-First Google Sign-in */}
         <div className="form-check mb-3">
           <input
             className="form-check-input"
@@ -206,9 +273,7 @@ export default function AuthPage() {
             אני מאשר/ת קבלת דיוורים וחומר פרסומי במייל מהחנות (ניתן להסרה בכל עת).
           </label>
           {(tab === "register" && !marketingOptIn) && (
-            <div className="form-text text-danger">
-              חובה לאשר כדי להשלים הרשמה.
-            </div>
+            <div className="form-text text-danger">חובה לאשר כדי להשלים הרשמה.</div>
           )}
         </div>
 

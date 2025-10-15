@@ -1,7 +1,14 @@
 // src/firebase.js
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported as analyticsSupported } from "firebase/analytics";
-import { getAuth, connectAuthEmulator } from "firebase/auth";
+import {
+  // אתחול Auth עם resolver לפופ־אפ + התמדה בדפדפן
+  initializeAuth,
+  getAuth,
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  connectAuthEmulator,
+} from "firebase/auth";
 import {
   initializeFirestore,
   persistentLocalCache,
@@ -10,7 +17,7 @@ import {
   disableNetwork,
   connectFirestoreEmulator,
   // helpers for console debugging
-  doc, getDoc, setDoc
+  doc, getDoc, setDoc,
 } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
@@ -56,10 +63,8 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
    App Check – run only in PRODUCTION
    ========================= */
 if (isBrowser && !isDev) {
-  // choose provider by env
   const providerKind = (process.env.REACT_APP_APPCHECK_PROVIDER || "enterprise").toLowerCase();
   let provider;
-
   if (providerKind === "v3") {
     const siteKey = process.env.REACT_APP_RECAPTCHA_V3_SITE_KEY || "";
     provider = new ReCaptchaV3Provider(siteKey);
@@ -69,7 +74,6 @@ if (isBrowser && !isDev) {
     provider = new ReCaptchaEnterpriseProvider(siteKey);
     console.log("[AppCheck] Provider: reCAPTCHA Enterprise");
   }
-
   try {
     initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true });
   } catch (e) {
@@ -105,10 +109,23 @@ export const db = initializeFirestore(app, {
 });
 
 /* =========================
+   Auth – יציב לפופ־אפ + עבודה עם redirect
+   ========================= */
+// ננסה לאתחל את Auth עם popupRedirectResolver. אם כבר אותחל (Hot Reload), נשתמש ב-getAuth.
+export const auth = (() => {
+  try {
+    return initializeAuth(app, {
+      persistence: browserLocalPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  } catch {
+    return getAuth(app);
+  }
+})();
+
+/* =========================
    Services
    ========================= */
-export const auth = getAuth(app);
-
 // Storage: respect explicit bucket when provided
 const bucket = firebaseConfig.storageBucket;
 export const storage = bucket ? getStorage(app, `gs://${bucket}`) : getStorage(app);
@@ -130,8 +147,8 @@ if (isBrowser) {
      🔍 Debug helpers (DEV only)
      expose to window for quick console checks:
      - auth / db / functions / storage
-     - await fsGet(`users/${auth.currentUser.uid}`)
-     - await fsSet(`users/${auth.currentUser.uid}`, { approved: true }, true)
+     - await fsGet(`users/${auth.currentUser?.uid}`)
+     - await fsSet(`users/${auth.currentUser?.uid}`, { approved: true }, true)
      - await fsUserGet()
      - await fsUserApprove({ role: 'customer' })
      ========================= */
