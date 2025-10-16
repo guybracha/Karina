@@ -1,6 +1,12 @@
 // src/services/users.js
 import { db } from "../firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  getDocFromCache,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
 export async function ensureUserDoc(user, extra = null) {
   if (!user || !user.uid) return;
@@ -28,15 +34,24 @@ export async function ensureUserDoc(user, extra = null) {
   }
 }
 
+// ⚡️ מהיר: קודם מנסה cache, אם אין — שרת
 export async function getUserProfile(uid) {
   if (!uid) return null;
   const ref = doc(db, "users", uid);
+
+  // cache first
+  try {
+    const snapCache = await getDocFromCache(ref);
+    if (snapCache.exists()) {
+      return { id: snapCache.id, ...snapCache.data() };
+    }
+  } catch {} // אין בקאש – נמשיך לשרת
+
   const snap = await getDoc(ref);
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-// ✅ חדש: עדכון פרטי פרופיל (שם/טלפון/חברה)
-// src/services/users.js
+// עדכון פרופיל
 export async function updateUserProfile(uid, data) {
   if (!uid) throw new Error("missing uid");
   const ref = doc(db, "users", uid);
@@ -53,6 +68,5 @@ export async function updateUserProfile(uid, data) {
   }
 
   allowed.updatedAt = serverTimestamp();
-
   await setDoc(ref, allowed, { merge: true });
 }

@@ -145,7 +145,7 @@ function normalizeCartArray(arr) {
     }));
 }
 
-// read/write cart
+// read/write cart (LS ONLY)
 function readCartFromLS() {
   try {
     const raw = localStorage.getItem(LS_CART_KEY);
@@ -221,7 +221,7 @@ async function withRetry(fn, { tries = 2, delayMs = 500, tag = "call" } = {}) {
 }
 
 /* =========================================================================
-   Firestore refs
+   Firestore refs (kept for orders/drafts, but NOT used for cart syncing)
 ============================================================================ */
 function cartDocRef(userId) {
   return doc(db, "users", userId, "carts", "current");
@@ -231,37 +231,7 @@ function orderDraftDocRef(userId) {
 }
 
 /* =========================================================================
-   merge local <-> cloud
-============================================================================ */
-function mergeCartArrays(cloudArr = [], localArr = []) {
-  const cloud = normalizeCartArray(cloudArr);
-  const local = normalizeCartArray(localArr);
-
-  if (cloud.length === 0 && local.length > 0) return local;
-  if (cloud.length > 0 && local.length === 0) return cloud;
-
-  const byId = new Map();
-  for (const it of local) byId.set(it.id, it);
-  for (const it of cloud) {
-    const prev = byId.get(it.id);
-    if (!prev) {
-      byId.set(it.id, it);
-    } else {
-      byId.set(
-        it.id,
-        {
-          ...prev,
-          ...it,
-          qty: Math.max(1, (Number(prev.qty) || 0) + (Number(it.qty) || 0)),
-        }
-      );
-    }
-  }
-  return Array.from(byId.values());
-}
-
-/* =========================================================================
-   Robust order-level logo aggregation
+   Aggregation helpers
 ============================================================================ */
 function firstHttp(...vals) {
   return vals.find((v) => typeof v === "string" && /^https?:\/\//i.test(v)) || null;
@@ -310,148 +280,12 @@ export default function Cart() {
   const busyRef = useRef(false); // הגנה מכפילות לחיצה
   const { takeOriginalFromMemory } = useLogosQueue();
 
-  /* ---------- Firestore ops ---------- */
-  async function loadCartFromFirestore(userId) {
-    try {
-      const snap = await getDoc(cartDocRef(userId));
-      const local = readCartFromLS();
-
-      if (snap.exists()) {
-        const data = snap.data() || {};
-        const cloudItems = Array.isArray(data.items) ? data.items : [];
-        const merged = mergeCartArrays(cloudItems, local);
-
-        setItems(merged);
-        try {
-          localStorage.setItem(LS_CART_KEY, JSON.stringify(merged));
-        } catch {}
-
-        if (data.shipping) setShipping(data.shipping);
-        if (data.address) setShippingAddress(normalizeAddress(data.address));
-
-        if (cloudItems.length === 0 && merged.length > 0) {
-          await setDoc(
-            cartDocRef(userId),
-            { items: merged, updatedAt: serverTimestamp() },
-            { merge: true }
-          );
-        }
-      } else {
-        const merged = normalizeCartArray(local);
-        setItems(merged);
-        try {
-          localStorage.setItem(LS_CART_KEY, JSON.stringify(merged));
-        } catch {}
-        if (merged.length > 0) {
-          await setDoc(
-            cartDocRef(userId),
-            { items: merged, updatedAt: serverTimestamp() },
-            { merge: true }
-          );
-        }
-      }
-    } catch (e) {
-      console.error("[loadCartFromFirestore] failed", e);
-      setItems(readCartFromLS());
-    }
-  }
-
-  function scheduleSaveToFirestore(userId, nextItems, nextShipping, nextAddress) {
-    if (!userId) return;
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await setDoc(
-          cartDocRef(userId),
-          {
-            items: normalizeCartArray(nextItems ?? items),
-            shipping: nextShipping ?? shipping,
-            address: normalizeAddress(nextAddress ?? shippingAddress),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-      } catch (e) {
-        console.error("[scheduleSaveToFirestore] failed", e);
-      }
-    }, 400);
-  }
-
-  async function getCustomerProfile(userId) {
-    try {
-      const ref = doc(db, "users", userId);
-      const d = await getDoc(ref);
-      if (d.exists()) return { uid: userId, ...d.data() };
-      const minimal = { uid: userId, createdAt: serverTimestamp() };
-      await setDoc(ref, minimal, { merge: true });
-      return minimal;
-    } catch (e) {
-      console.error("[getCustomerProfile] failed", e);
-      return { uid: userId };
-    }
-  }
-
-  async function upsertDraftOrder(userId, payload, customer) {
-    try {
-      await setDoc(
-        orderDraftDocRef(userId),
-        {
-          customer: customer || null,
-          items: payload.items,
-          shipping: payload.shipping,
-          totals: payload.clientTotals,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-    } catch (e) {
-      console.error("[upsertDraftOrder] failed", e);
-    }
-  }
-
-  async function createOrderDocument(customer, payload) {
-    const ordersCol = collection(db, "users", customer.uid, "orders");
-    const newOrderRef = doc(ordersCol);
-    const order = {
-      status: "pending",
-      userId: customer.uid,
-      currency: "ILS",
-      amountCents: Math.round(Number(payload.clientTotals.grandTotal || 0) * 100),
-      customer,
-      items: payload.items,
-      shipping: payload.shipping,
-      totals: payload.clientTotals,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      draft: true,
-    };
-    await setDoc(newOrderRef, order);
-    return newOrderRef.id;
-  }
-
-  async function onSaveDraft() {
-    if (!auth.currentUser?.uid) {
-      alert("יש להתחבר כדי לשמור טיוטה");
-      return;
-    }
-    try {
-      await ensureAuthTokenFresh();
-      await saveDraftAssets({ uid: auth.currentUser.uid, takeOriginalFromMemory });
-      alert("נשמרה טיוטה בשרת (Storage + Firestore).");
-    } catch (e) {
-      console.error(e);
-      alert("שמירת הטיוטה נכשלה");
-    }
-  }
-
   /* ---------- effects ---------- */
+  // ✅ LS-only: init from LocalStorage and keep uid for later flows
   useEffect(() => {
     setItems(readCartFromLS());
     const unsub = onAuthStateChanged(auth, async (u) => {
-      const userId = u?.uid || null;
-      setUid(userId);
-      if (userId) await loadCartFromFirestore(userId);
-      else setItems(readCartFromLS());
+      setUid(u?.uid || null);
     });
     return () => unsub();
   }, []);
@@ -472,6 +306,7 @@ export default function Cart() {
     };
   }, []);
 
+  // keep LS in sync
   useEffect(() => {
     function onStorage(e) {
       if (e.key === LS_CART_KEY) setItems(readCartFromLS());
@@ -502,7 +337,7 @@ export default function Cart() {
       localStorage.setItem(LS_SHIP_KEY, shipping);
     } catch {}
     writeAddressToLS(shippingAddress);
-    scheduleSaveToFirestore(uid, items, shipping, shippingAddress);
+    // ❌ Removed Firestore cart sync — LS is the source of truth
     // eslint-disable-next-line
   }, [shipping, shippingAddress]);
 
@@ -511,14 +346,12 @@ export default function Cart() {
     const qty = Math.max(1, Number(newQty) || 1);
     const next = items.map((it) => (it.id === id ? { ...it, qty } : it));
     setItems(next);
-    saveCartToLS(next);
-    scheduleSaveToFirestore(uid, next);
+    saveCartToLS(next); // LS ONLY
   }
   function removeItem(id) {
     const next = items.filter((it) => it.id !== id);
     setItems(next);
-    saveCartToLS(next);
-    scheduleSaveToFirestore(uid, next);
+    saveCartToLS(next); // LS ONLY
   }
 
   const merchandiseTotal = useMemo(
@@ -542,28 +375,20 @@ export default function Cart() {
     }
   }
 
-  // ensure a draft doc
+  // ensure a draft doc (kept for assets/drafts flow)
   async function ensureDraft(uid) {
-    const customer = await getCustomerProfile(uid);
-    await setDoc(
-      orderDraftDocRef(uid),
-      { customer, status: "draft", updatedAt: serverTimestamp() },
-      { merge: true }
-    );
-    return customer;
+    const ref = orderDraftDocRef(uid);
+    await setDoc(ref, { status: "draft", updatedAt: serverTimestamp() }, { merge: true });
+    return { uid };
   }
 
-  // upload mockups + logos for one line (used by manual "שמור קבצים")
+  // upload mockups + logos for one line (manual "שמור קבצים")
   async function saveAssetsForItem(it) {
     if (!uid) {
       alert("עליך להתחבר כדי לשמור קבצים.");
       return;
     }
-    try {
-      await ensureAuthTokenFresh();
-    } catch (e) {
-      console.error("ensureAuthTokenFresh failed", e);
-    }
+    try { await ensureAuthTokenFresh(); } catch (e) { console.error("ensureAuthTokenFresh failed", e); }
 
     const customer = await ensureDraft(uid);
     const orderId = "draft";
@@ -742,7 +567,7 @@ export default function Cart() {
         return;
       }
 
-      const customer = await getCustomerProfile(uid);
+      const customer = { uid };
       const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
 
       const basePayload = {
@@ -752,8 +577,22 @@ export default function Cart() {
       };
 
       // create empty order under user
-      const orderId = await createOrderDocument(customer, basePayload);
-      try { localStorage.setItem("karina:lastOrderId", orderId); } catch {}
+      const ordersCol = collection(db, "users", customer.uid, "orders");
+      const newOrderRef = doc(ordersCol);
+      const orderId = newOrderRef.id;
+      await setDoc(newOrderRef, {
+        status: "pending",
+        userId: customer.uid,
+        currency: "ILS",
+        amountCents: Math.round(Number(basePayload.clientTotals.grandTotal || 0) * 100),
+        customer,
+        items: [],
+        shipping: basePayload.shipping,
+        totals: basePayload.clientTotals,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        draft: true,
+      });
 
       // mirror at top-level /orders/{orderId}
       await setDoc(
@@ -831,12 +670,6 @@ export default function Cart() {
       }
       // ---------------- END loop ----------------
 
-      const payload = { ...basePayload, items: itemsWithUrls };
-
-      // write summaries to draft mirror
-      await upsertDraftOrder(uid, payload, customer);
-
-      // ---- Aggregate order-level logos for email (pick first available per side) ----
       const { frontUrl: orderFrontLogoUrl, backUrl: orderBackLogoUrl } = aggregateOrderLogos(itemsWithUrls);
       const orderLogosPatch = {
         logos: { frontUrl: orderFrontLogoUrl, backUrl: orderBackLogoUrl },
@@ -856,30 +689,30 @@ export default function Cart() {
         { merge: true }
       );
 
-      // ---- Send PDF + logos email now (with retry & rich logs) ----
-      try {
-        await ensureAuthTokenFresh();
-        const gen = httpsCallable(functions, "generateOrderSummary");
-        await withRetry(() => gen({ pathType: "sub", uid: customer.uid, orderId }), {
-          tag: "generateOrderSummary",
-        });
-      } catch (e) {
-        // לא עוצרים את התשלום — רק לוג ברור
-        logCallableError("generateOrderSummary(final)", e);
-      }
+      // ❌ Removed email generation from Cart — will be handled on Checkout page
+      // try {
+      //   await ensureAuthTokenFresh();
+      //   const gen = httpsCallable(functions, "generateOrderSummary");
+      //   await withRetry(() => gen({ pathType: "sub", uid: customer.uid, orderId }), {
+      //     tag: "generateOrderSummary",
+      //   });
+      // } catch (e) {
+      //   logCallableError("generateOrderSummary(final)", e);
+      // }
 
-      // checkout session (with retry & logs)
-      let checkoutUrl = null;
+      // Keep existing payment flow (or just navigate to a dedicated checkout route)
+      let checkoutUrl = `/checkout?order=${orderId}`;
+
       try {
-        const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
-        const { data } = await withRetry(
-          () => createCheckoutSession({ ...payload, orderId, customer }),
-          { tag: "createCheckoutSession" }
-        );
-        checkoutUrl = data?.checkoutUrl || null;
+        // If you still want to support direct payment creation here, uncomment:
+        // const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
+        // const { data } = await withRetry(
+        //   () => createCheckoutSession({ ...basePayload, orderId, customer }),
+        //   { tag: "createCheckoutSession" }
+        // );
+        // checkoutUrl = data?.checkoutUrl || checkoutUrl;
       } catch (e) {
         logCallableError("createCheckoutSession(final)", e);
-        checkoutUrl = `/checkout?order=${orderId}`; // פולבק ידידותי
       }
 
       if (!checkoutUrl) throw new Error("Missing checkoutUrl");
@@ -989,7 +822,11 @@ export default function Cart() {
               </tbody>
             </table>
 
-            <button className="btn btn-outline-primary me-2" onClick={onSaveDraft}>
+            <button className="btn btn-outline-primary me-2" onClick={async () => {
+              if (!uid) return alert("עליך להתחבר");
+              try { await ensureAuthTokenFresh(); await saveDraftAssets({ uid, takeOriginalFromMemory }); alert("נשמרה טיוטה בשרת (Storage + Firestore)."); }
+              catch (e) { console.error(e); alert("שמירת הטיוטה נכשלה"); }
+            }}>
               שמור טיוטה לשרת
             </button>
           </div>

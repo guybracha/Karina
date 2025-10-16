@@ -1,19 +1,18 @@
 // src/lib/uploadLogoAssets.js
-import { ref, uploadBytes, uploadString, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 /** המרה של dataURL -> Blob */
 function dataUrlToBlob(dataUrl) {
   const [head, b64] = dataUrl.split(",");
-  const mime = head.match(/data:(.*?);base64/)[1] || "application/octet-stream";
+  const mime = head.match(/data:(.*?);base64/)?.[1] || "application/octet-stream";
   const bin = atob(b64);
-  const len = bin.length;
-  const buf = new Uint8Array(len);
-  for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
   return new Blob([buf], { type: mime });
 }
 
-/** המרת תמונה (Blob/DataURL) ל־WebP באיכות נתונה */
-async function imageToWebpBlob(src, quality = 0.9, maxSide = 3000) {
+/** המרת תמונה (Blob/DataURL) ל־WebP */
+async function imageToWebpBlob(src, quality = 0.92, maxSide = 3000) {
   const blob = typeof src === "string" ? dataUrlToBlob(src) : src;
   const url = URL.createObjectURL(blob);
   try {
@@ -23,9 +22,8 @@ async function imageToWebpBlob(src, quality = 0.9, maxSide = 3000) {
       i.onerror = rej;
       i.src = url;
     });
-    let { naturalWidth: w, naturalHeight: h } = img;
+    let w = img.naturalWidth, h = img.naturalHeight;
     if (!w || !h) throw new Error("decode-failed");
-    // ריסייז עדין אם קובץ ענק
     if (Math.max(w, h) > maxSide) {
       const r = w / h;
       if (r >= 1) { w = maxSide; h = Math.round(maxSide / r); }
@@ -37,9 +35,7 @@ async function imageToWebpBlob(src, quality = 0.9, maxSide = 3000) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(img, 0, 0, w, h);
-    const out = await new Promise((resolve) =>
-      canvas.toBlob(resolve, "image/webp", quality)
-    );
+    const out = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", quality));
     if (!out) throw new Error("to-webp-failed");
     return out;
   } finally {
@@ -47,50 +43,76 @@ async function imageToWebpBlob(src, quality = 0.9, maxSide = 3000) {
   }
 }
 
+function extFromName(name = "", fallback = "bin") {
+  const m = String(name).match(/\.(\w{1,10})$/i);
+  return (m ? m[1].toLowerCase() : fallback);
+}
+
 /**
- * מעלה לוגו מקורי + WebP (אם תמונה) תחת orders/{orderId}/logos/...
- * - לוקח את הקובץ המקורי (File/Blob) או dataURL
- * - קובע שמות קבצים לפי logoId
- * @returns {Promise<{original?:{url,path,bytes,contentType}, webp?:{url,path,bytes,contentType}}>}
+ * מעלה מקור + webp (אם זה תמונה).
+ * אם נמסרו slug/side — ישמור תחת assets/{slug}/{side}/
+ * אחרת ישמור תחת logos/{original|webp}/
  */
-export async function uploadLogoAssets({ storage, uid, orderId, logoId, originalFile, originalDataUrl }) {
+export async function uploadLogoAssets({
+  storage,
+  uid,
+  orderId,
+  logoId,
+  originalFile,       // File/Blob (עדיף)
+  originalDataUrl,    // dataURL (אלטרנטיבה)
+  slug,               // אופציונלי: item slug
+  side,               // אופציונלי: "front"/"back"
+}) {
   if (!uid || !orderId || !logoId) throw new Error("missing-args");
 
-  // קבצים להעלאה
-  let original = null;  // {blob, contentType, ext}
+  // בחר מקור
+  let blob, contentType, ext;
   if (originalFile) {
-    const ext = (originalFile.name?.split(".").pop() || "").toLowerCase();
-    original = { blob: originalFile, contentType: originalFile.type || "application/octet-stream", ext };
+    blob = originalFile;
+    contentType = originalFile.type || "application/octet-stream";
+    ext = extFromName(originalFile.name, "bin");
   } else if (originalDataUrl) {
-    const blob = dataUrlToBlob(originalDataUrl);
-    const ext = (blob.type.split("/")[1] || "bin").toLowerCase();
-    original = { blob, contentType: blob.type, ext };
+    const b = dataUrlToBlob(originalDataUrl);
+    blob = b;
+    contentType = b.type || "application/octet-stream";
+    ext = extFromName(contentType.split("/")[1] || "", "bin");
   } else {
-    // אין מקור – אין מה להעלות
     return {};
   }
 
+  // בסיס נתיב
+  const now = Date.now();
+  const base = (slug && side)
+    ? `users/${uid}/orders/${orderId}/assets/${slug}/${side}`
+    : `users/${uid}/orders/${orderId}/logos`;
+
   // העלאת המקור
-  const origPath = `users/${uid}/orders/${orderId}/logos/original/${logoId}.${original.ext || "bin"}`;
-  const origRef = ref(storage, origPath);
-  const origSnap = await uploadBytes(origRef, original.blob, { contentType: original.contentType });
-  const origUrl = await getDownloadURL(origSnap.ref);
+  const originalPath = `${base}/original/${logoId}_${now}.${ext}`;
+  const originalRef = ref(storage, originalPath);
+  const origSnap = await uploadBytes(originalRef, blob, {
+    contentType,
+    cacheControl: "private, max-age=0",
+  });
+  const originalUrl = await getDownloadURL(origSnap.ref);
 
   const result = {
     original: {
-      url: origUrl,
-      path: origPath,
-      bytes: original.blob.size || 0,
-      contentType: original.contentType,
-    }
+      url: originalUrl,
+      path: originalPath,
+      bytes: blob.size || 0,
+      contentType,
+    },
   };
 
   // אם זה תמונה – נעלה גם WebP
-  if (original.contentType.startsWith("image/")) {
-    const webpBlob = await imageToWebpBlob(originalDataUrl || original.blob, 0.92);
-    const webpPath = `users/${uid}/orders/${orderId}/logos/webp/${logoId}.webp`;
+  if (contentType.startsWith("image/")) {
+    const webpBlob = await imageToWebpBlob(originalDataUrl || blob, 0.92);
+    const webpPath = `${base}/webp/${logoId}_${now}.webp`;
     const webpRef = ref(storage, webpPath);
-    const webpSnap = await uploadBytes(webpRef, webpBlob, { contentType: "image/webp" });
+    const webpSnap = await uploadBytes(webpRef, webpBlob, {
+      contentType: "image/webp",
+      cacheControl: "private, max-age=0",
+    });
     const webpUrl = await getDownloadURL(webpSnap.ref);
     result.webp = {
       url: webpUrl,

@@ -59,11 +59,23 @@ export default function AuthPage() {
   const from = location.state?.from?.pathname || "/account";
 
   async function afterAuth(user, extra = null) {
-    const u = user || auth.currentUser;
-    if (!u) return; // הגנה – לא אמור לקרות
-    await ensureUserDoc(u, extra || undefined);
-    navigate(from, { replace: true });
+  const u = user || auth.currentUser;
+  if (!u) return;
+
+  // ניווט מיידי – לא מחכים ל-Firestore
+  navigate(from, { replace: true });
+
+  // יצירת/מיזוג מסמך המשתמש ברקע (עם תקרת זמן קצרה)
+  try {
+    await Promise.race([
+      ensureUserDoc(u, extra || undefined),
+      new Promise((resolve) => setTimeout(resolve, 800)), // לא לעכב את ה־UI
+    ]);
+  } catch (e) {
+    console.warn("[Auth] ensureUserDoc failed (background):", e?.code || e?.message || e);
   }
+}
+
 
   // --- טיפול בתוצאת Redirect (אם popup לא זמין/נחסם) ---
   useEffect(() => {

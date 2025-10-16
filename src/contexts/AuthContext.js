@@ -18,11 +18,12 @@ import {
  * צורת הקונטקסט
  */
 const AuthCtx = createContext({
-  user: null,           // Firebase User (או null)
-  profile: null,        // נתוני users/{uid} (או null)
-  claims: null,         // custom claims (או null)
-  loading: true,        // טוען (auth/profile)
-  logout: async () => {}, // פונקציית יציאה
+  user: null,             // Firebase User (או null)
+  profile: null,          // users/{uid} (או null)
+  claims: null,           // custom claims (או null)
+  authLoading: true,      // טוען את Firebase Auth בלבד
+  profileLoading: false,  // טוען את מסמך הפרופיל (לא חוסם מסכים)
+  logout: async () => {},
 });
 
 export const useAuth = () => useContext(AuthCtx);
@@ -42,12 +43,10 @@ async function ensureUserDoc(uid, base) {
         photoURL: base?.photoURL || null,
         role: "user",
         createdAt: serverTimestamp(),
-        // אפשר להוסיף approved: false וכד' לפי הלוגיקה שלך
       },
       { merge: true }
     );
   } else {
-    // מיזוג שדות חסרים בסיסיים (לא חובה)
     const data = snap.data() || {};
     const patch = {};
     if (!data.displayName && base?.displayName) patch.displayName = base.displayName;
@@ -66,11 +65,13 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [claims, setClaims] = useState(null);
   const [profile, setProfile] = useState(null);
+
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
   const profileUnsubRef = useRef(null);
   const mountedRef = useRef(true);
+
   useEffect(() => {
     return () => {
       mountedRef.current = false;
@@ -101,15 +102,11 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        // ריענון כפוי כדי להימנע מ-401 / token mismatch
-        await u.getIdToken(true);
+        // לא מכריחים רענון טוקן (true) כדי לא לעכב רינדור
         const tokenRes = await getIdTokenResult(u);
-        if (mountedRef.current) {
-          setClaims(tokenRes?.claims || null);
-        }
+        if (mountedRef.current) setClaims(tokenRes?.claims || null);
       } catch (e) {
-        // אם יש בעיית טוקן – ננסה לאפס סשן
-        console.warn("[Auth] getIdToken/getIdTokenResult failed:", e?.code || e?.message || e);
+        console.warn("[Auth] getIdTokenResult failed:", e?.code || e?.message || e);
         try { await firebaseSignOut(auth); } catch {}
         if (mountedRef.current) {
           setUser(null);
@@ -129,11 +126,10 @@ export function AuthProvider({ children }) {
           photoURL: u.photoURL,
         });
       } catch (e) {
-        console.warn("[Auth] ensureUserDoc failed:", e?.message || e);
-        // לא חוסם המשך; פשוט לא יהיה פרופיל עד ל-retry
+        console.warn("[Auth] ensureUserDoc failed (ignored):", e?.message || e);
       }
 
-      // מאזין ריאקטיבי למסמך הפרופיל
+      // מאזין ריאקטיבי למסמך הפרופיל — לא חוסם את ה-UI
       setLoadingProfile(true);
       const ref = doc(db, "users", u.uid);
       profileUnsubRef.current = onSnapshot(
@@ -154,9 +150,7 @@ export function AuthProvider({ children }) {
       setLoadingAuth(false);
     });
 
-    return () => {
-      unsub();
-    };
+    return () => unsub();
   }, []);
 
   // פונקציית יציאה
@@ -180,7 +174,8 @@ export function AuthProvider({ children }) {
       user,
       profile,
       claims,
-      loading: loadingAuth || loadingProfile,
+      authLoading:   loadingAuth,
+      profileLoading: loadingProfile,
       logout,
     }),
     [user, profile, claims, loadingAuth, loadingProfile]

@@ -32,3 +32,5 @@ firestore.rules
 storage.rules  
 
 /functions
+
+cors.json

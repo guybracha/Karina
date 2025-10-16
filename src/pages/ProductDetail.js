@@ -210,17 +210,9 @@ export default function ProductDetail() {
   }
 
   // ✅ NEW: גארד כללי לפני הוספה לעגלה
-  function ensureSellerOrExplain() {
-    if (checkingRole) {
-      alert("בודק הרשאות… נסה שוב בעוד רגע.");
-      return false;
-    }
-    if (!user) {
-      alert("עליך להתחבר כדי להוסיף פריטים לעגלה.");
-      return false;
-    }
-    if (!isSeller) {
-      alert("רק מוכרים מורשים יכולים להוסיף פריטים לעגלה.");
+  function ensureAuthed(){
+    if(!user){
+      alert("עליך להתחבר כדי להוסיף פריטים לעגלה");
       return false;
     }
     return true;
@@ -229,7 +221,7 @@ export default function ProductDetail() {
   // עגלה — רגיל
   function addToCart() {
     if (!product) return;
-    if (!ensureSellerOrExplain()) return; // ✅ NEW
+    if (!ensureAuthed()) return; // ✅ NEW
 
     const lineId = `${product.slug}__${color}__${size}`;
     const current = readCartFromLS();
@@ -264,7 +256,7 @@ export default function ProductDetail() {
   // עגלה — הזמנה מרוכזת
   function addBulkToCart() {
     if (!product) return;
-    if (!ensureSellerOrExplain()) return; // ✅ NEW
+    if (!ensureAuthed()) return; // ✅ NEW
 
     const current = readCartFromLS(); const next = [...current];
     Object.entries(bulkForCurrentColor).forEach(([sizeKey, q]) => {
@@ -331,13 +323,8 @@ export default function ProductDetail() {
     side === "front" ? product?.printArea : (product?.backPrintArea || product?.printArea);
 
   // ✅ NEW: סטטוס הרשאות להצגה ב־UI
-  const roleStatus =
-    checkingRole ? "בודק הרשאות…" :
-    !user ? "עליך להתחבר כדי להוסיף לעגלה." :
-    !isSeller ? "החשבון שלך אינו מוגדר כמוכר. פנה למנהל לקבלת הרשאה." :
-    "";
-
-  const addButtonsDisabled = checkingRole || !user || !isSeller;
+  const roleStatus = !user ? "עליך להתחבר כדי להוסיף לעגלה" : "";
+  const addButtonsDisabled = !user;
 
   return (
     <LogosQueueProvider>
@@ -445,13 +432,7 @@ export default function ProductDetail() {
                       className="btn btn-primary btn-lg"
                       onClick={addToCart}
                       disabled={!canAdd || addButtonsDisabled}
-                      title={
-                        !canAdd ? "בחר צבע ומידה" :
-                        checkingRole ? "בודק הרשאות…" :
-                        !user ? "עליך להתחבר" :
-                        !isSeller ? "רק מוכרים יכולים להוסיף לעגלה" :
-                        undefined
-                      }
+                      title={ !canAdd ? "בחר צבע ומידה" : (!user ? "עליך להתחבר" : undefined) }
                     >
                       הוסף לעגלה
                     </button>
