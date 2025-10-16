@@ -39,14 +39,13 @@ const isDev = process.env.NODE_ENV !== "production";
 /** החזר קונפיג מ־ENV, עם תיקונים/ברירות מחדל ידידותיות בזמן DEV */
 function resolveFirebaseConfig() {
   const DEV_DEFAULTS = isDev ? {
-    apiKey:        "AIzaSyA3boVq8BifcXzSYseulxJxgazyDXvExK0",
-    authDomain:    "karina-web.firebaseapp.com",
-    projectId:     "karina-web",
-    // 👇 חשוב: הבקט הקיים אצלך בפועל
-    storageBucket: "karina-web.firebasestorage.app",
-    messagingSenderId: "294748432945",
-    appId:         "1:294748432945:web:4f118fa9717536a2e9c310",
-    measurementId: "G-W111YEYQ6K",
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
   } : {};
 
   const cfg = {
