@@ -19,6 +19,10 @@
 
   /* overlay */
   --hero-overlay: linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.35) 40%, rgba(0,0,0,.15) 100%);
+
+  /* ===== Icon theme (pink) ===== */
+  --icon-accent: #e91e63;   /* ורוד עיקרי לאייקונים */
+  --icon-bg:     #ffe4f1;   /* רקע עדין ורדרד לקפסולות/עיגולים */
 }
 
 /* container padding that plays nice with Bootstrap */
@@ -68,6 +72,7 @@
 
 .hero-badge{ border-radius:999px; }
 .hero-kpis{ font-size:.9rem; opacity:.95; }
+.hero-kpis i{ color: var(--icon-accent); } /* ← גם ה-KPI יקבלו ורוד */
 @media (max-width: 389.98px){ .hero-kpis{ display:none; } }
 
 .hero-wrap .d-flex > .btn{ min-height:44px; }
@@ -82,7 +87,9 @@
 .usp .usp-icon{
   width:42px; height:42px; border-radius:12px;
   display:inline-flex; align-items:center; justify-content:center;
-  background:#eef2ff; color:#3b82f6; font-size:20px;
+  background: var(--icon-bg);       /* היה #eef2ff */
+  color: var(--icon-accent);        /* היה #3b82f6 */
+  font-size:20px;
 }
 @media (max-width: 575.98px){
   .usp .text-muted{ font-size:.85rem; }
@@ -98,7 +105,10 @@
 }
 .step-icon{
   width:56px; height:56px; border-radius:14px; margin:0 auto 10px;
-  display:grid; place-items:center; background:#f1f5ff; color:#3b82f6; font-size:24px;
+  display:grid; place-items:center;
+  background: var(--icon-bg);       /* היה #f1f5ff */
+  color: var(--icon-accent);        /* היה #3b82f6 */
+  font-size:24px;
 }
 
 /* =========================================
@@ -150,6 +160,7 @@
 /* desktop arrows */
 .cats-arrow{ z-index:2; border-radius:14px; }
 .cats-arrow:disabled{ opacity:.35; pointer-events:none; }
+.cats-arrow i{ color: var(--icon-accent); } /* ← חיצים ורודים */
 
 /* =========================================
    Bestsellers
@@ -198,6 +209,9 @@
   .best-actions{ margin-top:auto; height:46px; display:grid; align-items:center; }
   .best-card .best-actions{ opacity:0; pointer-events:none; transition:opacity .2s var(--ease); }
   .best-card:hover .best-actions{ opacity:1; pointer-events:auto; }
+
+  /* אייקונים קטנים בתוך גריד (למשל chevron) */
+  .best-desktop-grid .bi{ color: var(--icon-accent); }
 }
 
 /* =========================================

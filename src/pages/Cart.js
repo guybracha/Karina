@@ -1,6 +1,6 @@
 /* @refresh skip */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 // ---- Firebase ----
 import { auth, db, functions, ensureAuthTokenFresh } from "../firebase";
@@ -22,12 +22,11 @@ import { saveDraftAssets } from "../lib/saveDraftAssets";
 
 // ---- safe number formatting ----
 const LOCALE_HE = (Intl.NumberFormat.supportedLocalesOf?.(["he-IL"])?.length ? "he-IL" : undefined);
-const dashFix = (s) => (typeof s === "string" ? s.replace(/\u2011|\u2010|\u2013|\u2014/g, "-") : s); // אם פעם יסתנן מקף לא רגיל
+const dashFix = (s) => (typeof s === "string" ? s.replace(/\u2011|\u2010|\u2013|\u2014/g, "-") : s);
 function fmt(n) {
   try { return Number(n || 0).toLocaleString(LOCALE_HE); }
   catch { return Number(n || 0).toLocaleString(); }
 }
-
 
 // fetch blob: URL to Blob
 async function fetchBlob(blobUrl) {
@@ -47,11 +46,7 @@ function blobToDataURL(blob) {
 }
 
 /**
- * Normalize & upload mockup if needed:
- * http(s) → return as-is
- * blob:   → fetch → upload
- * data:   → upload
- * returns public URL for Firestore
+ * Normalize & upload mockup if needed
  */
 async function ensurePreviewUploadedSmart({ uid, orderId, slug, side, source }) {
   if (!source) return null;
@@ -212,7 +207,6 @@ async function withRetry(fn, { tries = 2, delayMs = 500, tag = "call" } = {}) {
       lastErr = e;
       logCallableError(`${tag}#${i + 1}/${tries}`, e);
       const code = e?.code || "";
-      // רטריי רק על שגיאות רגעיות
       if (!/resource-exhausted|unavailable|deadline-exceeded|internal|unknown|aborted|cancelled/i.test(code)) break;
       if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
     }
@@ -265,6 +259,8 @@ function aggregateOrderLogos(itemsWithUrls = []) {
    Component
 ============================================================================ */
 export default function Cart() {
+  const navigate = useNavigate();
+
   const [items, setItems] = useState([]);
   const [shipping, setShipping] = useState(() => {
     try {
@@ -277,11 +273,10 @@ export default function Cart() {
   const [loading, setLoading] = useState(false);
   const [uid, setUid] = useState(null);
   const saveTimer = useRef(null);
-  const busyRef = useRef(false); // הגנה מכפילות לחיצה
+  const busyRef = useRef(false);
   const { takeOriginalFromMemory } = useLogosQueue();
 
   /* ---------- effects ---------- */
-  // ✅ LS-only: init from LocalStorage and keep uid for later flows
   useEffect(() => {
     setItems(readCartFromLS());
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -290,7 +285,6 @@ export default function Cart() {
     return () => unsub();
   }, []);
 
-  // מאזינים גלובליים לשגיאות "חולפות" שלא נלכדות
   useEffect(() => {
     const onRejection = (ev) => {
       console.error("[unhandledrejection]", ev?.reason || ev);
@@ -306,7 +300,6 @@ export default function Cart() {
     };
   }, []);
 
-  // keep LS in sync
   useEffect(() => {
     function onStorage(e) {
       if (e.key === LS_CART_KEY) setItems(readCartFromLS());
@@ -337,7 +330,6 @@ export default function Cart() {
       localStorage.setItem(LS_SHIP_KEY, shipping);
     } catch {}
     writeAddressToLS(shippingAddress);
-    // ❌ Removed Firestore cart sync — LS is the source of truth
     // eslint-disable-next-line
   }, [shipping, shippingAddress]);
 
@@ -346,12 +338,12 @@ export default function Cart() {
     const qty = Math.max(1, Number(newQty) || 1);
     const next = items.map((it) => (it.id === id ? { ...it, qty } : it));
     setItems(next);
-    saveCartToLS(next); // LS ONLY
+    saveCartToLS(next);
   }
   function removeItem(id) {
     const next = items.filter((it) => it.id !== id);
     setItems(next);
-    saveCartToLS(next); // LS ONLY
+    saveCartToLS(next);
   }
 
   const merchandiseTotal = useMemo(
@@ -382,7 +374,7 @@ export default function Cart() {
     return { uid };
   }
 
-  // upload mockups + logos for one line (manual "שמור קבצים")
+  // upload mockups + logos for one line
   async function saveAssetsForItem(it) {
     if (!uid) {
       alert("עליך להתחבר כדי לשמור קבצים.");
@@ -479,7 +471,7 @@ export default function Cart() {
     alert("ההדמיות והלוגואים נשמרו לטיוטה.");
   }
 
-  // OPTIONAL: save only logos (no mockups) for quick testing
+  // OPTIONAL: save only logos
   async function saveLogosOnly() {
     if (!uid) { alert("עליך להתחבר כדי לשמור קבצים."); return; }
     try { await ensureAuthTokenFresh(); } catch (e) { console.error("ensureAuthTokenFresh failed", e); }
@@ -546,185 +538,48 @@ export default function Cart() {
 
   /* ---------- checkout ---------- */
   async function startCheckout() {
-    if (busyRef.current) return; // הגנה מכפילות לחיצה
-    busyRef.current = true;
+  if (busyRef.current) return;
+  busyRef.current = true;
 
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
 
-      if (!uid) {
-        alert("עליך להתחבר כדי להשלים את ההזמנה והעלאת הקבצים.");
-        setLoading(false);
-        return;
-      }
-
-      try { await ensureAuthTokenFresh(); } catch (e) { console.error("ensureAuthTokenFresh failed", e); }
-
-      const a = normalizeAddress(shippingAddress);
-      if (items.length > 0 && shipping !== "pickup" && !(a.city.trim() && a.street.trim() && a.house.trim())) {
-        alert("אנא מלא/י עיר, רחוב ומספר בית או בחר/י 'איסוף מהמפעל'.");
-        setLoading(false);
-        return;
-      }
-
-      const customer = { uid };
-      const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
-
-      const basePayload = {
-        items: [],
-        shipping: { method: shipping, label: shipOpt.label, cost: shipOpt.cost, address: a },
-        clientTotals: { merchandiseTotal, shippingCost, grandTotal },
-      };
-
-      // create empty order under user
-      const ordersCol = collection(db, "users", customer.uid, "orders");
-      const newOrderRef = doc(ordersCol);
-      const orderId = newOrderRef.id;
-      await setDoc(newOrderRef, {
-        status: "pending",
-        userId: customer.uid,
-        currency: "ILS",
-        amountCents: Math.round(Number(basePayload.clientTotals.grandTotal || 0) * 100),
-        customer,
-        items: [],
-        shipping: basePayload.shipping,
-        totals: basePayload.clientTotals,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        draft: true,
-      });
-
-      // mirror at top-level /orders/{orderId}
-      await setDoc(
-        doc(db, "orders", orderId),
-        {
-          status: "pending",
-          userId: customer.uid,
-          currency: "ILS",
-          amountCents: Math.round(Number(basePayload.clientTotals.grandTotal || 0) * 100),
-          customer,
-          items: [],
-          shipping: basePayload.shipping,
-          totals: basePayload.clientTotals,
-          userRef: doc(db, "users", customer.uid),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      // ---------------- Upload previews (if any) + logos ALWAYS ----------------
-      const sourceFront = collectLogoSource("front", takeOriginalFromMemory);
-      const sourceBack  = collectLogoSource("back",  takeOriginalFromMemory);
-
-      const itemsWithUrls = [];
-      for (const { slug, qty, color, size, name, price } of items) {
-        const { front, back } = getPreviewsForItem({ slug });
-
-        let frontUrl = null, backUrl = null;
-        let frontLogo = null, backLogo = null;
-
-        try {
-          if (front) {
-            frontUrl = await ensurePreviewUploadedSmart({
-              uid: customer.uid, orderId, slug, side: "front", source: front
-            });
-          }
-        } catch (e) { console.error("upload front mockup failed", e); }
-
-        try {
-          if (back) {
-            backUrl = await ensurePreviewUploadedSmart({
-              uid: customer.uid, orderId, slug, side: "back", source: back
-            });
-          }
-        } catch (e) { console.error("upload back mockup failed", e); }
-
-        try {
-          const nf = await normalizeLogoSourceForUpload({ file: sourceFront.file, dataUrl: sourceFront.dataUrl });
-          if (nf.file || nf.dataUrl) {
-            frontLogo = await uploadItemLogoAssets({
-              uid: customer.uid, orderId, slug, side: "front",
-              logoId: sourceFront.logoId || "front",
-              file: nf.file || null, dataUrlFallback: nf.dataUrl || null
-            });
-          }
-        } catch (e) { console.error("upload front logo failed", e); }
-
-        try {
-          const nb = await normalizeLogoSourceForUpload({ file: sourceBack.file, dataUrl: sourceBack.dataUrl });
-          if (nb.file || nb.dataUrl) {
-            backLogo = await uploadItemLogoAssets({
-              uid: customer.uid, orderId, slug, side: "back",
-              logoId: sourceBack.logoId || "back",
-              file: nb.file || null, dataUrlFallback: nb.dataUrl || null
-            });
-          }
-        } catch (e) { console.error("upload back logo failed", e); }
-
-        itemsWithUrls.push({
-          slug, qty, color, size, name, price,
-          previews: { frontUrl: frontUrl || null, backUrl: backUrl || null },
-          logos:    { front: frontLogo || null,   back: backLogo || null }
-        });
-      }
-      // ---------------- END loop ----------------
-
-      const { frontUrl: orderFrontLogoUrl, backUrl: orderBackLogoUrl } = aggregateOrderLogos(itemsWithUrls);
-      const orderLogosPatch = {
-        logos: { frontUrl: orderFrontLogoUrl, backUrl: orderBackLogoUrl },
-        autoEmailOnCreate: false,
-      };
-
-      // persist items + order-level logos to both docs
-      await setDoc(
-        doc(db, "users", customer.uid, "orders", orderId),
-        { items: itemsWithUrls, ...orderLogosPatch, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-
-      await setDoc(
-        doc(db, "orders", orderId),
-        { items: itemsWithUrls, ...orderLogosPatch, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-
-      // ❌ Removed email generation from Cart — will be handled on Checkout page
-      // try {
-      //   await ensureAuthTokenFresh();
-      //   const gen = httpsCallable(functions, "generateOrderSummary");
-      //   await withRetry(() => gen({ pathType: "sub", uid: customer.uid, orderId }), {
-      //     tag: "generateOrderSummary",
-      //   });
-      // } catch (e) {
-      //   logCallableError("generateOrderSummary(final)", e);
-      // }
-
-      // Keep existing payment flow (or just navigate to a dedicated checkout route)
-      let checkoutUrl = `/checkout?order=${orderId}`;
-
-      try {
-        // If you still want to support direct payment creation here, uncomment:
-        // const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
-        // const { data } = await withRetry(
-        //   () => createCheckoutSession({ ...basePayload, orderId, customer }),
-        //   { tag: "createCheckoutSession" }
-        // );
-        // checkoutUrl = data?.checkoutUrl || checkoutUrl;
-      } catch (e) {
-        logCallableError("createCheckoutSession(final)", e);
-      }
-
-      if (!checkoutUrl) throw new Error("Missing checkoutUrl");
-      window.location.href = checkoutUrl;
-    } catch (err) {
-      console.error(err);
-      alert("אירעה שגיאה בהפניה לקופה. נסה שוב.");
-    } finally {
-      setLoading(false);
-      busyRef.current = false;
+    // אופציונלי: ודא שהמשתמש מחובר לפני מעבר לקופה
+    if (!uid) {
+      alert("עליך להתחבר כדי להמשיך לקופה.");
+      return;
     }
+
+    // אופציונלי: ולידציה בסיסית לכתובת כאשר לא בוחרים איסוף
+    const a = normalizeAddress(shippingAddress);
+    if (items.length > 0 && shipping !== "pickup" && !(a.city.trim() && a.street.trim() && a.house.trim())) {
+      alert("אנא מלא/י עיר, רחוב ומספר בית או בחר/י 'איסוף מהמפעל'.");
+      return;
+    }
+
+    // חישוב נתונים שנוחים ל-Checkout (ללא כתיבה לשרת)
+    const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
+    const checkoutState = {
+      items, // צילום מצב העגלה כפי שהיא כרגע
+      shipping: { method: shipping, label: shipOpt.label, cost: shipOpt.cost, address: a },
+      totals: { merchandiseTotal, shippingCost, grandTotal },
+      // אפשר להוסיף info נוסף במידת הצורך
+      from: "cart",
+    };
+
+    // ✅ מעבר ל-Checkout בתוך ה-SPA, ללא ריענון
+    navigate("/checkout", { state: checkoutState });
+    // לחלופין, אם אתה מעדיף query string:
+    // navigate(`/checkout?from=cart`);
+  } catch (err) {
+    console.error(err);
+    alert("אירעה שגיאה במעבר לקופה.");
+  } finally {
+    setLoading(false);
+    busyRef.current = false;
   }
+}
+
 
   /* ---------- render ---------- */
   return (

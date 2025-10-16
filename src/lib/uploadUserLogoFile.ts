@@ -1,36 +1,28 @@
-// src/lib/uploadUserLogoFile.ts
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { auth } from "../firebase";
+// אותם מפתחות כמו ב-Cart.jsx
+export const LS_LOGO_ID = (side: "front"|"back") => `karina:logoId:${side}`;
+export const LS_PENDING_LOGOS = "karina:pendingLogos";
 
-// side: "front" | "back"
-export async function uploadUserLogoFile(file: File, side: "front" | "back", slug?: string) {
-  const user = auth.currentUser;
-  if (!user) throw new Error("Not authenticated");
+// שמירת dataURL לגיבוי (כדי לשרוד רענון דף)
+export function savePendingLogo(logoId: string, originalDataUrl: string) {
+  try {
+    const raw = localStorage.getItem(LS_PENDING_LOGOS);
+    const arr = raw ? JSON.parse(raw) : [];
+    const filtered = Array.isArray(arr) ? arr.filter((x: any) => x?.id !== logoId) : [];
+    filtered.push({ id: logoId, originalDataUrl, createdAt: Date.now() });
+    localStorage.setItem(LS_PENDING_LOGOS, JSON.stringify(filtered));
+  } catch {}
+}
 
-  // ודא שהסיומת/Content-Type תקינים
-  const contentType = file.type || "application/octet-stream";
-  const ext = (file.name.split(".").pop() || "").toLowerCase() || "bin";
+export function setActiveLogoForSide(side: "front"|"back", logoId: string) {
+  try { localStorage.setItem(LS_LOGO_ID(side), logoId); } catch {}
+}
 
-  // 🔴 חשוב: תואם ל-Rules — נתיב תחת users/{uid}/logos/...
-  const ts = Date.now();
-  const safeSlug = (slug || "general").replace(/[^\w-]+/g, "-");
-  const path = `users/${user.uid}/logos/${ts}-${safeSlug}-${side}.${ext}`;
-
-  const storage = getStorage();
-  const storageRef = ref(storage, path);
-
-  // העלאה של קובץ המקור
-  await uploadBytes(storageRef, file, { contentType });
-
-  // קבלת URL לצפייה
-  const url = await getDownloadURL(storageRef);
-
-  return {
-    path,
-    url,
-    name: file.name,
-    size: file.size,
-    contentType,
-    uploadedAt: new Date().toISOString(),
-  };
+// כלי קטן: File -> dataURL (לגיבוי בלבד)
+export function fileToDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload = () => resolve(String(fr.result));
+    fr.readAsDataURL(file);
+  });
 }

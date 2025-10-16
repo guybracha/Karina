@@ -34,3 +34,5 @@ storage.rules
 /functions
 
 cors.json
+
+/.firebase
