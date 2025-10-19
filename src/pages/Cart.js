@@ -537,40 +537,70 @@ export default function Cart() {
   }
 
   /* ---------- checkout ---------- */
-  async function startCheckout() {
+// --- בתוך startCheckout: החלף את הגוף של הפונקציה ---
+// --- בתוך Cart.jsx: החלף את כל הפונקציה startCheckout ---
+async function startCheckout() {
   if (busyRef.current) return;
   busyRef.current = true;
 
   try {
     setLoading(true);
 
-    // אופציונלי: ודא שהמשתמש מחובר לפני מעבר לקופה
     if (!uid) {
       alert("עליך להתחבר כדי להמשיך לקופה.");
       return;
     }
 
-    // אופציונלי: ולידציה בסיסית לכתובת כאשר לא בוחרים איסוף
     const a = normalizeAddress(shippingAddress);
-    if (items.length > 0 && shipping !== "pickup" && !(a.city.trim() && a.street.trim() && a.house.trim())) {
-      alert("אנא מלא/י עיר, רחוב ומספר בית או בחר/י 'איסוף מהמפעל'.");
+
+    // אם לא איסוף — ודא שהשדות החיוניים מולאו
+    if (
+      items.length > 0 &&
+      shipping !== "pickup" &&
+      !(a.city.trim() && a.street.trim() && a.house.trim())
+    ) {
+      alert('אנא מלא/י עיר, רחוב ומספר בית או בחר/י "איסוף מהמפעל".');
       return;
     }
 
-    // חישוב נתונים שנוחים ל-Checkout (ללא כתיבה לשרת)
+    // ✨ התאמת פורמט הכתובת למה ש-Checkout מצפה:
+    // נבנה address מלא (טקסט חופשי), ונשמור גם city/zip.
+    const addressLine = [a.street, a.house, a.apt].filter(Boolean).join(" ").trim();
+    const addressFull = [a.city.trim(), addressLine].filter(Boolean).join(", ");
+
+    const aOut = {
+      ...a,
+      address: addressFull, // << זהו השדה שקופה קוראת כ-form.address
+    };
+
+    // שמירה ל-LocalStorage למקרה של חזרה אחורה
+    try {
+      localStorage.setItem(
+        "karina:shippingAddress",
+        JSON.stringify({
+          ...aOut,
+          // הבטחה שהשדות הבולטים קיימים
+          city: a.city || "",
+          zip: a.zip || "",
+        })
+      );
+    } catch {}
+
     const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
+
     const checkoutState = {
-      items, // צילום מצב העגלה כפי שהיא כרגע
-      shipping: { method: shipping, label: shipOpt.label, cost: shipOpt.cost, address: a },
+      items,
+      shipping: {
+        method: shipping,
+        label: shipOpt.label,
+        cost: shipOpt.cost,
+        address: aOut, // << כאן עוברת הכתובת במבנה האחיד
+      },
       totals: { merchandiseTotal, shippingCost, grandTotal },
-      // אפשר להוסיף info נוסף במידת הצורך
       from: "cart",
     };
 
-    // ✅ מעבר ל-Checkout בתוך ה-SPA, ללא ריענון
     navigate("/checkout", { state: checkoutState });
-    // לחלופין, אם אתה מעדיף query string:
-    // navigate(`/checkout?from=cart`);
   } catch (err) {
     console.error(err);
     alert("אירעה שגיאה במעבר לקופה.");
@@ -586,12 +616,6 @@ export default function Cart() {
     <div className="container py-4">
       <h1 className="h3 mb-4">העגלה שלי</h1>
       <div className="d-flex justify-content-end mb-3 gap-2">
-        <button className="btn btn-outline-primary" onClick={saveAllAssets} disabled={!uid || items.length === 0}>
-          שמור את כל ההדמיות + הלוגואים
-        </button>
-        <button className="btn btn-outline-success" onClick={saveLogosOnly} disabled={!uid || items.length === 0}>
-          שמור לוגואים בלבד
-        </button>
       </div>
 
       {items.length === 0 ? (
@@ -662,28 +686,11 @@ export default function Cart() {
                           הסר
                         </button>
                       </td>
-                      <td className="d-flex gap-2">
-                        <button
-                          className="btn btn-sm btn-outline-success"
-                          onClick={() => saveAssetsForItem(it)}
-                          title="שמור הדמיה + לוגו לטיוטה"
-                        >
-                          שמור קבצים
-                        </button>
-                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-
-            <button className="btn btn-outline-primary me-2" onClick={async () => {
-              if (!uid) return alert("עליך להתחבר");
-              try { await ensureAuthTokenFresh(); await saveDraftAssets({ uid, takeOriginalFromMemory }); alert("נשמרה טיוטה בשרת (Storage + Firestore)."); }
-              catch (e) { console.error(e); alert("שמירת הטיוטה נכשלה"); }
-            }}>
-              שמור טיוטה לשרת
-            </button>
           </div>
 
           {/* משלוח + כתובת */}

@@ -125,15 +125,21 @@ export default function Checkout() {
   const grandTotal =
     totals?.grandTotal ?? items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
 
-  // form
-  const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    address: shipping?.address?.address || "",
-    city: shipping?.address?.city || "",
-    zip: shipping?.address?.zip || "",
-  });
+  // האם הגיעו פרטי משלוח מהעגלה? (עיר+רחוב+בית או address מוכן)
+  const shippingAddress = shipping?.address || {};
+  const readyFromCart =
+    Boolean(
+      shippingAddress?.address &&
+        String(shippingAddress.address).trim().length > 0
+    ) ||
+    Boolean(
+      shippingAddress?.city && shippingAddress?.street && shippingAddress?.house &&
+      String(shippingAddress.city).trim() &&
+      String(shippingAddress.street).trim() &&
+      String(shippingAddress.house).trim()
+    );
+
+  // ui state
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -148,18 +154,13 @@ export default function Checkout() {
 
   const { takeOriginalFromMemory } = useLogosQueue();
 
-  function handleChange(e) {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  }
-
   async function uploadOriginalLogoIfAvailable() {
     const idFront = localStorage.getItem("karina:logoId:front");
     const idBack = localStorage.getItem("karina:logoId:back");
     const logoId = idFront || idBack;
     if (!logoId) return null;
 
-    const file = takeOriginalFromMemory(logoId);
+    const file = useLogosQueue ? takeOriginalFromMemory(logoId) : null;
     if (!file) return null;
 
     const uid = auth.currentUser?.uid;
@@ -218,7 +219,6 @@ export default function Checkout() {
       clientName: clientName || "לקוח/ה",
       productId: String(orderId || 9999),
       uid: auth.currentUser?.uid || "",
-      // אין כאן paymentsNumber/firstPayment: הבחירה תתבצע במסך הסליקה של Credit2000
     };
 
     const data = await authorizedPostJson(endpoint, payload);
@@ -238,47 +238,63 @@ export default function Checkout() {
     throw new Error("לא נמצא redirectUrl/iframe בתשובת Credit2000");
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    try {
+  // התחלת תשלום אוטומטית אם יש פרטים מהעגלה
+  useEffect(() => {
+    let cancelled = false;
+
+    async function kickOff() {
+      if (!readyFromCart || iframeSrc || busy) return;
+      setError("");
       setBusy(true);
+      try {
+        if (!auth.currentUser?.uid) throw new Error("עליך להתחבר לפני השלמת ההזמנה.");
+        await ensureAuthTokenFresh();
 
-      if (!auth.currentUser?.uid) throw new Error("עליך להתחבר לפני השלמת ההזמנה.");
-      await ensureAuthTokenFresh();
+        // העלאות (best-effort)
+        await uploadOriginalLogoIfAvailable().catch(() => null);
+        await uploadMockupsForCart().catch(() => []);
 
-      await uploadOriginalLogoIfAvailable().catch(() => null);
-      await uploadMockupsForCart().catch(() => []);
+        // מזהה הזמנה
+        const orderId = state?.orderId || Math.floor(Date.now() / 1000);
+        if (!cancelled) setCurrentOrderId(orderId);
 
-      // מזהה הזמנה (אם אין מהניווט – דמו/זמן)
-      const orderId = state?.orderId || Math.floor(Date.now() / 1000);
-      setCurrentOrderId(orderId);
+        // שם לקוח למסוף (אופציונלי — ננסה להרכיב מהכתובת)
+        const clientName =
+          state?.contact?.fullName ||
+          `${shippingAddress?.city || ""} ${shippingAddress?.street || ""}`.trim() ||
+          "לקוח/ה";
 
-      // תמיד תשלום אשראי (Credit2000) ב-iframe:
-      const { redirectUrl } = await startCredit2000Payment({
-        amount: Number(grandTotal || 0),
-        orderId,
-        clientName: form.fullName?.trim(),
-      });
+        // פתיחת ה־iframe
+        const { redirectUrl } = await startCredit2000Payment({
+          amount: Number(grandTotal || 0),
+          orderId,
+          clientName,
+        });
 
-      if (!/^https:\/\//i.test(redirectUrl)) {
-        throw new Error("כתובת האייפריים אינה https.");
+        if (!/^https:\/\//i.test(redirectUrl)) {
+          throw new Error("כתובת האייפריים אינה https.");
+        }
+
+        if (!cancelled) {
+          setPaymentResult({ status: null, txId: null });
+          setIframeSrc(redirectUrl);
+          setIframeReady(false);
+          setTimeout(() => iframeBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setError(err?.message || "תקלה בהתחלת התשלום");
+      } finally {
+        if (!cancelled) setBusy(false);
       }
-
-      // איפוס תוצאות קודמות והצגה
-      setPaymentResult({ status: null, txId: null });
-      setIframeSrc(redirectUrl);
-      setIframeReady(false);
-      // גלילה עדינה לאזור האשראי
-      setTimeout(() => iframeBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-      return;
-    } catch (err) {
-      console.error(err);
-      setError(err?.message || "תקלה בשליחת ההזמנה");
-    } finally {
-      setBusy(false);
     }
-  }
+
+    kickOff();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyFromCart, items, totals, state, grandTotal]);
 
   const lineTotal = (it) => (Number(it.price) || 0) * (Number(it.qty) || 0);
 
@@ -294,9 +310,6 @@ export default function Checkout() {
   ========================= */
   useEffect(() => {
     function onMessage(e) {
-      // אופציונלי: לסנן לפי מקור. לדוגמה, אם ה־Return יושב ב- Cloud Functions:
-      // if (!String(e.origin).includes("cloudfunctions.net") && !String(e.origin).includes("credit2000.co.il")) return;
-
       const data = e?.data;
       if (!data || typeof data !== "object") return;
 
@@ -337,12 +350,7 @@ export default function Checkout() {
         <div className="alert alert-success d-flex justify-content-between align-items-center" role="alert">
           <div>
             ✅ התשלום התקבל בהצלחה{currentOrderId ? ` להזמנה #${currentOrderId}` : ""}.
-            {paymentResult.txId ? (
-              <>
-                {" "}
-                מספר עסקה: <strong>{paymentResult.txId}</strong>.
-              </>
-            ) : null}
+            {paymentResult.txId ? <> מספר עסקה: <strong>{paymentResult.txId}</strong>.</> : null}
           </div>
           <div className="d-flex gap-2">
             <Link to={currentOrderId ? `/orders/${currentOrderId}` : "/orders"} className="btn btn-sm btn-outline-light">
@@ -358,12 +366,7 @@ export default function Checkout() {
         <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
           <div>
             ❌ התשלום נכשל. ניתן לנסות שוב או לבחור אמצעי תשלום אחר.
-            {paymentResult.txId ? (
-              <>
-                {" "}
-                (מס׳ עסקה: <strong>{paymentResult.txId}</strong>)
-              </>
-            ) : null}
+            {paymentResult.txId ? <> (מס׳ עסקה: <strong>{paymentResult.txId}</strong>)</> : null}
           </div>
           <button
             className="btn btn-sm btn-outline-light"
@@ -374,102 +377,53 @@ export default function Checkout() {
         </div>
       )}
 
-      {/* תיבת הטמעת האשראי (מופיעה אחרי submit מוצלח) */}
+      {/* אם אין פרטי כתובת מהעגלה — הצג הודעה וקישור חזרה לעגלה */}
+      {!readyFromCart && (
+        <div className="alert alert-warning">
+          חסרים פרטי משלוח/כתובת. אנא חזור/י ל<a className="alert-link" href="/cart"> עגלת הקניות</a> ומלא/י את הכתובת.
+        </div>
+      )}
+
+      {/* תיבת הטמעת האשראי (אוטומטית עם פרטי העגלה) */}
+      {readyFromCart && (
+        <div className="card shadow-sm p-3 mb-4" ref={iframeBoxRef}>
+          <div className="d-flex justify-content-between align-items-center">
+            <h5 className="m-0">תשלום בכרטיס – עמוד מאובטח (Credit2000)</h5>
+            <button className="btn btn-outline-secondary btn-sm" onClick={handleCloseIframe} disabled={!iframeSrc}>
+              חזרה
+            </button>
+          </div>
+
+          <div className="mt-3 position-relative">
+            {!iframeReady && iframeSrc && (
+              <div
+                className="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                style={{ background: "rgba(255,255,255,.6)", zIndex: 2 }}
+              >
+                <div className="spinner-border" role="status" aria-hidden="true" />
+                <span className="ms-2">טוען מסך סליקה…</span>
+              </div>
+            )}
+
+            {iframeSrc ? (
+              <ResponsiveIframe src={iframeSrc} title="Credit2000" onLoad={() => setIframeReady(true)} />
+            ) : (
+              <div className="text-center p-4 text-muted">מכין מסך תשלום…</div>
+            )}
+          </div>
+
+          <small className="text-muted d-block mt-2">
+            אם יש לך Content-Security-Policy באתר, ודא שהדומיין של Credit2000 מותר תחת <code>frame-src</code>{" "}
+            (למשל: <code>https://www.credit2000.co.il</code>).
+          </small>
+
+          {error && <div className="alert alert-danger mt-3">{error}</div>}
+        </div>
+      )}
 
       <div className="row g-4">
-        {/* טופס פרטים אישיים */}
-        <div className="col-lg-7">
-          <form onSubmit={handleSubmit} className="card shadow-sm p-4">
-            <h5 className="mb-3">פרטים אישיים ומשלוח</h5>
-
-            <div className="mb-3">
-              <label className="form-label">שם מלא</label>
-              <input
-                type="text"
-                name="fullName"
-                value={form.fullName}
-                onChange={handleChange}
-                className="form-control"
-                required
-              />
-            </div>
-
-            <div className="row">
-              <div className="col-md-6 mb-3">
-                <label className="form-label">אימייל</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  className="form-control"
-                  required
-                />
-              </div>
-              <div className="col-md-6 mb-3">
-                <label className="form-label">טלפון</label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={form.phone}
-                  onChange={handleChange}
-                  className="form-control"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="mb-3">
-              <label className="form-label">כתובת</label>
-              <input
-                type="text"
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                className="form-control"
-                required
-              />
-            </div>
-
-            <div className="row">
-              <div className="col-md-6 mb-3">
-                <label className="form-label">עיר</label>
-                <input
-                  type="text"
-                  name="city"
-                  value={form.city}
-                  onChange={handleChange}
-                  className="form-control"
-                  required
-                />
-              </div>
-              <div className="col-md-6 mb-3">
-                <label className="form-label">מיקוד</label>
-                <input
-                  type="text"
-                  name="zip"
-                  value={form.zip}
-                  onChange={handleChange}
-                  className="form-control"
-                />
-              </div>
-            </div>
-
-            <h5 className="mt-4 mb-2">תשלום</h5>
-            <div className="alert alert-secondary" role="alert">
-              התשלום מתבצע בכרטיס אשראי בלבד. פריסת התשלומים תיבחר במסך הסליקה המאובטח של Credit2000.
-            </div>
-
-            {error && <div className="alert alert-danger">{error}</div>}
-
-            <button type="submit" className="btn btn-primary btn-lg" disabled={busy}>
-              {busy ? "שולח הזמנה…" : "בצע הזמנה"}
-            </button>
-          </form>
-        </div>
-
         {/* סיכום הזמנה */}
-        <div className="col-lg-5">
+        <div className="col-lg-6 col-xl-5">
           <div className="card shadow-sm p-4">
             <h5 className="mb-3">סיכום הזמנה</h5>
             <ul className="list-group list-group-flush mb-3">
@@ -512,35 +466,28 @@ export default function Checkout() {
             </Link>
           </div>
         </div>
-        {iframeSrc && (
-        <div className="card shadow-sm p-3 mb-4">
-          <div className="d-flex justify-content-between align-items-center">
-            <h5 className="m-0">תשלום בכרטיס – עמוד מאובטח (Credit2000)</h5>
-            <button className="btn btn-outline-secondary btn-sm" onClick={handleCloseIframe}>
-              חזרה
-            </button>
-          </div>
 
-          <div ref={iframeBoxRef} className="mt-3 position-relative">
-            {!iframeReady && (
-              <div
-                className="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-                style={{ background: "rgba(255,255,255,.6)", zIndex: 2 }}
-              >
-                <div className="spinner-border" role="status" aria-hidden="true" />
-                <span className="ms-2">טוען מסך סליקה…</span>
+        {/* פרטי משלוח קצרים (תצוגה בלבד) */}
+        {readyFromCart && (
+          <div className="col-lg-6 col-xl-7">
+            <div className="card shadow-sm p-4 h-100">
+              <h6 className="mb-3">כתובת משלוח</h6>
+              <div className="text-muted">
+                {shippingAddress?.address
+                  ? shippingAddress.address
+                  : [shippingAddress?.city, shippingAddress?.street, shippingAddress?.house]
+                      .filter(Boolean)
+                      .join(" ")}
+                {shippingAddress?.apt ? `, דירה ${shippingAddress.apt}` : ""}
+                {shippingAddress?.zip ? `, ${shippingAddress.zip}` : ""}
+                {shippingAddress?.notes ? <div className="mt-2">הערות: {shippingAddress.notes}</div> : null}
               </div>
-            )}
-
-            <ResponsiveIframe src={iframeSrc} title="Credit2000" onLoad={() => setIframeReady(true)} />
+              <small className="text-muted d-block mt-3">
+                לשינוי הכתובת, חזור/י ל<a href="/cart">עגלת הקניות</a>.
+              </small>
+            </div>
           </div>
-
-          <small className="text-muted d-block mt-2">
-            אם יש לך Content-Security-Policy באתר, ודא שהדומיין של Credit2000 מותר תחת <code>frame-src</code>{" "}
-            (למשל: <code>https://www.credit2000.co.il</code>).
-          </small>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );
