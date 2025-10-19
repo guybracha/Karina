@@ -5,6 +5,10 @@ import banner from "../img/background.png";
 import { PRODUCTS } from "../lib/products";
 import "../style/home.css";
 import { Helmet } from "react-helmet-async";
+import logo from "../img/logo1.png";
+import render1 from "../img/render1.png";
+import render2 from "../img/render2.png";
+import render3 from "../img/render3.png";
 
 /* ==================== קבועים/נתונים סטטיים ==================== */
 
@@ -130,13 +134,20 @@ export default function HomePage() {
         <div className="container position-relative">
           <div className="row justify-content-center">
             <div className="col-12 col-xl-10 text-center">
-              <div className="badge bg-white text-dark fw-semibold shadow-soft mb-3 hero-badge">
-                <i className="bi bi-stars me-1" aria-hidden="true" /> קארינה – חולצות מודפסות לעסקים וצוותים
-              </div>
+              <div className="hero-logo mb-3">
+              <img
+                src={logo}
+                alt="Karina Workwear Logo"
+                className="img-fluid"
+                style={{ maxHeight: "128px" }}
+                loading="eager"
+                decoding="async"
+              />
+            </div>
 
               {/* הסרתי display-5 כדי לאפשר גודל זורם מה-CSS (clamp) */}
               <h1 className="fw-bolder text-white mb-3 lh-sm hero-title">
-                מיתוג שמבליט את הצוות. איכות שמחזיקה בכביסה.
+                מיתוג שמבליט את הצוות <br></br> איכות שמחזיקה בכביסה
               </h1>
 
               <p className="text-white-75 mb-4 hero-subtitle">
@@ -144,14 +155,10 @@ export default function HomePage() {
                 ותמיכה אישית משלב הסקיצה עד למסירה.
               </p>
 
-              <div className="d-flex gap-2 gap-md-3 justify-content-center flex-wrap hero-cta">
-                <NavLink to="/catalog" className="btn btn-primary btn-lg px-4 shadow-soft">
-                  עיינו בקטלוג
-                </NavLink>
-                <NavLink to="/contact" className="btn btn-outline-light btn-lg px-4">
-                  בקשת הצעת מחיר
-                </NavLink>
-              </div>
+              <div className="d-flex gap-2 justify-content-center">
+              <NavLink to="/contact" className="btn btn-primary">דברו איתנו</NavLink>
+              <NavLink to="/catalog" className="btn btn-primary">עיינו בקטלוג</NavLink>
+            </div>
 
               <ul className="list-inline mt-4 mb-0 text-white-75 small hero-kpis" aria-label="יתרונות משלימים">
                 <li className="list-inline-item me-3">
@@ -198,8 +205,8 @@ export default function HomePage() {
       {/* ===== איך זה עובד ===== */}
       <section className="container py-6">
         <header className="text-center mb-4">
-          <h2 className="h3 fw-bold">איך זה עובד</h2>
-          <p className="text-muted">פשוטים, מהירים, שקופים.</p>
+          <h2 className="h3 fw-bold">איך זה עובד? נרשמים לאתר ומקבלים שירות באופן</h2>
+          <h3 className="text-muted">פשוט, מהיר ושקוף</h3>
         </header>
 
         <div className="row g-4 text-center" role="list">
@@ -218,7 +225,7 @@ export default function HomePage() {
       </section>
 
       {/* ===== מי אנחנו ===== */}
-      <section className="py-6 bg-body-tertiary position-relative overflow-hidden">
+    <section className="py-6 bg-pink-soft position-relative overflow-hidden">
         <div className="shape-blur-1" aria-hidden="true" />
         <div className="container">
           <div className="row g-4 align-items-center">
@@ -256,13 +263,13 @@ export default function HomePage() {
             <div className="col-12 col-lg-6">
               <div className="about-photo-grid">
                 <figure className="about-photo main">
-                  <img src={banner} alt="סטודיו עבודה והדפסות בפעולה" loading="lazy" decoding="async" />
+                  <img src={render1} alt="סטודיו עבודה והדפסות בפעולה" loading="lazy" decoding="async" />
                 </figure>
                 <figure className="about-photo sub a">
-                  <img src={banner} alt="דוגמת הדפס קרוב" loading="lazy" decoding="async" />
+                  <img src={render2} alt="דוגמת הדפס קרוב" loading="lazy" decoding="async" />
                 </figure>
                 <figure className="about-photo sub b">
-                  <img src={banner} alt="אריזות ומשלוחים מוכנים" loading="lazy" decoding="async" />
+                  <img src={render3} alt="אריזות ומשלוחים מוכנים" loading="lazy" decoding="async" />
                 </figure>
               </div>
             </div>
@@ -317,10 +324,10 @@ export default function HomePage() {
       </section>
 
       {/* ===== ההשקעה שלנו – טיימליין ===== */}
-      <section className="py-6 bg-body">
+      <section className="py-6 bg-pink-soft">
         <div className="container">
           <header className="text-center mb-4">
-            <h2 className="h4 fw-bold">ההשקעה שלנו בכל הזמנה</h2>
+            <h2 className="h4 fw-bold">תהליך ההזמנה</h2>
             <p className="text-muted m-0">שקיפות בתהליך – צעד-צעד.</p>
           </header>
 
@@ -328,7 +335,7 @@ export default function HomePage() {
             <li>
               <div className="dot" aria-hidden="true" />
               <h3 className="h6 m-0">קבלת לוגו וקבצים</h3>
-              <p className="text-muted small m-0">בדיקת איכות/פורמט והמלצה על טכניקת הדפסה.</p>
+              <p className="text-muted small m-0">בדיקת איכות/פורמט ועבודה גרפית במידת הצורך. (בחינם)</p>
             </li>
             <li>
               <div className="dot" aria-hidden="true" />
@@ -348,7 +355,7 @@ export default function HomePage() {
             <li>
               <div className="dot" aria-hidden="true" />
               <h3 className="h6 m-0">אריזה ומשלוח</h3>
-              <p className="text-muted small m-0">אריזה נקייה, תווית בקרה, שליחה לכל הארץ.</p>
+              <p className="text-muted small m-0">אריזה נקייה ושליחה לכל הארץ.</p>
             </li>
           </ol>
         </div>
@@ -377,14 +384,6 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-
-          <div className="logos-marquee mt-4" aria-label="מותגים שעבדנו איתם">
-            <div className="track">
-              {Array.from({length:10}).map((_,i)=>(
-                <span key={i} className="logo-pill"><i className="bi bi-building me-1" />Brand {i+1}</span>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 
@@ -397,8 +396,18 @@ export default function HomePage() {
               נלווה אתכם מבחירת הפריט, דרך עיבוד הלוגו ועד להדפסה ומשלוח.
             </p>
             <div className="d-flex gap-2 justify-content-center">
-              <NavLink to="/contact" className="btn btn-primary">דברו איתנו</NavLink>
-              <NavLink to="/catalog" className="btn btn-outline-primary">עיינו בקטלוג</NavLink>
+              <a
+                href="https://wa.me/972545042443?text=שלום! אשמח להצעת מחיר או פרטים נוספים על הדפסות."
+                className="btn btn-success d-flex align-items-center gap-2 px-4 py-2"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <i className="bi bi-whatsapp fs-5" aria-hidden="true"></i>
+                <span>צור קשר בוואטסאפ</span>
+              </a>
+              <NavLink to="/catalog" className="btn btn-outline-primary px-4 py-2">
+                עיינו בקטלוג
+              </NavLink>
             </div>
           </div>
         </div>

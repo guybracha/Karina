@@ -309,3 +309,47 @@ img[loading="lazy"]{ content-visibility:auto; }
   transform: rotate(8deg);
   pointer-events:none;
 }
+
+/* כרטיסי פידבק – ורוד עדין ונעים לעין */
+.quote-card{
+  background: #ffe4ec;       /* ורוד עדין */
+  border: 1px solid #ffb8cd; /* מסגרת ורודה בהירה */
+  border-radius: 16px;
+}
+
+.quote-card .quote-icon{
+  opacity: .6;
+}
+
+/* ורוד עדין לסקשנים */
+/* ורוד עדין לסקשנים שביקשת */
+.bg-pink-soft {
+  background-color: #ffe4ec !important;
+}
+
+/* שיפור קריאות בתוך הסקשן הוורוד "מי אנחנו" */
+.bg-pink-soft .glass-card {
+  background: #ffffffcc;         /* לבן חצי־שקוף עדין מעל ורוד */
+  backdrop-filter: blur(4px);
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.06);
+}
+
+/* קונטרסט נעים לנקודות/קו בטיימליין על ורוד */
+.bg-pink-soft .timeline {
+  --tl-dot: #7a3e6a;    /* סגול/בורדו עדין לנקודה */
+  --tl-ring: #f4bfd0;   /* ורוד טבעתי סביב הנקודה */
+}
+
+.bg-pink-soft .timeline .dot {
+  background: var(--tl-dot);
+  box-shadow: 0 0 0 6px var(--tl-ring);
+}
+
+.bg-pink-soft .timeline li h3 {
+  color: #2b2b2b;       /* כותרות כהות לקריאות */
+}
+.bg-pink-soft .timeline li p {
+  color: #555;          /* טקסט משני מעט כהה */
+}
+
