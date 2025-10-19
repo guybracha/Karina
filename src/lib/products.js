@@ -32,6 +32,7 @@ export const PRODUCTS = [
     category: "workwear",
     season: "חורף",
     type: "hoodie",
+    logoAllowed: true,
   },
   {
     slug: "tshirt-gray",
@@ -43,6 +44,7 @@ export const PRODUCTS = [
     category: "workwear",
     season: "קיץ",
     type: "shirt",
+    logoAllowed: true,
   },
   {
     slug: "helmet-blue",
@@ -54,6 +56,7 @@ export const PRODUCTS = [
     category: "safety",
     season: "כל השנה",
     type: "helmet",
+    logoAllowed: false, // ← לא מאפשרים לוגו
   },
   {
     slug: "vest-yellow",
@@ -66,6 +69,7 @@ export const PRODUCTS = [
     category: "safety",
     season: "כל השנה",
     type: "vest",
+    logoAllowed: true,
   },
   {
     slug: "vest-orange",
@@ -78,6 +82,7 @@ export const PRODUCTS = [
     category: "safety",
     season: "כל השנה",
     type: "vest",
+    logoAllowed: true,
   },
   {
     slug: "manager-vest",
@@ -90,6 +95,7 @@ export const PRODUCTS = [
     category: "safety",
     season: "קיץ",
     type: "vest",
+    logoAllowed: true,
   },
   {
     slug: "cargo-pants",
@@ -102,6 +108,7 @@ export const PRODUCTS = [
     category: "workwear",
     season: "כל השנה",
     type: "pants",
+    logoAllowed: false, // ← לא מאפשרים לוגו
   },
   {
     slug: "kenguru",
@@ -114,6 +121,7 @@ export const PRODUCTS = [
     category: "workwear",
     season: "כל השנה",
     type: "hoodie",
+    logoAllowed: true,
   },
   {
     slug: "softshell-coat",
@@ -126,6 +134,7 @@ export const PRODUCTS = [
     category: "workwear",
     season: "חורף",
     type: "jacket",
+    logoAllowed: true,
   },
   {
     slug: "drifit-short",
@@ -138,6 +147,7 @@ export const PRODUCTS = [
     category: "workwear",
     season: "קיץ",
     type: "shirt",
+    logoAllowed: true,
   },
   {
     slug: "drifit-long",
@@ -150,5 +160,6 @@ export const PRODUCTS = [
     category: "workwear",
     season: "חורף",
     type: "shirt",
+    logoAllowed: true,
   }
 ];

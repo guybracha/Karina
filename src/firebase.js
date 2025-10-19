@@ -37,25 +37,21 @@ const isBrowser = typeof window !== "undefined";
 const isDev = process.env.NODE_ENV !== "production";
 
 /** החזר קונפיג מ־ENV, עם תיקונים/ברירות מחדל ידידותיות בזמן DEV */
+// החלף את הפונקציה הקיימת בזה (CRA-safe, בלי import.meta)
 function resolveFirebaseConfig() {
-  const DEV_DEFAULTS = isDev ? {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-  } : {};
+  const isDev = process.env.NODE_ENV !== "production";
+
+  // מאפשר גם הזרקה בזמן ריצה דרך public/env.js אם תרצה
+  const RUNTIME = (typeof window !== "undefined" && window.__ENV__) || {};
 
   const cfg = {
-    apiKey:        process.env.REACT_APP_FB_API_KEY        || DEV_DEFAULTS.apiKey        || "",
-    authDomain:    process.env.REACT_APP_FB_AUTH_DOMAIN    || DEV_DEFAULTS.authDomain    || "",
-    projectId:     process.env.REACT_APP_FB_PROJECT_ID     || DEV_DEFAULTS.projectId     || "",
-    storageBucket: process.env.REACT_APP_FB_STORAGE_BUCKET || DEV_DEFAULTS.storageBucket || "",
-    messagingSenderId: process.env.REACT_APP_FB_MESSAGING_SENDER_ID || DEV_DEFAULTS.messagingSenderId || "",
-    appId:         process.env.REACT_APP_FB_APP_ID         || DEV_DEFAULTS.appId         || "",
-    measurementId: process.env.REACT_APP_FB_MEASUREMENT_ID || DEV_DEFAULTS.measurementId || undefined,
+    apiKey:        process.env.REACT_APP_FB_API_KEY        || RUNTIME.FIREBASE_API_KEY        || "",
+    authDomain:    process.env.REACT_APP_FB_AUTH_DOMAIN    || RUNTIME.FIREBASE_AUTH_DOMAIN    || "",
+    projectId:     process.env.REACT_APP_FB_PROJECT_ID     || RUNTIME.FIREBASE_PROJECT_ID     || "",
+    storageBucket: process.env.REACT_APP_FB_STORAGE_BUCKET || RUNTIME.FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: process.env.REACT_APP_FB_MESSAGING_SENDER_ID || RUNTIME.FIREBASE_MESSAGING_SENDER_ID || "",
+    appId:         process.env.REACT_APP_FB_APP_ID         || RUNTIME.FIREBASE_APP_ID         || "",
+    measurementId: process.env.REACT_APP_FB_MEASUREMENT_ID || RUNTIME.FIREBASE_MEASUREMENT_ID || undefined,
   };
 
   if (isDev) {
@@ -64,13 +60,20 @@ function resolveFirebaseConfig() {
       apiKey: cfg.apiKey ? "<set>" : "<missing>",
       appId:  cfg.appId  ? "<set>" : "<missing>",
     });
-    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא קובץ .env תקין או אפשר DEV_DEFAULTS");
+    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא קובץ .env.local תקין.");
     if (cfg.storageBucket && !/\.(appspot|firebasestorage)\.app$/i.test(cfg.storageBucket)) {
       console.warn("⚠️ storageBucket לא נראה תקין. צפה ל: <project>.appspot.com או <project>.firebasestorage.app");
     }
   }
+
+  const missing = ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"]
+    .filter((k) => !cfg[k]);
+  if (missing.length) {
+    throw new Error(`[Firebase config/CRA] חסרים משתנים: ${missing.join(", ")}. בדוק .env.local ואתחל את dev server.`);
+  }
   return cfg;
 }
+
 
 const firebaseConfig = resolveFirebaseConfig();
 

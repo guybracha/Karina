@@ -1542,3 +1542,33 @@ body:has(.modal-portal) {
 .karina-footer .footer-title { font-weight: 800; font-size: 1.1rem; margin-bottom: .5rem; }
 .karina-footer a { color: var(--blue-fb); }
 .karina-footer a:hover { text-decoration: underline; }
+
+/* יחס-צד וגובה מינימלי גמיש עבור האייפריים של הסליקה */
+.cc-frame {
+  /* כבר יש padding-top 75% בקוד, כאן רק מוסיפים מינימום נעים */
+  min-height: 380px;
+}
+
+/* מסכים צרים — הגדל מעט את היחס והגובה המינימלי */
+@media (max-width: 576px) {
+  .cc-frame {
+    padding-top: 95%;   /* יותר גובה */
+    min-height: 420px;
+  }
+}
+
+/* טאבלטים */
+@media (min-width: 577px) and (max-width: 991px) {
+  .cc-frame {
+    padding-top: 80%;
+    min-height: 400px;
+  }
+}
+
+/* דסקטופ רחב — יחס נמוך יותר, אבל עדיין מאפשר הזנה נוחה */
+@media (min-width: 1200px) {
+  .cc-frame {
+    padding-top: 66.66%; /* ~3:2 */
+    min-height: 420px;
+  }
+}

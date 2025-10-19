@@ -247,3 +247,65 @@ img[loading="lazy"]{ content-visibility:auto; }
   .best-price, .hero-gradient{ forced-color-adjust:none; }
   .cat-badge{ background:Canvas; color:CanvasText; }
 }
+
+/* כרטיס זכוכיתי */
+.glass-card{
+  background: rgba(255,255,255,.6);
+  backdrop-filter: saturate(140%) blur(10px);
+  border: 1px solid rgba(255,255,255,.4);
+  border-radius: 20px;
+  transition: transform .25s ease, box-shadow .25s ease;
+}
+.glass-card:hover{ transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+
+/* רשת תמונות “מי אנחנו” */
+.about-photo-grid{ position:relative; display:grid; grid-template-columns: 1.2fr .8fr; gap:14px; }
+.about-photo{ overflow:hidden; border-radius:20px; margin:0; }
+.about-photo img{ width:100%; height:100%; object-fit:cover; display:block; }
+.about-photo.main{ grid-row: span 2; min-height: 360px; }
+.about-photo.sub{ min-height: 170px; }
+
+/* למה אנחנו – קלפים ומדדים */
+.why-card{ border-radius:18px; background:#fff; border:1px solid #eee; transition: transform .22s ease, box-shadow .22s ease; }
+.why-card:hover{ transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+.why-icon{ font-size: 28px; }
+
+.stats-wrap{ display:grid; grid-template-columns: repeat(2,1fr); gap:14px; margin-top:20px; }
+@media (min-width: 992px){ .stats-wrap{ grid-template-columns: repeat(4,1fr); } }
+.stat{ text-align:center; padding:18px; border-radius:16px; background: linear-gradient(180deg, #fff, #f8fafc); border:1px solid #eef2f6; }
+.stat-num{ font-weight:800; font-size: clamp(22px,3vw,34px); line-height:1; }
+.stat-label{ color:#6c757d; font-size:13px; margin-top:6px; }
+
+/* טיימליין */
+.timeline{ position:relative; list-style:none; padding:0; margin:0; }
+.timeline li{ position:relative; padding-inline-start:28px; margin-bottom:18px; }
+.timeline li::before{
+  content:""; position:absolute; inset-inline-start:10px; top:8px; bottom:-10px;
+  width:2px; background: linear-gradient(#e7eaf0, #cfd6e0);
+}
+.timeline .dot{
+  width:14px; height:14px; border-radius:50%; background: #0d6efd;
+  position:absolute; inset-inline-start:3px; top:2px; box-shadow:0 0 0 4px rgba(13,110,253,.12);
+}
+
+/* ציטוטים + מרקיזת לוגואים */
+.quote-card{
+  border:1px solid #e9edf3; border-radius:18px; background:#fff; padding:18px 18px 14px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.06);
+}
+.quote-icon{ font-size: 26px; opacity:.2; }
+
+.logos-marquee{ overflow:hidden; border-radius:14px; background:#fff; border:1px solid #eee; }
+.logos-marquee .track{ display:flex; gap:20px; padding:12px 16px; animation: marquee 28s linear infinite; }
+.logo-pill{ border:1px solid #e8ecf3; padding:8px 12px; border-radius:999px; white-space:nowrap; font-size:14px; background:#f8fafc; }
+@keyframes marquee{ 0%{ transform: translateX(0); } 100%{ transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce){ .logos-marquee .track{ animation:none; } }
+
+/* דקור רך */
+.shape-blur-1{
+  position:absolute; inset-inline-start:-120px; top:-60px; width:300px; height:300px;
+  background: radial-gradient(closest-side, rgba(13,110,253,.18), transparent 70%);
+  filter: blur(18px);
+  transform: rotate(8deg);
+  pointer-events:none;
+}

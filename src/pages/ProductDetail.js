@@ -55,6 +55,9 @@ export default function ProductDetail() {
   const { slug } = useParams();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
 
+  // ✅ האם מותר להעלות לוגו למוצר (ברירת מחדל: כן)
+  const canUploadLogo = product?.logoAllowed !== false;
+
   // ✅ NEW: מצב התחברות ותפקיד מוכר
   const [user, setUser] = useState(null);
   const [isSeller, setIsSeller] = useState(false);
@@ -111,7 +114,7 @@ export default function ProductDetail() {
   const colorsList = product?.colors?.slice(0, 4)?.join(" / ") || "";
   const sizesList  = product?.sizes?.slice(0, 4)?.join(", ") || "";
   const description = product
-    ? `חולצת ${product?.name ?? ""} להדפסה אישית. צבעים: ${colorsList}. מידות: ${sizesList}.`
+    ? `${product?.name ?? ""} ${canUploadLogo ? "— מתאים להדפסה אישית." : "— ללא אפשרות הטבעת לוגו."} צבעים: ${colorsList}. מידות: ${sizesList}.`
     : "המוצר לא נמצא.";
 
   const baseImageForSide = side === "front" ? product?.img : (product?.backImg || product?.img);
@@ -145,12 +148,20 @@ export default function ProductDetail() {
     setBulkMode(false);
     setBulkByColor({});
 
-    // טען מטא־דאטה של לוגואים מה-LS (אם יש)
-    try {
-      const sFront = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY("front")) || "null");
-      const sBack  = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY("back"))  || "null");
-      setLogoStorageBySide({ front: sFront, back: sBack });
-    } catch {
+    // טען מטא־דאטה של לוגואים מה-LS רק אם מותר לוגו; אחרת ננקה
+    if (canUploadLogo) {
+      try {
+        const sFront = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY("front")) || "null");
+        const sBack  = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY("back"))  || "null");
+        setLogoStorageBySide({ front: sFront, back: sBack });
+      } catch {
+        setLogoStorageBySide({ front: null, back: null });
+      }
+    } else {
+      try {
+        localStorage.removeItem(LS_LOGO_STORAGE_KEY("front"));
+        localStorage.removeItem(LS_LOGO_STORAGE_KEY("back"));
+      } catch {}
       setLogoStorageBySide({ front: null, back: null });
     }
 
@@ -173,7 +184,7 @@ export default function ProductDetail() {
 
     setShowUpload(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.slug]);
+  }, [product?.slug, canUploadLogo]);
 
   // ודא מבנה bulk לכל צבע
   useEffect(() => {
@@ -192,6 +203,7 @@ export default function ProductDetail() {
 
   // קליטת תוצאת המודאל: שומר רק מטא־דאטה מ-Storage (אין preview)
   function onLogoUploaded(_dataUrl, uploaded) {
+    if (!canUploadLogo) { alert("לא ניתן להעלות לוגו לפריט זה."); setShowUpload(false); return; }
     const storage = uploaded?.storage || null;
     setLogoStorageBySide((prev) => {
       const next = { ...prev, [side]: storage };
@@ -308,6 +320,10 @@ export default function ProductDetail() {
       price: String(product?.price ?? ""),
       availability: "https://schema.org/InStock"
     },
+    // ✅ חושפים מאפיין נוסף למנועי חיפוש
+    additionalProperty: [
+      { "@type": "PropertyValue", name: "logoAllowed", value: String(canUploadLogo) }
+    ]
   };
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -387,13 +403,19 @@ export default function ProductDetail() {
 
                 <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
                   <span className="badge text-bg-light">תצוגה: {side === "front" ? "קדמי" : "אחורי"}</span>
-                  {logoStorageBySide[side] ? (
-                    <span className="badge text-bg-success">לוגו הועלה ונשמר לצד הזה</span>
+                  {canUploadLogo ? (
+                    <>
+                      {logoStorageBySide[side] ? (
+                        <span className="badge text-bg-success">לוגו הועלה ונשמר לצד הזה</span>
+                      ) : (
+                        <span className="badge text-bg-secondary">אין לוגו שמור לצד הזה</span>
+                      )}
+                      {(logoStorageBySide.front || logoStorageBySide.back) && (
+                        <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>איפוס לוגואים</button>
+                      )}
+                    </>
                   ) : (
-                    <span className="badge text-bg-secondary">אין לוגו שמור לצד הזה</span>
-                  )}
-                  {(logoStorageBySide.front || logoStorageBySide.back) && (
-                    <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>איפוס לוגואים</button>
+                    <span className="badge text-bg-warning">ללא אפשרות הטבעת לוגו</span>
                   )}
                 </div>
               </div>
@@ -421,12 +443,16 @@ export default function ProductDetail() {
                       <input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} className="form-control w-auto" />
                     </div>
 
-                    <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                      <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>
-                        העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
-                      </button>
-                      {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
-                    </div>
+                    {canUploadLogo ? (
+                      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                        <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>
+                          העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
+                        </button>
+                        {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
+                      </div>
+                    ) : (
+                      <div className="alert alert-secondary py-2 small">לפריט זה לא ניתן להעלות לוגו.</div>
+                    )}
 
                     <button
                       className="btn btn-primary btn-lg"
@@ -487,12 +513,14 @@ export default function ProductDetail() {
                       </div>
                     </div>
 
-                    <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                      <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>
-                        העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
-                      </button>
-                      {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
-                    </div>
+                    {canUploadLogo ? (
+                      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                        <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>
+                          העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
+                        </button>
+                        {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
+                      </div>
+                    ) : null}
                   </>
                 )}
 
@@ -501,7 +529,11 @@ export default function ProductDetail() {
                   <h6 className="fw-bold">מידע</h6>
                   <ul className="text-muted small mb-0">
                     <li>הדפסה איכותית על מגוון בדים.</li>
-                    <li>העלאת לוגו לפי צד — קדמי/אחורי.</li>
+                    {canUploadLogo ? (
+                      <li>העלאת לוגו לפי צד — קדמי/אחורי.</li>
+                    ) : (
+                      <li>לפריט זה אין אפשרות הטבעת לוגו.</li>
+                    )}
                     <li>משלוח לכל הארץ או איסוף עצמי.</li>
                   </ul>
                 </div>
@@ -509,15 +541,17 @@ export default function ProductDetail() {
             </div>
 
             {/* מודאל העלאת לוגו בלבד (מעלה ל-Storage ושולח מטא־דאטה) */}
-            <LogoUploadModal
-              show={showUpload}
-              onClose={() => setShowUpload(false)}
-              // המודאל החדש מחזיר (preview=null, file, { storage })
-              onConfirm={(_preview, _file, uploaded) => onLogoUploaded(_preview, uploaded)}
-              orderId="draft"              // אפשר להחליף בהזדהות/הזמנה אמיתית כשיש
-              itemSlug={product.slug}
-              side={side}
-            />
+            {canUploadLogo && (
+              <LogoUploadModal
+                show={showUpload}
+                onClose={() => setShowUpload(false)}
+                // המודאל מחזיר (preview=null, file, { storage })
+                onConfirm={(_preview, _file, uploaded) => onLogoUploaded(_preview, uploaded)}
+                orderId="draft"              // אפשר להחליף בהזדהות/הזמנה אמיתית כשיש
+                itemSlug={product.slug}
+                side={side}
+              />
+            )}
 
             {/* מוצרים דומים */}
             <div className="mt-5">

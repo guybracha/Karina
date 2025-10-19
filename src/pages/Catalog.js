@@ -397,44 +397,48 @@ export default function Catalog() {
         <>
           <div className="row g-3 g-md-4 catalog-grid">
             {paged.map((p) => {
-              const stock = p.stock ?? Math.floor(6 + Math.random() * 30);
-              const low = stock <= 8;
-              const barPct = Math.max(12, Math.min(100, Math.round((stock / 30) * 100)));
+  // ✅ מציגים מלאי רק אם יש ערך stock אמיתי על המוצר
+  const hasStock = Number.isFinite(p.stock);
+  const stock = hasStock ? p.stock : null;
+  const low = hasStock && stock <= 8;
+  const barPct = hasStock ? Math.max(12, Math.min(100, Math.round((stock / 30) * 100))) : 0;
 
-              return (
-                <div className="col-6 col-md-4 col-lg-3" key={p.slug}>
-                  <div className="card product-card h-100">
-                    {p.sale && <span className="product-badge sale">-{p.sale}%</span>}
-                    {!p.sale && p.isNew && <span className="product-badge new">חדש</span>}
-                    <span className="price-pill">{formatCurrency(p.price)}</span>
+  return (
+    <div className="col-6 col-md-4 col-lg-3" key={p.slug}>
+      <div className="card product-card h-100">
+        {p.sale && <span className="product-badge sale">-{p.sale}%</span>}
+        {!p.sale && p.isNew && <span className="product-badge new">חדש</span>}
+        <span className="price-pill">{formatCurrency(p.price)}</span>
 
-                    <div className="product-media">
-                      <img src={p.img} alt={p.name} loading="lazy" decoding="async" />
-                    </div>
+        <div className="product-media">
+          <img src={p.img} alt={p.name} loading="lazy" decoding="async" />
+        </div>
 
-                    <div className="card-body">
-                      <h6 className="card-title mb-1">{p.name}</h6>
-                      <div className="meta-row">
-                        <span>קטגוריה: {CATEGORY_LABELS[p.category] || "כללי"}</span>
-                        <span>•</span>
-                        <span>עונה: {p.season}</span>
-                      </div>
+        <div className="card-body">
+          <h6 className="card-title mb-1">{p.name}</h6>
+          <div className="meta-row">
+            <span>קטגוריה: {CATEGORY_LABELS[p.category] || "כללי"}</span>
+            <span>•</span>
+            <span>עונה: {p.season}</span>
+          </div>
 
-                      {low && (
-                        <div className="low-stock">
-                          <div className="bar"><span style={{ width: `${barPct}%` }} /></div>
-                          <span className="text-muted small">נשארו רק {stock} במלאי</span>
-                        </div>
-                      )}
+          {/* יוצג רק אם יש נתון stock תקף */}
+          {low && (
+            <div className="low-stock">
+              <div className="bar"><span style={{ width: `${barPct}%` }} /></div>
+              <span className="text-muted small">נשארו רק {stock} במלאי</span>
+            </div>
+          )}
 
-                      <div className="d-grid mt-auto">
-                        <Link to={`/product/${p.slug}`} className="btn btn-primary">לפריט</Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="d-grid mt-auto">
+            <Link to={`/product/${p.slug}`} className="btn btn-primary">לפריט</Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+})}
+
           </div>
 
           {/* Pagination */}

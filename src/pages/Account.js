@@ -7,15 +7,24 @@ import { getMyOrders /*, listenMyOrders */ } from "../services/orders";
 import { logout } from "../services/auth";
 import CreateDemoOrderButton from "../components/CreateDemoOrderButton";
 
-// ⬇️ NEW: קריאה לפונקציה testSendEmail
+// פונקציות ענן (מייל בדיקה)
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { app } from "../firebase"; // וודא שקיים export של ה-App מאותחל
+import { app } from "../firebase";
+
+// עדכון פרופיל/אימייל + אימות מחדש ב-Auth
+import {
+  updateProfile,
+  updateEmail,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+} from "firebase/auth";
 
 function shekels(amountCentsOrFloat) {
   let n = Number(amountCentsOrFloat || 0);
   if (n > 0 && n % 1 === 0 && n > 1000) n = n / 100;
   return new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS" }).format(n);
 }
+
 function statusBadgeClass(status) {
   const map = {
     pending: "bg-secondary",
@@ -53,14 +62,16 @@ export default function Account() {
 
   // fields in modal
   const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editPhoneNumber, setEditPhoneNumber] = useState("");
   const [editCompany, setEditCompany] = useState("");
+  const [reauthPassword, setReauthPassword] = useState(""); // לאימות שינוי אימייל אם נדרש
 
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   const [saveErr, setSaveErr] = useState(null);
 
-  // ⬇️ NEW: מצב לכפתור המייל
+  // מצב לכפתור המייל
   const [mailBusy, setMailBusy] = useState(false);
   const [mailMsg, setMailMsg] = useState(null);
   const [mailErr, setMailErr] = useState(null);
@@ -76,6 +87,7 @@ export default function Account() {
         if (mounted) {
           setProfile(p || {});
           setEditName(p?.displayName || user.displayName || user.email?.split("@")[0] || "");
+          setEditEmail(p?.email || user.email || "");
           setEditPhoneNumber(p?.phoneNumber || "");
           setEditCompany(p?.company || "");
         }
@@ -148,6 +160,11 @@ export default function Account() {
       setSaveErr("יש למלא שם.");
       return;
     }
+    const emailTrim = (editEmail || "").trim();
+    if (!emailTrim || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      setSaveErr("אימייל לא תקין.");
+      return;
+    }
     const phoneTrim = (editPhoneNumber || "").trim();
     if (phoneTrim && !/^[0-9+\-()\s]{7,20}$/.test(phoneTrim)) {
       setSaveErr("מספר טלפון לא תקין.");
@@ -156,30 +173,65 @@ export default function Account() {
 
     try {
       setSaving(true);
+
+      // 1) עדכון שם ב־Auth אם השתנה
+      if (user.displayName !== nameTrim) {
+        await updateProfile(user, { displayName: nameTrim });
+      }
+
+      // 2) עדכון אימייל ב־Auth אם השתנה
+      if (emailTrim && user.email !== emailTrim) {
+        try {
+          await updateEmail(user, emailTrim);
+        } catch (err) {
+          if (err?.code === "auth/requires-recent-login") {
+            if (reauthPassword) {
+              const cred = EmailAuthProvider.credential(user.email, reauthPassword);
+              await reauthenticateWithCredential(user, cred);
+              await updateEmail(user, emailTrim);
+            } else {
+              throw new Error("נדרש אימות מחדש לשינוי אימייל. הזן/י סיסמה ולאחר מכן נסה/י שוב.");
+            }
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      // 3) עדכון פרופיל ב־Firestore (טלפון/חברה + סנכרון שם/אימייל)
       await updateUserProfile(user.uid, {
         displayName: nameTrim,
+        email: emailTrim,
         phoneNumber: phoneTrim,
         company: (editCompany || "").trim(),
+        updatedAt: new Date(),
       });
 
       setProfile((prev) => ({
         ...prev,
         displayName: nameTrim,
+        email: emailTrim,
         phoneNumber: phoneTrim,
         company: (editCompany || "").trim(),
       }));
+
+      // רענון אובייקט המשתמש בזיכרון (למקרה שהאימייל/שם שונו)
+      if (user && user.reload) {
+        await user.reload();
+      }
+
       setSaveMsg("השינויים נשמרו בהצלחה.");
       setTimeout(() => setShowEdit(false), 600);
     } catch (err) {
       console.error(err);
-      setSaveErr("שמירה נכשלה. נסו שוב.");
+      setSaveErr(err?.message || "שמירה נכשלה. נסו שוב.");
     } finally {
       setSaving(false);
       window.setTimeout(() => { setSaveMsg(null); setSaveErr(null); }, 4000);
     }
   }
 
-  // ⬇️ NEW: שליחת מייל בדיקה דרך פונקציה עננית
+  // שליחת מייל בדיקה דרך פונקציית הענן
   async function handleSendTestEmail() {
     setMailErr(null);
     setMailMsg(null);
@@ -187,7 +239,6 @@ export default function Account() {
       setMailBusy(true);
       const functions = getFunctions(app, "europe-west1");
       const testSendEmail = httpsCallable(functions, "testSendEmail");
-      // ננסה לשלוח גם למשתמש (אם יש אימייל), ותמיד יישלח אל מייל החברה
       const res = await testSendEmail({
         to: email || undefined,
         subject: "Karina — בדיקת מייל",
@@ -225,7 +276,7 @@ export default function Account() {
               עריכת פרטים
             </button>
 
-            {/* ⬇️ NEW: כפתור בדיקת מייל + חיווי */}
+            {/* כפתור בדיקת מייל + חיווי */}
             <button
               className="btn btn-outline-secondary"
               onClick={handleSendTestEmail}
@@ -265,22 +316,78 @@ export default function Account() {
 
                   <div className="mb-3">
                     <label className="form-label fw-semibold">שם מלא</label>
-                    <input type="text" className="form-control" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="לדוגמה: יעל כהן" required disabled={saving} />
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="לדוגמה: יעל כהן"
+                      required
+                      disabled={saving}
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold">אימייל</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      required
+                      disabled={saving}
+                    />
                   </div>
 
                   <div className="mb-3">
                     <label className="form-label fw-semibold">מספר טלפון</label>
-                    <input type="tel" className="form-control" value={editPhoneNumber} onChange={(e) => setEditPhoneNumber(e.target.value)} placeholder="לדוגמה: 050-1234567" disabled={saving} />
+                    <input
+                      type="tel"
+                      className="form-control"
+                      value={editPhoneNumber}
+                      onChange={(e) => setEditPhoneNumber(e.target.value)}
+                      placeholder="לדוגמה: 050-1234567"
+                      disabled={saving}
+                    />
                   </div>
 
                   <div className="mb-0">
                     <label className="form-label fw-semibold">שם חברה</label>
-                    <input type="text" className="form-control" value={editCompany} onChange={(e) => setEditCompany(e.target.value)} placeholder="לדוגמה: קארינה בע״מ" disabled={saving} />
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editCompany}
+                      onChange={(e) => setEditCompany(e.target.value)}
+                      placeholder="לדוגמה: קארינה בע״מ"
+                      disabled={saving}
+                    />
+                  </div>
+
+                  <div className="form-text mt-3">
+                    שינוי אימייל עלול לדרוש אימות מחדש. אם תתבקש/י — הזן/י סיסמה כאן ושמור/י שוב.
+                  </div>
+                  <div className="mb-0">
+                    <label className="form-label fw-semibold">סיסמה (לאימות שינוי אימייל אם נדרש)</label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      value={reauthPassword}
+                      onChange={(e) => setReauthPassword(e.target.value)}
+                      placeholder="הקלד/י סיסמה לחשבון"
+                      disabled={saving}
+                      autoComplete="current-password"
+                    />
                   </div>
                 </div>
 
                 <div className="modal-footer">
-                  <button type="button" className="btn btn-outline-secondary" onClick={() => !saving && setShowEdit(false)} disabled={saving}>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => !saving && setShowEdit(false)}
+                    disabled={saving}
+                  >
                     ביטול
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={saving}>

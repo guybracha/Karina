@@ -1,5 +1,5 @@
 // src/pages/Checkout.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ref, uploadBytes, uploadString, getDownloadURL } from "firebase/storage";
 import { storage, auth, ensureAuthTokenFresh } from "../firebase";
@@ -8,6 +8,9 @@ import { useLogosQueue } from "../contexts/LogosQueueContext.tsx";
 const LS_CART_KEY = "karina:cart";
 const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
 
+/* =========================
+   Helpers: cart + previews
+========================= */
 function useCartFallback() {
   const lsCart = (() => {
     try {
@@ -31,7 +34,7 @@ function useCartFallback() {
   return { items, totals: { merchandiseTotal, shippingCost: 0, grandTotal: merchandiseTotal } };
 }
 
-// עזרי dataURL
+// dataURL helpers
 function approxBytesFromDataUrl(dataUrl = "") {
   if (!dataUrl) return 0;
   const b64 = dataUrl.split(",")[1] || "";
@@ -42,7 +45,7 @@ function contentTypeFromDataUrl(dataUrl = "") {
   return m?.[1] || "image/png";
 }
 
-// POST עם ID Token (מומלץ)
+// Authorized POST with Firebase ID token
 async function authorizedPostJson(url, body) {
   await ensureAuthTokenFresh();
   const token = await auth.currentUser?.getIdToken();
@@ -57,6 +60,65 @@ async function authorizedPostJson(url, body) {
   return data;
 }
 
+/* =========================
+   Credit2000 iFrame helpers
+========================= */
+// מחלץ את קטע ה-HTML של האייפריים מתוך SOAP
+function extractIframeHtmlFromSoap(soapXml) {
+  if (!soapXml) return null;
+  const m = soapXml.match(/<SendParamToCredit2000Result>([\s\S]*?)<\/SendParamToCredit2000Result>/i);
+  return m ? m[1] : null;
+}
+
+// מסיר HTML-escape ומוציא את ה-src מתוך תג ה-iframe
+function extractRedirectUrlFromIframeHtml(iframeHtml) {
+  if (!iframeHtml) return null;
+  const unescaped = iframeHtml
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&amp;", "&")
+    .trim();
+  const m = unescaped.match(/src="([^"]+)"/i);
+  return m ? m[1] : null;
+}
+
+/* =========================
+   Responsive iframe wrapper
+========================= */
+function ResponsiveIframe({ src, title = "Credit2000", onLoad }) {
+  // יחס 4:3 (גובה = 75% מהרוחב) + מינ' גובה — רספונסיבי
+  const containerStyle = {
+    position: "relative",
+    width: "100%",
+    paddingTop: "75%",
+    borderRadius: 12,
+    border: "1px solid rgba(0,0,0,.08)",
+    overflow: "hidden",
+    background: "rgba(0,0,0,.02)",
+  };
+  const iframeStyle = {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    border: 0,
+    display: "block",
+  };
+  return (
+    <div className="cc-frame" style={containerStyle}>
+      <iframe
+        title={title}
+        src={src}
+        style={iframeStyle}
+        scrolling="no"
+        allow="payment *"
+        onLoad={onLoad}
+      />
+    </div>
+  );
+}
+
 export default function Checkout() {
   const { state } = useLocation() || {};
   const fallback = useCartFallback();
@@ -67,7 +129,7 @@ export default function Checkout() {
 
   const grandTotal = totals?.grandTotal ?? items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
 
-  // פרטי טופס + תשלומים
+  // form + payments
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -76,11 +138,20 @@ export default function Checkout() {
     city: shipping?.address?.city || "",
     zip: shipping?.address?.zip || "",
     payment: "credit",
-    paymentsNumber: 1,     // ← כמה תשלומים
-    firstPayment: "",      // ← תשלום ראשון (אופציונלי בש"ח)
+    paymentsNumber: 1,
+    firstPayment: "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  // הטמעת תשלום
+  const [iframeSrc, setIframeSrc] = useState("");
+  const [iframeReady, setIframeReady] = useState(false);
+  const iframeBoxRef = useRef(null);
+
+  // ↪️ תוצאה מה־iframe (הודעת חזרה)
+  const [paymentResult, setPaymentResult] = useState({ status: null, txId: null });
+  const [currentOrderId, setCurrentOrderId] = useState(null);
 
   const { takeOriginalFromMemory } = useLogosQueue();
 
@@ -137,7 +208,9 @@ export default function Checkout() {
     return results;
   }
 
-  // קריאה ל־Cloud Function שמחזירה redirectUrl
+  /* =========================
+     Credit2000 start (embed)
+  ========================= */
   async function startCredit2000Payment({ amount, orderId, clientName, paymentsNumber = 1, firstPayment }) {
     const endpoint = "https://europe-west1-karina-web.cloudfunctions.net/credit2000Start";
     const payload = {
@@ -145,17 +218,28 @@ export default function Checkout() {
       clientName: clientName || "לקוח/ה",
       productId: String(orderId || 9999),
       paymentsNumber,
-      // שלח firstPayment רק אם יש ערך חוקי
       ...(firstPayment != null && firstPayment !== "" ? { firstPayment: Number(firstPayment) } : {}),
       uid: auth.currentUser?.uid || "",
     };
+
     const data = await authorizedPostJson(endpoint, payload);
-    if (data.redirectUrl) return data.redirectUrl;
-    console.warn("Credit2000 raw response:", data.raw);
-    throw new Error("לא התקבל redirectUrl מהסליקה (ראה קונסול).");
+
+    if (data.redirectUrl) return { redirectUrl: data.redirectUrl };
+    if (data.iframeHtml) {
+      const src = extractRedirectUrlFromIframeHtml(data.iframeHtml);
+      if (src) return { redirectUrl: src };
+    }
+    if (data.soap || data.raw) {
+      const iframeHtml = extractIframeHtmlFromSoap(data.soap || data.raw);
+      const src = extractRedirectUrlFromIframeHtml(iframeHtml);
+      if (src) return { redirectUrl: src };
+    }
+
+    console.warn("Credit2000 raw response:", data);
+    throw new Error("לא נמצא redirectUrl/iframe בתשובת Credit2000");
   }
 
-  // חישוב אינפורמטיבי ללקוח כשנבחרו תשלומים
+  // installments info (UI only)
   const installmentsInfo = useMemo(() => {
     const n = Number(form.paymentsNumber) || 1;
     const first = form.firstPayment === "" ? null : Number(form.firstPayment);
@@ -169,12 +253,10 @@ export default function Checkout() {
       return { first, count: n, per: Math.max(0, per) };
     }
 
-    // בלי תשלום ראשון – חלוקה שווה
     const per = total / n;
     return { first: per, count: n, per };
   }, [form.paymentsNumber, form.firstPayment, grandTotal]);
 
-  // ולידציה בסיסית לתשלומים לפני קריאה לסליקה
   function validateInstallments() {
     const n = Number(form.paymentsNumber) || 1;
     if (n < 1 || n > 12) return "מספר התשלומים חייב להיות בין 1 ל-12.";
@@ -195,26 +277,36 @@ export default function Checkout() {
       if (!auth.currentUser?.uid) throw new Error("עליך להתחבר לפני השלמת ההזמנה.");
       await ensureAuthTokenFresh();
 
-      // ולידציית תשלומים לפני העלאות/סליקה
       const errI = validateInstallments();
       if (errI) throw new Error(errI);
 
-      // העלאות (אם יש)
       await uploadOriginalLogoIfAvailable().catch(() => null);
       await uploadMockupsForCart().catch(() => []);
 
-      // מזהה הזמנה (רצוי אמיתי משרת/Firestore)
+      // מזהה הזמנה (אם אין מהניווט – דמו/זמן)
       const orderId = state?.orderId || Math.floor(Date.now() / 1000);
+      setCurrentOrderId(orderId);
 
       if (form.payment === "credit") {
-        const redirectUrl = await startCredit2000Payment({
+        // Embed במקום Redirect
+        const { redirectUrl } = await startCredit2000Payment({
           amount: Number(grandTotal || 0),
           orderId,
           clientName: form.fullName?.trim(),
           paymentsNumber: Number(form.paymentsNumber) || 1,
           firstPayment: form.firstPayment === "" ? undefined : Number(form.firstPayment),
         });
-        window.location.assign(redirectUrl);
+
+        if (!/^https:\/\//i.test(redirectUrl)) {
+          throw new Error("כתובת האייפריים אינה https.");
+        }
+
+        // איפוס תוצאות קודמות והצגה
+        setPaymentResult({ status: null, txId: null });
+        setIframeSrc(redirectUrl);
+        setIframeReady(false);
+        // גלילה עדינה לאזור האשראי
+        setTimeout(() => iframeBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
         return;
       }
 
@@ -234,9 +326,116 @@ export default function Checkout() {
 
   const lineTotal = (it) => (Number(it.price) || 0) * (Number(it.qty) || 0);
 
+  // כפתור חזרה מהאייפריים
+  const handleCloseIframe = useCallback(() => {
+    setIframeSrc("");
+    setIframeReady(false);
+  }, []);
+
+  /* =========================
+     מאזין ל-postMessage מה-Return URL
+     מחפש: { type: "payment:success"| "payment:failure", provider:"credit2000", orderId?, txId? }
+  ========================= */
+  useEffect(() => {
+    function onMessage(e) {
+      // אופציונלי: לסנן לפי מקור. לדוגמה, אם ה־Return יושב ב- Cloud Functions:
+      // if (!String(e.origin).includes("cloudfunctions.net") && !String(e.origin).includes("credit2000.co.il")) return;
+
+      const data = e?.data;
+      if (!data || typeof data !== "object") return;
+
+      if (data.provider === "credit2000" && typeof data.type === "string" && data.type.startsWith("payment:")) {
+        const ok = data.type === "payment:success";
+        // סוגרים את האייפריים ומציגים חיווי
+        setIframeSrc("");
+        setIframeReady(false);
+        setPaymentResult({ status: ok ? "success" : "failure", txId: data.txId || null });
+        // גלילה לראש העמוד כדי לראות את הבאנר
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
   return (
     <div className="container py-5">
+      {/* CSS רספונסיבי לאייפריים (יחס-צד + min-height) */}
+      <style>{`
+        .cc-frame { min-height: 380px; }
+        @media (max-width: 576px) {
+          .cc-frame { padding-top: 95%; min-height: 420px; } /* יותר גובה במסכים צרים */
+        }
+        @media (min-width: 577px) and (max-width: 991px) {
+          .cc-frame { padding-top: 80%; min-height: 400px; } /* טאבלטים */
+        }
+        @media (min-width: 1200px) {
+          .cc-frame { padding-top: 66.66%; min-height: 420px; } /* ~3:2 בדסקטופ רחב */
+        }
+      `}</style>
+
       <h1 className="mb-4">תשלום והזמנה</h1>
+
+      {/* 🔔 הודעת חזרה מתשלום */}
+      {paymentResult.status === "success" && (
+        <div className="alert alert-success d-flex justify-content-between align-items-center" role="alert">
+          <div>
+            ✅ התשלום התקבל בהצלחה{currentOrderId ? ` להזמנה #${currentOrderId}` : ""}.
+            {paymentResult.txId ? <> מספר עסקה: <strong>{paymentResult.txId}</strong>.</> : null}
+          </div>
+          <div className="d-flex gap-2">
+            <Link to={currentOrderId ? `/orders/${currentOrderId}` : "/orders"} className="btn btn-sm btn-outline-light">
+              לצפייה בהזמנה
+            </Link>
+            <Link to="/catalog" className="btn btn-sm btn-light">
+              המשך בקניות
+            </Link>
+          </div>
+        </div>
+      )}
+      {paymentResult.status === "failure" && (
+        <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
+          <div>
+            ❌ התשלום נכשל. ניתן לנסות שוב או לבחור אמצעי תשלום אחר.
+            {paymentResult.txId ? <> (מס׳ עסקה: <strong>{paymentResult.txId}</strong>)</> : null}
+          </div>
+          <button className="btn btn-sm btn-outline-light" onClick={() => setPaymentResult({ status: null, txId: null })}>
+            הסתר
+          </button>
+        </div>
+      )}
+
+      {/* תיבת הטמעת האשראי (מופיעה אחרי submit מוצלח) */}
+      {iframeSrc && (
+        <div className="card shadow-sm p-3 mb-4">
+          <div className="d-flex justify-content-between align-items-center">
+            <h5 className="m-0">תשלום בכרטיס – עמוד מאובטח (Credit2000)</h5>
+            <button className="btn btn-outline-secondary btn-sm" onClick={handleCloseIframe}>
+              חזרה
+            </button>
+          </div>
+
+          <div ref={iframeBoxRef} className="mt-3 position-relative">
+            {!iframeReady && (
+              <div className="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ background: "rgba(255,255,255,.6)", zIndex: 2 }}>
+                <div className="spinner-border" role="status" aria-hidden="true" />
+                <span className="ms-2">טוען מסך סליקה…</span>
+              </div>
+            )}
+
+            <ResponsiveIframe
+              src={iframeSrc}
+              title="Credit2000"
+              onLoad={() => setIframeReady(true)}
+            />
+          </div>
+
+          <small className="text-muted d-block mt-2">
+            אם יש לך Content-Security-Policy באתר, ודא שהדומיין של Credit2000 מותר תחת <code>frame-src</code>{" "}
+            (למשל: <code>https://www.credit2000.co.il</code>).
+          </small>
+        </div>
+      )}
 
       <div className="row g-4">
         {/* טופס פרטים אישיים + תשלומים */}
@@ -279,7 +478,7 @@ export default function Checkout() {
             <h5 className="mt-4 mb-2">שיטת תשלום</h5>
             <div className="form-check mb-2">
               <input className="form-check-input" type="radio" name="payment" value="credit" checked={form.payment === "credit"} onChange={handleChange} id="payCredit" />
-              <label className="form-check-label" htmlFor="payCredit">כרטיס אשראי (עמוד מאובטח)</label>
+              <label className="form-check-label" htmlFor="payCredit">כרטיס אשראי (עמוד מאובטח באייפריים)</label>
             </div>
             <div className="form-check mb-2">
               <input className="form-check-input" type="radio" name="payment" value="paypal" checked={form.payment === "paypal"} onChange={handleChange} id="payPaypal" />
@@ -290,7 +489,6 @@ export default function Checkout() {
               <label className="form-check-label" htmlFor="payCash">מזומן בעת מסירה</label>
             </div>
 
-            {/* ⚠️ לא אוספים מספר כרטיס אצלך באתר. רק בחירה של תשלומים/תשלום ראשון */}
             {form.payment === "credit" && (
               <div className="border rounded-3 p-3 mb-3">
                 <h6 className="mb-3">העדפות תשלום בכרטיס</h6>
@@ -336,7 +534,7 @@ export default function Checkout() {
                   </div>
                 )}
                 <small className="text-muted d-block mt-2">
-                  פרטי הכרטיס יוזנו בעמוד הסליקה המאובטח של Credit2000.
+                  פרטי הכרטיס יוזנו בעמוד הסליקה המאובטח של Credit2000 (מוטמע באייפריים).
                 </small>
               </div>
             )}
@@ -362,7 +560,7 @@ export default function Checkout() {
                       x{it.qty}{it.color ? ` • ${it.color}` : ""}{it.size ? ` • ${it.size}` : ""}
                     </small>
                   </div>
-                  <div>{lineTotal(it)} ₪</div>
+                  <div>{(Number(it.price) || 0) * (Number(it.qty) || 0)} ₪</div>
                 </li>
               ))}
             </ul>

@@ -130,7 +130,7 @@ export default function HomePage() {
           <div className="row justify-content-center">
             <div className="col-12 col-xl-10 text-center">
               <div className="badge bg-white text-dark fw-semibold shadow-soft mb-3 hero-badge">
-                <i className="bi bi-stars me-1" aria-hidden="true" /> קרינה – חולצות מודפסות לעסקים וצוותים
+                <i className="bi bi-stars me-1" aria-hidden="true" /> קארינה – חולצות מודפסות לעסקים וצוותים
               </div>
 
               {/* הסרתי display-5 כדי לאפשר גודל זורם מה-CSS (clamp) */}
@@ -177,7 +177,7 @@ export default function HomePage() {
           </header>
 
           <div className="row g-4 text-center text-md-start" role="list">
-            {FEATURES.map((f, i) => (
+            {FEATURES.map((f) => (
               <div key={f.title} className="col-6 col-lg-4" role="listitem">
                 <div className="usp d-flex align-items-center justify-content-center justify-content-md-start gap-3">
                   <span className="usp-icon" aria-hidden="true">
@@ -339,6 +339,202 @@ export default function HomePage() {
                 </article>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== מי אנחנו ===== */}
+      <section className="py-6 bg-body-tertiary position-relative overflow-hidden">
+        <div className="shape-blur-1" aria-hidden="true" />
+        <div className="container">
+          <div className="row g-4 align-items-center">
+            <div className="col-12 col-lg-6">
+              <div className="glass-card p-4 p-md-5 h-100">
+                <span className="badge bg-primary-subtle text-primary-emphasis mb-2">
+                  <i className="bi bi-people-fill me-1" /> מי אנחנו
+                </span>
+                <h2 className="h3 fw-bold mb-2">קרינה – הדפסות לעסקים וצוותים</h2>
+                <p className="text-muted mb-3">
+                  אנחנו סטודיו קטן-בינוני עם סטנדרט של גדול: טכנולוגיית הדפסה מתקדמת (DTF, רקמה, סובלימציה),
+                  בקרת איכות ידנית לכל הזמנה, ושירות אנושי אמיתי מרגע הסקיצה ועד שהחבילה אצלכם.
+                </p>
+                <ul className="list-unstyled m-0">
+                  <li className="d-flex align-items-start gap-2 mb-2">
+                    <i className="bi bi-check2-circle text-success mt-1" aria-hidden="true" />
+                    <span>אלפי פריטים שסופקו לצוותים, עמותות ועסקים בארץ</span>
+                  </li>
+                  <li className="d-flex align-items-start gap-2 mb-2">
+                    <i className="bi bi-check2-circle text-success mt-1" aria-hidden="true" />
+                    <span>סטודיו עיצוב פנימי להדמיות מהירות וחדות</span>
+                  </li>
+                  <li className="d-flex align-items-start gap-2">
+                    <i className="bi bi-check2-circle text-success mt-1" aria-hidden="true" />
+                    <span>מענה מהיר בוואטסאפ/מייל והובלה בלוחות זמנים</span>
+                  </li>
+                </ul>
+                <div className="mt-3 d-flex gap-2">
+                  <NavLink to="/contact" className="btn btn-primary">בואו נכיר</NavLink>
+                  <NavLink to="/catalog" className="btn btn-outline-primary">עיינו בקטלוג</NavLink>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-12 col-lg-6">
+              <div className="about-photo-grid">
+                <figure className="about-photo main">
+                  <img src={banner} alt="סטודיו עבודה והדפסות בפעולה" loading="lazy" decoding="async" />
+                </figure>
+                <figure className="about-photo sub a">
+                  <img src={banner} alt="דוגמת הדפס קרוב" loading="lazy" decoding="async" />
+                </figure>
+                <figure className="about-photo sub b">
+                  <img src={banner} alt="אריזות ומשלוחים מוכנים" loading="lazy" decoding="async" />
+                </figure>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== למה דווקא אנחנו (מוקטן + KPIs) ===== */}
+      <section className="py-6">
+        <div className="container">
+          <header className="text-center mb-4">
+            <h2 className="h3 fw-bold">למה לבחור דווקא בקרינה?</h2>
+            <p className="text-muted m-0">תכל’ס: שילוב של איכות, דיוק ושירות.</p>
+          </header>
+
+          <div className="row g-4">
+            {[
+              { icon:"bi-shield-check", title:"אחריות על ההדפסה", text:"התחייבות לאיכות גימור ושמירת צבעים" },
+              { icon:"bi-aspect-ratio", title:"הדמיה לפני ייצור", text:"מאשרים הדמיה – ואז מדפיסים" },
+              { icon:"bi-lightning-charge", title:"מהירות תגובה", text:"זמינות לשיחה/וואטסאפ והנעת תהליך" },
+              { icon:"bi-recycle", title:"חומרים חזקים", text:"בדים וצבעים שמחזיקים כביסות ושחיקה" },
+            ].map(item => (
+              <div key={item.title} className="col-6 col-lg-3">
+                <div className="why-card text-center p-4 h-100">
+                  <i className={`bi ${item.icon} why-icon`} aria-hidden="true" />
+                  <h3 className="h6 fw-bold mt-2 mb-1">{item.title}</h3>
+                  <p className="text-muted small m-0">{item.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="stats-wrap mt-4">
+            <div className="stat">
+              <div className="stat-num">10k+</div>
+              <div className="stat-label">פריטים שסופקו</div>
+            </div>
+            <div className="stat">
+              <div className="stat-num">4.9★</div>
+              <div className="stat-label">דירוג ממוצע לקוחות</div>
+            </div>
+            <div className="stat">
+              <div className="stat-num">48–72ש׳</div>
+              <div className="stat-label">הדמיה ראשונה</div>
+            </div>
+            <div className="stat">
+              <div className="stat-num">100%</div>
+              <div className="stat-label">בקרת איכות לפני משלוח</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== ההשקעה שלנו – טיימליין ===== */}
+      <section className="py-6 bg-body">
+        <div className="container">
+          <header className="text-center mb-4">
+            <h2 className="h4 fw-bold">ההשקעה שלנו בכל הזמנה</h2>
+            <p className="text-muted m-0">שקיפות בתהליך – צעד-צעד.</p>
+          </header>
+
+          <ol className="timeline">
+            <li>
+              <div className="dot" aria-hidden="true" />
+              <h3 className="h6 m-0">קבלת לוגו וקבצים</h3>
+              <p className="text-muted small m-0">בדיקת איכות/פורמט והמלצה על טכניקת הדפסה.</p>
+            </li>
+            <li>
+              <div className="dot" aria-hidden="true" />
+              <h3 className="h6 m-0">הדמיה מדויקת</h3>
+              <p className="text-muted small m-0">מידות, מיקומים, צבעים—מאשרים לפני ייצור.</p>
+            </li>
+            <li>
+              <div className="dot" aria-hidden="true" />
+              <h3 className="h6 m-0">בדיקות לפני הדפסה</h3>
+              <p className="text-muted small m-0">התאמת צבעים ובדיקה ידנית של חומרים.</p>
+            </li>
+            <li>
+              <div className="dot" aria-hidden="true" />
+              <h3 className="h6 m-0">הדפסה ובקרת איכות</h3>
+              <p className="text-muted small m-0">סקירת גימור לכל יחידה ומדבקות זיהוי.</p>
+            </li>
+            <li>
+              <div className="dot" aria-hidden="true" />
+              <h3 className="h6 m-0">אריזה ומשלוח</h3>
+              <p className="text-muted small m-0">אריזה נקייה, תווית בקרה, שליחה לכל הארץ.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      {/* ===== לקוחות מספרים + לוגואים ===== */}
+      <section className="py-6">
+        <div className="container">
+          <header className="text-center mb-4">
+            <h2 className="h4 fw-bold">מה הלקוחות שלנו אומרים</h2>
+            <p className="text-muted m-0">קצת פידבק מהשטח.</p>
+          </header>
+
+          <div className="row g-4">
+            {[
+              {name:"נועה, מנהלת משאבי אנוש", text:"הדמיה מהירה ומדויקת, אספקה זריזה – כל הצוות התאהב בחולצות."},
+              {name:"אמיר, בעל סטארטאפ", text:"שירות אלוף. עזרו לנו לבחור טכניקה שהחמיאה ללוגו."},
+              {name:"טל, עמותה", text:"מחיר הוגן, איכות מעולה והכי חשוב – יחס אנושי וסבלני."},
+            ].map(t => (
+              <div key={t.name} className="col-12 col-md-4">
+                <blockquote className="quote-card h-100">
+                  <i className="bi bi-quote quote-icon" aria-hidden="true" />
+                  <p className="m-0">{t.text}</p>
+                  <footer className="mt-2 text-muted small">— {t.name}</footer>
+                </blockquote>
+              </div>
+            ))}
+          </div>
+
+          <div className="logos-marquee mt-4" aria-label="מותגים שעבדנו איתם">
+            <div className="track">
+              {Array.from({length:10}).map((_,i)=>(
+                <span key={i} className="logo-pill"><i className="bi bi-building me-1" />Brand {i+1}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== שאלות נפוצות ===== */}
+      <section className="py-6 bg-body-tertiary">
+        <div className="container">
+          <h2 className="h4 fw-bold text-center mb-4">שאלות נפוצות</h2>
+          <div className="accordion" id="faq">
+            {[
+              {q:"כמה זמן לוקח לקבל הדמיה?", a:"בד״כ 48–72 שעות עסקים מרגע קבלת קבצים תקינים."},
+              {q:"באילו טכניקות אתם משתמשים?", a:"DTF, רקמה וסובלימציה – נבחר יחד את הטכניקה שמתאימה לבד וללוגו."},
+              {q:"האם יש אחריות על ההדפסה?", a:"כן, אנחנו עומדים מאחורי איכות ההדפסה ובקרת האיכות בכל הזמנה."},
+            ].map((item, idx)=>(
+              <div className="accordion-item" key={idx}>
+                <h3 className="accordion-header" id={`faq-h${idx}`}>
+                  <button className="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target={`#faq-c${idx}`} aria-expanded="false" aria-controls={`faq-c${idx}`}>
+                    {item.q}
+                  </button>
+                </h3>
+                <div id={`faq-c${idx}`} className="accordion-collapse collapse" data-bs-parent="#faq" aria-labelledby={`faq-h${idx}`}>
+                  <div className="accordion-body text-muted">{item.a}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
