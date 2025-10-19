@@ -13,6 +13,7 @@ import { PRODUCTS } from "../lib/products";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import ProductSEO from "../components/seo/ProductSEO.js";
 
 // LS keys (שומרים רק מטא־דאטה של הלוגו שהועלה ל-Storage)
 const LS_LOGO_STORAGE_KEY = (side) => `karina:logoStorage:${side}`;
@@ -577,6 +578,16 @@ export default function ProductDetail() {
           </>
         )}
       </div>
+      <ProductSEO
+  product={product}
+  canonical={canonical}
+  origin={origin}
+  description={description}
+  shownImage={shownImage}
+  canUploadLogo={canUploadLogo}
+  displayAvg={displayAvg}
+  displayCount={displayCount}
+/>
     </LogosQueueProvider>
   );
 }

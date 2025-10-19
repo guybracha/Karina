@@ -275,18 +275,6 @@ export default function Account() {
             <button className="btn btn-outline-primary" onClick={() => setShowEdit(true)} disabled={loadingProfile}>
               עריכת פרטים
             </button>
-
-            {/* כפתור בדיקת מייל + חיווי */}
-            <button
-              className="btn btn-outline-secondary"
-              onClick={handleSendTestEmail}
-              disabled={mailBusy}
-              title="שליחת מייל בדיקה דרך פונקציית הענן"
-            >
-              {mailBusy ? "שולח מייל..." : "שלח מייל בדיקה"}
-            </button>
-            {mailMsg && <div className="text-success small">{mailMsg}</div>}
-            {mailErr && <div className="text-danger small">{mailErr}</div>}
           </div>
         </div>
       </div>

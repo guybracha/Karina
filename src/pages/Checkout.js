@@ -55,7 +55,9 @@ async function authorizedPostJson(url, body) {
   };
   const r = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
   let data = {};
-  try { data = await r.json(); } catch {}
+  try {
+    data = await r.json();
+  } catch {}
   if (!r.ok) throw new Error(data?.error || `request_failed (${r.status})`);
   return data;
 }
@@ -107,14 +109,7 @@ function ResponsiveIframe({ src, title = "Credit2000", onLoad }) {
   };
   return (
     <div className="cc-frame" style={containerStyle}>
-      <iframe
-        title={title}
-        src={src}
-        style={iframeStyle}
-        scrolling="no"
-        allow="payment *"
-        onLoad={onLoad}
-      />
+      <iframe title={title} src={src} style={iframeStyle} scrolling="no" allow="payment *" onLoad={onLoad} />
     </div>
   );
 }
@@ -127,9 +122,10 @@ export default function Checkout() {
   const shipping = state?.shipping || { method: "pickup", label: "איסוף מהמפעל", cost: 0, address: {} };
   const totals = state?.totals || fallback.totals;
 
-  const grandTotal = totals?.grandTotal ?? items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+  const grandTotal =
+    totals?.grandTotal ?? items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
 
-  // form + payments
+  // form
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -137,9 +133,6 @@ export default function Checkout() {
     address: shipping?.address?.address || "",
     city: shipping?.address?.city || "",
     zip: shipping?.address?.zip || "",
-    payment: "credit",
-    paymentsNumber: 1,
-    firstPayment: "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -157,12 +150,12 @@ export default function Checkout() {
 
   function handleChange(e) {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: name === "paymentsNumber" ? Number(value) : value }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   async function uploadOriginalLogoIfAvailable() {
     const idFront = localStorage.getItem("karina:logoId:front");
-    const idBack  = localStorage.getItem("karina:logoId:back");
+    const idBack = localStorage.getItem("karina:logoId:back");
     const logoId = idFront || idBack;
     if (!logoId) return null;
 
@@ -189,9 +182,9 @@ export default function Checkout() {
       const slug = it.slug;
       if (!slug) continue;
       const front = localStorage.getItem(LS_PREVIEW_KEY(slug, "front"));
-      const back  = localStorage.getItem(LS_PREVIEW_KEY(slug, "back"));
+      const back = localStorage.getItem(LS_PREVIEW_KEY(slug, "back"));
       if (front) perProduct.set(`${slug}:front`, front);
-      if (back)  perProduct.set(`${slug}:back`, back);
+      if (back) perProduct.set(`${slug}:back`, back);
     }
 
     const results = [];
@@ -203,7 +196,14 @@ export default function Checkout() {
       const r = ref(storage, path);
       const snap = await uploadString(r, dataUrl, "data_url", { contentType: ct });
       const url = await getDownloadURL(snap.ref);
-      results.push({ slug, side, path, url, bytes: approxBytesFromDataUrl(dataUrl), contentType: ct });
+      results.push({
+        slug,
+        side,
+        path,
+        url,
+        bytes: approxBytesFromDataUrl(dataUrl),
+        contentType: ct,
+      });
     }
     return results;
   }
@@ -211,15 +211,14 @@ export default function Checkout() {
   /* =========================
      Credit2000 start (embed)
   ========================= */
-  async function startCredit2000Payment({ amount, orderId, clientName, paymentsNumber = 1, firstPayment }) {
+  async function startCredit2000Payment({ amount, orderId, clientName }) {
     const endpoint = "https://europe-west1-karina-web.cloudfunctions.net/credit2000Start";
     const payload = {
-      amount,                                 // ₪ (float)
+      amount, // ₪ (float)
       clientName: clientName || "לקוח/ה",
       productId: String(orderId || 9999),
-      paymentsNumber,
-      ...(firstPayment != null && firstPayment !== "" ? { firstPayment: Number(firstPayment) } : {}),
       uid: auth.currentUser?.uid || "",
+      // אין כאן paymentsNumber/firstPayment: הבחירה תתבצע במסך הסליקה של Credit2000
     };
 
     const data = await authorizedPostJson(endpoint, payload);
@@ -239,35 +238,6 @@ export default function Checkout() {
     throw new Error("לא נמצא redirectUrl/iframe בתשובת Credit2000");
   }
 
-  // installments info (UI only)
-  const installmentsInfo = useMemo(() => {
-    const n = Number(form.paymentsNumber) || 1;
-    const first = form.firstPayment === "" ? null : Number(form.firstPayment);
-    const total = Number(grandTotal) || 0;
-
-    if (n <= 1) return null;
-
-    if (first != null && isFinite(first) && first >= 0 && first <= total) {
-      const rest = Math.max(0, total - first);
-      const per = n > 1 ? rest / (n - 1) : 0;
-      return { first, count: n, per: Math.max(0, per) };
-    }
-
-    const per = total / n;
-    return { first: per, count: n, per };
-  }, [form.paymentsNumber, form.firstPayment, grandTotal]);
-
-  function validateInstallments() {
-    const n = Number(form.paymentsNumber) || 1;
-    if (n < 1 || n > 12) return "מספר התשלומים חייב להיות בין 1 ל-12.";
-    if (n > 1 && form.firstPayment !== "") {
-      const first = Number(form.firstPayment);
-      if (!isFinite(first) || first < 0) return "תשלום ראשון חייב להיות מספר תקין.";
-      if (first > grandTotal) return "תשלום ראשון לא יכול להיות גדול מהסכום הכולל.";
-    }
-    return null;
-  }
-
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
@@ -277,9 +247,6 @@ export default function Checkout() {
       if (!auth.currentUser?.uid) throw new Error("עליך להתחבר לפני השלמת ההזמנה.");
       await ensureAuthTokenFresh();
 
-      const errI = validateInstallments();
-      if (errI) throw new Error(errI);
-
       await uploadOriginalLogoIfAvailable().catch(() => null);
       await uploadMockupsForCart().catch(() => []);
 
@@ -287,35 +254,24 @@ export default function Checkout() {
       const orderId = state?.orderId || Math.floor(Date.now() / 1000);
       setCurrentOrderId(orderId);
 
-      if (form.payment === "credit") {
-        // Embed במקום Redirect
-        const { redirectUrl } = await startCredit2000Payment({
-          amount: Number(grandTotal || 0),
-          orderId,
-          clientName: form.fullName?.trim(),
-          paymentsNumber: Number(form.paymentsNumber) || 1,
-          firstPayment: form.firstPayment === "" ? undefined : Number(form.firstPayment),
-        });
+      // תמיד תשלום אשראי (Credit2000) ב-iframe:
+      const { redirectUrl } = await startCredit2000Payment({
+        amount: Number(grandTotal || 0),
+        orderId,
+        clientName: form.fullName?.trim(),
+      });
 
-        if (!/^https:\/\//i.test(redirectUrl)) {
-          throw new Error("כתובת האייפריים אינה https.");
-        }
-
-        // איפוס תוצאות קודמות והצגה
-        setPaymentResult({ status: null, txId: null });
-        setIframeSrc(redirectUrl);
-        setIframeReady(false);
-        // גלילה עדינה לאזור האשראי
-        setTimeout(() => iframeBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-        return;
+      if (!/^https:\/\//i.test(redirectUrl)) {
+        throw new Error("כתובת האייפריים אינה https.");
       }
 
-      if (form.payment === "paypal") {
-        alert("תשלום PayPal: ננתב לפי ה־API שלך.");
-        return;
-      }
-
-      alert("תודה! ההזמנה נקלטה בהצלחה.");
+      // איפוס תוצאות קודמות והצגה
+      setPaymentResult({ status: null, txId: null });
+      setIframeSrc(redirectUrl);
+      setIframeReady(false);
+      // גלילה עדינה לאזור האשראי
+      setTimeout(() => iframeBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      return;
     } catch (err) {
       console.error(err);
       setError(err?.message || "תקלה בשליחת ההזמנה");
@@ -381,7 +337,12 @@ export default function Checkout() {
         <div className="alert alert-success d-flex justify-content-between align-items-center" role="alert">
           <div>
             ✅ התשלום התקבל בהצלחה{currentOrderId ? ` להזמנה #${currentOrderId}` : ""}.
-            {paymentResult.txId ? <> מספר עסקה: <strong>{paymentResult.txId}</strong>.</> : null}
+            {paymentResult.txId ? (
+              <>
+                {" "}
+                מספר עסקה: <strong>{paymentResult.txId}</strong>.
+              </>
+            ) : null}
           </div>
           <div className="d-flex gap-2">
             <Link to={currentOrderId ? `/orders/${currentOrderId}` : "/orders"} className="btn btn-sm btn-outline-light">
@@ -397,147 +358,107 @@ export default function Checkout() {
         <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
           <div>
             ❌ התשלום נכשל. ניתן לנסות שוב או לבחור אמצעי תשלום אחר.
-            {paymentResult.txId ? <> (מס׳ עסקה: <strong>{paymentResult.txId}</strong>)</> : null}
+            {paymentResult.txId ? (
+              <>
+                {" "}
+                (מס׳ עסקה: <strong>{paymentResult.txId}</strong>)
+              </>
+            ) : null}
           </div>
-          <button className="btn btn-sm btn-outline-light" onClick={() => setPaymentResult({ status: null, txId: null })}>
+          <button
+            className="btn btn-sm btn-outline-light"
+            onClick={() => setPaymentResult({ status: null, txId: null })}
+          >
             הסתר
           </button>
         </div>
       )}
 
       {/* תיבת הטמעת האשראי (מופיעה אחרי submit מוצלח) */}
-      {iframeSrc && (
-        <div className="card shadow-sm p-3 mb-4">
-          <div className="d-flex justify-content-between align-items-center">
-            <h5 className="m-0">תשלום בכרטיס – עמוד מאובטח (Credit2000)</h5>
-            <button className="btn btn-outline-secondary btn-sm" onClick={handleCloseIframe}>
-              חזרה
-            </button>
-          </div>
-
-          <div ref={iframeBoxRef} className="mt-3 position-relative">
-            {!iframeReady && (
-              <div className="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ background: "rgba(255,255,255,.6)", zIndex: 2 }}>
-                <div className="spinner-border" role="status" aria-hidden="true" />
-                <span className="ms-2">טוען מסך סליקה…</span>
-              </div>
-            )}
-
-            <ResponsiveIframe
-              src={iframeSrc}
-              title="Credit2000"
-              onLoad={() => setIframeReady(true)}
-            />
-          </div>
-
-          <small className="text-muted d-block mt-2">
-            אם יש לך Content-Security-Policy באתר, ודא שהדומיין של Credit2000 מותר תחת <code>frame-src</code>{" "}
-            (למשל: <code>https://www.credit2000.co.il</code>).
-          </small>
-        </div>
-      )}
 
       <div className="row g-4">
-        {/* טופס פרטים אישיים + תשלומים */}
+        {/* טופס פרטים אישיים */}
         <div className="col-lg-7">
           <form onSubmit={handleSubmit} className="card shadow-sm p-4">
             <h5 className="mb-3">פרטים אישיים ומשלוח</h5>
 
             <div className="mb-3">
               <label className="form-label">שם מלא</label>
-              <input type="text" name="fullName" value={form.fullName} onChange={handleChange} className="form-control" required />
+              <input
+                type="text"
+                name="fullName"
+                value={form.fullName}
+                onChange={handleChange}
+                className="form-control"
+                required
+              />
             </div>
 
             <div className="row">
               <div className="col-md-6 mb-3">
                 <label className="form-label">אימייל</label>
-                <input type="email" name="email" value={form.email} onChange={handleChange} className="form-control" required />
+                <input
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  className="form-control"
+                  required
+                />
               </div>
               <div className="col-md-6 mb-3">
                 <label className="form-label">טלפון</label>
-                <input type="tel" name="phone" value={form.phone} onChange={handleChange} className="form-control" required />
+                <input
+                  type="tel"
+                  name="phone"
+                  value={form.phone}
+                  onChange={handleChange}
+                  className="form-control"
+                  required
+                />
               </div>
             </div>
 
             <div className="mb-3">
               <label className="form-label">כתובת</label>
-              <input type="text" name="address" value={form.address} onChange={handleChange} className="form-control" required />
+              <input
+                type="text"
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+                className="form-control"
+                required
+              />
             </div>
 
             <div className="row">
               <div className="col-md-6 mb-3">
                 <label className="form-label">עיר</label>
-                <input type="text" name="city" value={form.city} onChange={handleChange} className="form-control" required />
+                <input
+                  type="text"
+                  name="city"
+                  value={form.city}
+                  onChange={handleChange}
+                  className="form-control"
+                  required
+                />
               </div>
               <div className="col-md-6 mb-3">
                 <label className="form-label">מיקוד</label>
-                <input type="text" name="zip" value={form.zip} onChange={handleChange} className="form-control" />
+                <input
+                  type="text"
+                  name="zip"
+                  value={form.zip}
+                  onChange={handleChange}
+                  className="form-control"
+                />
               </div>
             </div>
 
-            <h5 className="mt-4 mb-2">שיטת תשלום</h5>
-            <div className="form-check mb-2">
-              <input className="form-check-input" type="radio" name="payment" value="credit" checked={form.payment === "credit"} onChange={handleChange} id="payCredit" />
-              <label className="form-check-label" htmlFor="payCredit">כרטיס אשראי (עמוד מאובטח באייפריים)</label>
+            <h5 className="mt-4 mb-2">תשלום</h5>
+            <div className="alert alert-secondary" role="alert">
+              התשלום מתבצע בכרטיס אשראי בלבד. פריסת התשלומים תיבחר במסך הסליקה המאובטח של Credit2000.
             </div>
-            <div className="form-check mb-2">
-              <input className="form-check-input" type="radio" name="payment" value="paypal" checked={form.payment === "paypal"} onChange={handleChange} id="payPaypal" />
-              <label className="form-check-label" htmlFor="payPaypal">PayPal</label>
-            </div>
-            <div className="form-check mb-3">
-              <input className="form-check-input" type="radio" name="payment" value="cash" checked={form.payment === "cash"} onChange={handleChange} id="payCash" />
-              <label className="form-check-label" htmlFor="payCash">מזומן בעת מסירה</label>
-            </div>
-
-            {form.payment === "credit" && (
-              <div className="border rounded-3 p-3 mb-3">
-                <h6 className="mb-3">העדפות תשלום בכרטיס</h6>
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <label className="form-label">מספר תשלומים</label>
-                    <select className="form-select" name="paymentsNumber" value={form.paymentsNumber} onChange={handleChange}>
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">תשלום ראשון (אופציונלי)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      name="firstPayment"
-                      value={form.firstPayment}
-                      onChange={handleChange}
-                      className="form-control"
-                      placeholder="למשל 100.00"
-                      disabled={Number(form.paymentsNumber) <= 1}
-                    />
-                  </div>
-                </div>
-
-                {installmentsInfo && (
-                  <div className="alert alert-info mt-3 mb-0" dir="rtl">
-                    {installmentsInfo.first != null ? (
-                      <>
-                        תשלום ראשון: <strong>{installmentsInfo.first.toFixed(2)} ₪</strong>, ולאחריו{" "}
-                        <strong>{installmentsInfo.count - 1}</strong> תשלומים של{" "}
-                        <strong>{installmentsInfo.per.toFixed(2)} ₪</strong>.
-                      </>
-                    ) : (
-                      <>
-                        {installmentsInfo.count} תשלומים שווים של{" "}
-                        <strong>{installmentsInfo.per.toFixed(2)} ₪</strong>.
-                      </>
-                    )}
-                  </div>
-                )}
-                <small className="text-muted d-block mt-2">
-                  פרטי הכרטיס יוזנו בעמוד הסליקה המאובטח של Credit2000 (מוטמע באייפריים).
-                </small>
-              </div>
-            )}
 
             {error && <div className="alert alert-danger">{error}</div>}
 
@@ -557,7 +478,9 @@ export default function Checkout() {
                   <div>
                     {it.name}{" "}
                     <small className="text-muted">
-                      x{it.qty}{it.color ? ` • ${it.color}` : ""}{it.size ? ` • ${it.size}` : ""}
+                      x{it.qty}
+                      {it.color ? ` • ${it.color}` : ""}
+                      {it.size ? ` • ${it.size}` : ""}
                     </small>
                   </div>
                   <div>{(Number(it.price) || 0) * (Number(it.qty) || 0)} ₪</div>
@@ -589,6 +512,35 @@ export default function Checkout() {
             </Link>
           </div>
         </div>
+        {iframeSrc && (
+        <div className="card shadow-sm p-3 mb-4">
+          <div className="d-flex justify-content-between align-items-center">
+            <h5 className="m-0">תשלום בכרטיס – עמוד מאובטח (Credit2000)</h5>
+            <button className="btn btn-outline-secondary btn-sm" onClick={handleCloseIframe}>
+              חזרה
+            </button>
+          </div>
+
+          <div ref={iframeBoxRef} className="mt-3 position-relative">
+            {!iframeReady && (
+              <div
+                className="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                style={{ background: "rgba(255,255,255,.6)", zIndex: 2 }}
+              >
+                <div className="spinner-border" role="status" aria-hidden="true" />
+                <span className="ms-2">טוען מסך סליקה…</span>
+              </div>
+            )}
+
+            <ResponsiveIframe src={iframeSrc} title="Credit2000" onLoad={() => setIframeReady(true)} />
+          </div>
+
+          <small className="text-muted d-block mt-2">
+            אם יש לך Content-Security-Policy באתר, ודא שהדומיין של Credit2000 מותר תחת <code>frame-src</code>{" "}
+            (למשל: <code>https://www.credit2000.co.il</code>).
+          </small>
+        </div>
+      )}
       </div>
     </div>
   );

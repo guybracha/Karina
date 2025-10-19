@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 import banner from "../img/background.png";
 import { PRODUCTS } from "../lib/products";
 import "../style/home.css";
+import { Helmet } from "react-helmet-async";
 
 /* ==================== קבועים/נתונים סטטיים ==================== */
 
@@ -172,7 +173,7 @@ export default function HomePage() {
       <section className="bg-body py-5 border-bottom">
         <div className="container">
           <header className="text-center mb-4">
-            <h2 className="h3 fw-bold">למה לבחור בקרינה?</h2>
+            <h2 className="h3 fw-bold">למה לבחור בקארינה?</h2>
             <p className="text-muted m-0">איכות, מהירות ושירות – בלי הפתעות.</p>
           </header>
 
@@ -216,133 +217,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ===== קטגוריות ===== */}
-      <section className="container py-6 position-relative">
-        <div className="d-flex align-items-center justify-content-between mb-3">
-          <h2 className="fw-bold m-0">קטגוריות</h2>
-          <NavLink to="/catalog" className="btn btn-outline-primary btn-sm" aria-label="לכל הקטלוג">
-            לכל הקטלוג
-          </NavLink>
-        </div>
-
-        <div className="position-relative">
-          {/* חצי-גלילה – בדסקטופ בלבד */}
-          <button
-            type="button"
-            className="btn btn-light shadow-soft position-absolute top-50 translate-middle-y d-none d-lg-flex cats-arrow"
-            style={{ right: -6 }}
-            onClick={() => scrollByStep(-1)}
-            disabled={!canPrev}
-            aria-label="גלול ימינה"
-            aria-controls={catsListId}
-            title="הקודם"
-          >
-            <i className="bi bi-chevron-right" />
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-light shadow-soft position-absolute top-50 translate-middle-y d-none d-lg-flex cats-arrow"
-            style={{ left: -6 }}
-            onClick={() => scrollByStep(1)}
-            disabled={!canNext}
-            aria-label="גלול שמאלה"
-            aria-controls={catsListId}
-            title="הבא"
-          >
-            <i className="bi bi-chevron-left" />
-          </button>
-
-          <div
-            id={catsListId}
-            ref={catsRef}
-            className="cats-row strip-desktop"
-            role="list"
-            aria-label="קטגוריות מובילות"
-          >
-            {topCategories.map((c) => (
-              <NavLink key={c.key} to={c.to} className="cat-tile" role="listitem" aria-label={`${c.title}, ${c.count} מוצרים`}>
-                <div className="cat-media-simple">
-                  <img src={c.img} alt={c.title} loading="lazy" decoding="async" draggable="false" />
-                  <span className="cat-badge">{c.title} · {c.count}</span>
-                  <div className="cat-hover-cta">
-                    <span><i className="bi bi-grid me-1" aria-hidden="true" /> צפו במוצרים</span>
-                  </div>
-                </div>
-              </NavLink>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== נמכרים ביותר ===== */}
-      <section className="bestsellers py-6">
-        <div className="container">
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <h2 className="fw-bold m-0">נמכרים ביותר</h2>
-            <NavLink to="/catalog" className="btn btn-outline-primary btn-sm" aria-label="לכל המוצרים">
-              לכל המוצרים
-            </NavLink>
-          </div>
-
-          {/* מובייל/טאבלט: קרוסלה */}
-          <div className="d-lg-none">
-            <div className="best-mobile-row" role="list" aria-label="מוצרים נמכרים – גללו אופקית">
-              {bestSellers.map((p) => (
-                <article key={p.slug} className="best-mobile-card" role="listitem">
-                  {/* כל הכרטיס הוא קישור, לשיפור נגישות/טאצ' */}
-                  <NavLink to={`/product/${p.slug}`} className="text-decoration-none">
-                    <div className="best-media">
-                      <img src={p.img} alt={p.name} loading="lazy" decoding="async" draggable="false" />
-                      <span className="best-price">{p.price} ₪</span>
-                    </div>
-                    <div className="best-body">
-                      <h3 className="best-title text-dark">{p.name}</h3>
-                      <span className="btn btn-primary w-100">לפרטים והזמנה</span>
-                    </div>
-                  </NavLink>
-                </article>
-              ))}
-            </div>
-
-            <div className="mt-3 text-center">
-              <small className="text-muted">
-                גררו הצידה כדי לראות עוד מוצרים <i className="bi bi-arrow-left-right ms-1" aria-hidden="true"></i>
-              </small>
-            </div>
-          </div>
-
-          {/* דסקטופ: גריד */}
-          <div className="d-none d-lg-block">
-            <div className="best-desktop-grid" role="list" aria-label="מוצרים נמכרים">
-              {bestSellers.map((p) => (
-                <article key={p.slug} className="best-card" role="listitem">
-                  <NavLink to={`/product/${p.slug}`} className="text-decoration-none">
-                    <div className="best-media">
-                      <img src={p.img} alt={p.name} loading="lazy" decoding="async" draggable="false" />
-                      <span className="best-price">{p.price} ₪</span>
-                    </div>
-
-                    <div className="best-body">
-                      <h3 className="best-title text-dark">{p.name}</h3>
-                      <div className="best-row-meta d-flex align-items-center justify-content-between">
-                        <small className="text-muted">במלאי</small>
-                        <i className="bi bi-chevron-left small text-muted" aria-hidden="true"></i>
-                      </div>
-
-                      {/* הכפתור בתחתית – נשאר לינק, לא overlay */}
-                      <div className="best-actions">
-                        <span className="btn btn-primary btn-sm w-100">לפרטים והזמנה</span>
-                      </div>
-                    </div>
-                  </NavLink>
-                </article>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* ===== מי אנחנו ===== */}
       <section className="py-6 bg-body-tertiary position-relative overflow-hidden">
         <div className="shape-blur-1" aria-hidden="true" />
@@ -353,9 +227,9 @@ export default function HomePage() {
                 <span className="badge bg-primary-subtle text-primary-emphasis mb-2">
                   <i className="bi bi-people-fill me-1" /> מי אנחנו
                 </span>
-                <h2 className="h3 fw-bold mb-2">קרינה – הדפסות לעסקים וצוותים</h2>
+                <h2 className="h3 fw-bold mb-2">קארינה – הדפסות לעסקים וצוותים</h2>
                 <p className="text-muted mb-3">
-                  אנחנו סטודיו קטן-בינוני עם סטנדרט של גדול: טכנולוגיית הדפסה מתקדמת (DTF, רקמה, סובלימציה),
+                  אנחנו מפעל עם סטנדרט של גדול: טכנולוגיית הדפסה מתקדמת (DTF, רקמה, סובלימציה),
                   בקרת איכות ידנית לכל הזמנה, ושירות אנושי אמיתי מרגע הסקיצה ועד שהחבילה אצלכם.
                 </p>
                 <ul className="list-unstyled m-0">
@@ -365,7 +239,7 @@ export default function HomePage() {
                   </li>
                   <li className="d-flex align-items-start gap-2 mb-2">
                     <i className="bi bi-check2-circle text-success mt-1" aria-hidden="true" />
-                    <span>סטודיו עיצוב פנימי להדמיות מהירות וחדות</span>
+                    <span>מפעל עיצוב פנימי להדמיות מהירות וחדות</span>
                   </li>
                   <li className="d-flex align-items-start gap-2">
                     <i className="bi bi-check2-circle text-success mt-1" aria-hidden="true" />
@@ -400,7 +274,7 @@ export default function HomePage() {
       <section className="py-6">
         <div className="container">
           <header className="text-center mb-4">
-            <h2 className="h3 fw-bold">למה לבחור דווקא בקרינה?</h2>
+            <h2 className="h3 fw-bold">למה לבחור דווקא בקארינה?</h2>
             <p className="text-muted m-0">תכל’ס: שילוב של איכות, דיוק ושירות.</p>
           </header>
 
@@ -510,31 +384,6 @@ export default function HomePage() {
                 <span key={i} className="logo-pill"><i className="bi bi-building me-1" />Brand {i+1}</span>
               ))}
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== שאלות נפוצות ===== */}
-      <section className="py-6 bg-body-tertiary">
-        <div className="container">
-          <h2 className="h4 fw-bold text-center mb-4">שאלות נפוצות</h2>
-          <div className="accordion" id="faq">
-            {[
-              {q:"כמה זמן לוקח לקבל הדמיה?", a:"בד״כ 48–72 שעות עסקים מרגע קבלת קבצים תקינים."},
-              {q:"באילו טכניקות אתם משתמשים?", a:"DTF, רקמה וסובלימציה – נבחר יחד את הטכניקה שמתאימה לבד וללוגו."},
-              {q:"האם יש אחריות על ההדפסה?", a:"כן, אנחנו עומדים מאחורי איכות ההדפסה ובקרת האיכות בכל הזמנה."},
-            ].map((item, idx)=>(
-              <div className="accordion-item" key={idx}>
-                <h3 className="accordion-header" id={`faq-h${idx}`}>
-                  <button className="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target={`#faq-c${idx}`} aria-expanded="false" aria-controls={`faq-c${idx}`}>
-                    {item.q}
-                  </button>
-                </h3>
-                <div id={`faq-c${idx}`} className="accordion-collapse collapse" data-bs-parent="#faq" aria-labelledby={`faq-h${idx}`}>
-                  <div className="accordion-body text-muted">{item.a}</div>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
