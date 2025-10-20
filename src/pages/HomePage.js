@@ -177,30 +177,22 @@ export default function HomePage() {
       </section>
 
       {/* ===== למה קרינה ===== */}
-      <section className="bg-body py-5 border-bottom">
-        <div className="container">
-          <header className="text-center mb-4">
-            <h2 className="h3 fw-bold">למה לבחור בקארינה?</h2>
-            <p className="text-muted m-0">איכות, מהירות ושירות – בלי הפתעות.</p>
-          </header>
-
-          <div className="row g-4 text-center text-md-start" role="list">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="col-6 col-lg-4" role="listitem">
-                <div className="usp d-flex align-items-center justify-content-center justify-content-md-start gap-3">
-                  <span className="usp-icon" aria-hidden="true">
-                    <i className={`bi ${f.icon}`} />
-                  </span>
-                  <div>
-                    <div className="fw-bold">{f.title}</div>
-                    <div className="text-muted small">{f.text}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="row g-4 text-center text-md-start" role="list">
+  {FEATURES.map((f) => (
+    <div key={f.title} className="col-6 col-lg-4 d-flex" role="listitem">
+      <div className="feature-card usp d-flex align-items-center justify-content-center justify-content-md-start gap-3 flex-grow-1">
+        <span className="usp-icon" aria-hidden="true">
+          <i className={`bi ${f.icon}`} />
+        </span>
+        <div>
+          <div className="fw-bold">{f.title}</div>
+          <div className="text-muted small">{f.text}</div>
         </div>
-      </section>
+      </div>
+    </div>
+  ))}
+</div>
+
 
       {/* ===== איך זה עובד ===== */}
       <section className="container py-6">

@@ -2,11 +2,21 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ref, uploadBytes, uploadString, getDownloadURL } from "firebase/storage";
-import { storage, auth, ensureAuthTokenFresh } from "../firebase";
+import { storage, auth, ensureAuthTokenFresh, db } from "../firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useLogosQueue } from "../contexts/LogosQueueContext.tsx";
 
 const LS_CART_KEY = "karina:cart";
 const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
+
+// ✅ NEW: מפת לוגואים פר־שורת עגלה (lineId)
+const LS_ITEM_LOGOS = "karina:itemLogos";
+function readItemLogosMap() {
+  try { return JSON.parse(localStorage.getItem(LS_ITEM_LOGOS) || "{}") || {}; } catch { return {}; }
+}
+function writeItemLogosMap(map) {
+  try { localStorage.setItem(LS_ITEM_LOGOS, JSON.stringify(map)); } catch {}
+}
 
 /* =========================
    Helpers: cart + previews
@@ -152,7 +162,22 @@ export default function Checkout() {
   const [paymentResult, setPaymentResult] = useState({ status: null, txId: null });
   const [currentOrderId, setCurrentOrderId] = useState(null);
 
+  // נשמור כאן תוצאות העלאות שנעשו בצ'קאאוט (לפני התשלום)
+  const uploadedRef = useRef({ original: null, mockups: [] });
+
   const { takeOriginalFromMemory } = useLogosQueue();
+
+  // (אופציונלי) לוגואים גלובליים לפי צד — כבר לא נשתמש בהם למסמך פר־פריט,
+  // אך נשאיר להמשך שימוש פנימי אם תרצה.
+  function readLogoStorageFromLS() {
+    try {
+      const front = JSON.parse(localStorage.getItem("karina:logoStorage:front") || "null");
+      const back  = JSON.parse(localStorage.getItem("karina:logoStorage:back")  || "null");
+      return { front, back };
+    } catch {
+      return { front: null, back: null };
+    }
+  }
 
   async function uploadOriginalLogoIfAvailable() {
     const idFront = localStorage.getItem("karina:logoId:front");
@@ -171,7 +196,9 @@ export default function Checkout() {
     const r = ref(storage, path);
     const snap = await uploadBytes(r, file, { contentType: file.type || "application/octet-stream" });
     const url = await getDownloadURL(snap.ref);
-    return { path, url, bytes: file.size || 0, contentType: file.type || "application/octet-stream", logoId };
+    const meta = { path, url, bytes: file.size || 0, contentType: file.type || "application/octet-stream", logoId, when: Date.now() };
+    uploadedRef.current.original = meta; // נשמר בזיכרון עד כתיבת ההזמנה
+    return meta;
   }
 
   async function uploadMockupsForCart() {
@@ -204,8 +231,10 @@ export default function Checkout() {
         url,
         bytes: approxBytesFromDataUrl(dataUrl),
         contentType: ct,
+        when: Date.now(),
       });
     }
+    uploadedRef.current.mockups = results; // נשמר לזיכרון עד כתיבת ההזמנה
     return results;
   }
 
@@ -305,6 +334,72 @@ export default function Checkout() {
   }, []);
 
   /* =========================
+     Order doc creation
+  ========================= */
+  async function createOrderDoc({ orderId, txId }) {
+    const uid = auth.currentUser?.uid || null;
+    if (!uid) throw new Error("not_authed");
+
+    const cartItems = Array.isArray(items) ? items : [];
+    const uploads = uploadedRef.current || { original: null, mockups: [] };
+
+    // ✅ NEW: קריאת מפת לוגואים פר־שורה מן ה-LocalStorage
+    const logosMap = readItemLogosMap();
+    const byItemFromCart = {};
+    cartItems.forEach((it) => {
+      // כל מפתח הוא lineId בדיוק כפי שנשמר ב-ProductDetail
+      byItemFromCart[it.id] = logosMap[it.id] || { front: null, back: null };
+    });
+
+    const orderDoc = {
+      orderId: String(orderId),
+      uid,
+      createdAt: serverTimestamp(),
+      status: "paid",
+      provider: "credit2000",
+      txId: txId || null,
+      totals: {
+        merchandiseTotal: Number(totals?.merchandiseTotal || 0),
+        shippingCost: Number(totals?.shippingCost || 0),
+        grandTotal: Number(grandTotal || 0),
+      },
+      shipping: shipping || null,
+      items: cartItems.map((it) => ({
+        id: it.id,
+        slug: it.slug,
+        name: it.name,
+        price: Number(it.price) || 0,
+        qty: Number(it.qty) || 0,
+        color: it.color || null,
+        size: it.size || null,
+        lineTotal: lineTotal(it),
+      })),
+      logos: {
+        // ✅ NEW: המיפוי הפר־פריט כפי שהתבקש
+        byItemFromCart,
+        // שמירת קבצים שעלו בצ'קאאוט (מקור + מקאפים לכל מוצר/צד)
+        uploads: {
+          original: uploads.original || null,
+          mockups: Array.isArray(uploads.mockups) ? uploads.mockups : [],
+        },
+      },
+    };
+
+    await setDoc(doc(db, "orders", String(orderId)), orderDoc);
+
+    // אופציונלי: ניקוי עגלה/פריוויוזים/מפת לוגואים אחרי הזמנה מוצלחת
+    try {
+      localStorage.removeItem(LS_CART_KEY);
+      localStorage.removeItem(LS_ITEM_LOGOS); // ✅ NEW: ניקוי המפה הפר־שורתית
+      const slugs = [...new Set(cartItems.map((it) => it.slug).filter(Boolean))];
+      slugs.forEach((slug) => {
+        localStorage.removeItem(LS_PREVIEW_KEY(slug, "front"));
+        localStorage.removeItem(LS_PREVIEW_KEY(slug, "back"));
+      });
+    } catch {}
+  }
+
+  /* =========================
      מאזין ל-postMessage מה-Return URL
      מחפש: { type: "payment:success"| "payment:failure", provider:"credit2000", orderId?, txId? }
   ========================= */
@@ -321,11 +416,22 @@ export default function Checkout() {
         setPaymentResult({ status: ok ? "success" : "failure", txId: data.txId || null });
         // גלילה לראש העמוד כדי לראות את הבאנר
         window.scrollTo({ top: 0, behavior: "smooth" });
+
+        // אם הצליח — כתוב מסמך הזמנה עם הלוגואים ל-Firestore
+        if (ok) {
+          const txId = data.txId || null;
+          const orderId = currentOrderId || Math.floor(Date.now() / 1000);
+          createOrderDoc({ orderId, txId }).catch((err) => {
+            console.error("[orders] failed to create order doc:", err);
+            // לא מפיל את ה-UI; מציג אזהרה ידידותית
+            setError("התשלום הצליח, אך נכשלה שמירת ההזמנה במערכת. ננסה שוב מאוחר יותר.");
+          });
+        }
       }
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [currentOrderId, totals, shipping, items, grandTotal]);
 
   return (
     <div className="container py-5">
@@ -349,7 +455,8 @@ export default function Checkout() {
       {paymentResult.status === "success" && (
         <div className="alert alert-success d-flex justify-content-between align-items-center" role="alert">
           <div>
-            ✅ התשלום התקבל בהצלחה{currentOrderId ? ` להזמנה #${currentOrderId}` : ""}.
+            <strong>תודה שרכשת אצלנו!</strong> התשלום התקבל בהצלחה
+            {currentOrderId ? <> להזמנה <strong>#{currentOrderId}</strong></> : ""}.
             {paymentResult.txId ? <> מספר עסקה: <strong>{paymentResult.txId}</strong>.</> : null}
           </div>
           <div className="d-flex gap-2">
@@ -362,10 +469,11 @@ export default function Checkout() {
           </div>
         </div>
       )}
+
       {paymentResult.status === "failure" && (
         <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
           <div>
-            ❌ התשלום נכשל. ניתן לנסות שוב או לבחור אמצעי תשלום אחר.
+            <strong>מצטערים, ההזמנה לא עברה.</strong> ניתן לנסות שוב או לבחור אמצעי תשלום אחר.
             {paymentResult.txId ? <> (מס׳ עסקה: <strong>{paymentResult.txId}</strong>)</> : null}
           </div>
           <button

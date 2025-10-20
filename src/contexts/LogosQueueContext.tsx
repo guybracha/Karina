@@ -1,11 +1,13 @@
 // src/contexts/LogosQueueContext.tsx
 import React, { createContext, useContext, useRef } from "react";
 
-type MemoryOriginal = { id: string; file: File };
 type Ctx = {
+  /** שומר קובץ מקורי בזיכרון לפי מזהה (לא נמחק בקריאה) */
   setOriginalInMemory: (id: string, file: File) => void;
+  /** מחזיר את הקובץ לפי מזהה, אם קיים */
   takeOriginalFromMemory: (id: string) => File | undefined;
 };
+
 const LogosQueueCtx = createContext<Ctx | null>(null);
 
 export function LogosQueueProvider({ children }: { children: React.ReactNode }) {
@@ -14,9 +16,9 @@ export function LogosQueueProvider({ children }: { children: React.ReactNode }) 
   const setOriginalInMemory = (id: string, file: File) => {
     mapRef.current.set(id, file);
   };
+
   const takeOriginalFromMemory = (id: string) => {
-    const f = mapRef.current.get(id);
-    return f;
+    return mapRef.current.get(id);
   };
 
   return (

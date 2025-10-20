@@ -1,105 +1,46 @@
 /* @refresh skip */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import "../style/Cart.css";
 
 // ---- Firebase ----
-import { auth, db, functions, ensureAuthTokenFresh } from "../firebase";
+import { auth, db, ensureAuthTokenFresh } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc, collection, serverTimestamp } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getStorage, ref as storageRef, getDownloadURL } from "firebase/storage";
 
-// ---- Upload helpers ----
+// ---- (לשימוש בהדמיות בלבד) ----
 import { uploadPreview } from "../lib/uploadPreview";
-import { uploadItemLogoAssets } from "../lib/uploadItemLogoAssets";
-
-// ---- Logo queue ----
-import { useLogosQueue } from "../contexts/LogosQueueContext.tsx";
-import { saveDraftAssets } from "../lib/saveDraftAssets";
 
 /* =========================================================================
-   Helpers: preview/logo sources
-============================================================================ */
-
-// ---- safe number formatting ----
-const LOCALE_HE = (Intl.NumberFormat.supportedLocalesOf?.(["he-IL"])?.length ? "he-IL" : undefined);
-const dashFix = (s) => (typeof s === "string" ? s.replace(/\u2011|\u2010|\u2013|\u2014/g, "-") : s);
-function fmt(n) {
-  try { return Number(n || 0).toLocaleString(LOCALE_HE); }
-  catch { return Number(n || 0).toLocaleString(); }
-}
-
-// fetch blob: URL to Blob
-async function fetchBlob(blobUrl) {
-  const res = await fetch(blobUrl);
-  if (!res.ok) throw new Error("blob fetch failed");
-  return await res.blob();
-}
-
-// Blob -> dataURL
-function blobToDataURL(blob) {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onerror = reject;
-    fr.onload = () => resolve(fr.result);
-    fr.readAsDataURL(blob);
-  });
-}
-
-/**
- * Normalize & upload mockup if needed
- */
-async function ensurePreviewUploadedSmart({ uid, orderId, slug, side, source }) {
-  if (!source) return null;
-  if (/^https?:\/\//i.test(source)) return source;
-  if (source.startsWith("blob:")) {
-    const blob = await fetchBlob(source);
-    const { url } = await uploadPreview({ uid, orderId, slug, side, source: blob });
-    return url;
-  }
-  if (source.startsWith("data:")) {
-    const { url } = await uploadPreview({ uid, orderId, slug, side, source });
-    return url;
-  }
-  return null;
-}
-
-/**
- * Normalize logo source to {file | dataUrl}
- */
-async function normalizeLogoSourceForUpload({ file, dataUrl }) {
-  if (file) return { file, dataUrl: null };
-  if (!dataUrl) return { file: null, dataUrl: null };
-  if (dataUrl.startsWith("data:")) return { file: null, dataUrl };
-  if (dataUrl.startsWith("blob:")) {
-    const blob = await fetchBlob(dataUrl);
-    const durl = await blobToDataURL(blob);
-    return { file: null, dataUrl: durl };
-  }
-  return { file: null, dataUrl: null };
-}
-
-/* =========================================================================
-   LocalStorage keys & constants
+   LS keys & helpers
 ============================================================================ */
 const LS_CART_KEY = "karina:cart";
 const LS_SHIP_KEY = "karina:shipping";
 const LS_ADDR_KEY = "karina:shippingAddress";
 const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
-const LS_LOGO_ID = (side) => `karina:logoId:${side}`;
-const LS_PENDING_LOGOS = "karina:pendingLogos";
 
-const SHIP_OPTIONS = {
-  standard: { label: "משלוח רגיל", cost: 20 },
-  express: { label: "משלוח אקספרס", cost: 45 },
-  pickup: { label: "איסוף מהמפעל", cost: 0 },
-};
+// מפה של לוגו פר־שורה: { [lineId]: { front: Meta|null, back: Meta|null } }
+const LS_ITEM_LOGOS = "karina:itemLogos";
+function readItemLogosMap() {
+  try { return JSON.parse(localStorage.getItem(LS_ITEM_LOGOS) || "{}") || {}; } catch { return {}; }
+}
+function writeItemLogosMap(map) {
+  try {
+    localStorage.setItem(LS_ITEM_LOGOS, JSON.stringify(map));
+    window.dispatchEvent(new Event("karina:itemLogosUpdated"));
+  } catch {}
+}
 
 /* =========================================================================
-   Generic helpers
+   Utils
 ============================================================================ */
-function defaultAddress() {
-  return { city: "", street: "", house: "", apt: "", zip: "", notes: "" };
+const LOCALE_HE = (Intl.NumberFormat.supportedLocalesOf?.(["he-IL"])?.length ? "he-IL" : undefined);
+function fmt(n) {
+  try { return Number(n || 0).toLocaleString(LOCALE_HE); }
+  catch { return Number(n || 0).toLocaleString(); }
 }
+function defaultAddress() { return { city: "", street: "", house: "", apt: "", zip: "", notes: "" }; }
 function normalizeAddress(x) {
   if (!x) return defaultAddress();
   if (typeof x === "string") return { ...defaultAddress(), notes: x };
@@ -112,43 +53,27 @@ function readAddressFromLS() {
   try {
     const raw = localStorage.getItem(LS_ADDR_KEY);
     return normalizeAddress(raw ? JSON.parse(raw) : null);
-  } catch {
-    return defaultAddress();
-  }
+  } catch { return defaultAddress(); }
 }
 function writeAddressToLS(a) {
-  try {
-    localStorage.setItem(LS_ADDR_KEY, JSON.stringify(normalizeAddress(a)));
-  } catch {}
+  try { localStorage.setItem(LS_ADDR_KEY, JSON.stringify(normalizeAddress(a))); } catch {}
 }
 
-// item normalize
-function isValidItem(x) {
-  return x && typeof x === "object" && "id" in x && "name" in x;
-}
+function isValidItem(x) { return x && typeof x === "object" && "id" in x && "name" in x; }
 function normalizeCartArray(arr) {
   if (!Array.isArray(arr)) return [];
-  return arr
-    .filter(isValidItem)
-    .map((it) => ({
-      ...it,
-      qty: Math.max(1, Number(it.qty) || 1),
-      price: Number(it.price) || 0,
-      color: typeof it.color === "string" ? it.color : it.color ?? "",
-      size: typeof it.size === "string" ? it.size : it.size ?? "",
-      slug: typeof it.slug === "string" ? it.slug : it.slug ?? "",
-    }));
+  return arr.filter(isValidItem).map((it) => ({
+    ...it,
+    qty: Math.max(1, Number(it.qty) || 1),
+    price: Number(it.price) || 0,
+    color: typeof it.color === "string" ? it.color : it.color ?? "",
+    size: typeof it.size === "string" ? it.size : it.size ?? "",
+    slug: typeof it.slug === "string" ? it.slug : it.slug ?? "",
+  }));
 }
-
-// read/write cart (LS ONLY)
 function readCartFromLS() {
-  try {
-    const raw = localStorage.getItem(LS_CART_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return normalizeCartArray(parsed);
-  } catch {
-    return [];
-  }
+  try { return normalizeCartArray(JSON.parse(localStorage.getItem(LS_CART_KEY) || "[]")); }
+  catch { return []; }
 }
 function saveCartToLS(next) {
   try {
@@ -158,192 +83,173 @@ function saveCartToLS(next) {
   } catch {}
 }
 
-// pendingLogos -> dataURL
-function readOriginalDataUrlFromPending(logoId) {
-  if (!logoId) return null;
+// דוגם הדמיות (אם יש) – לא קשור ללוגו
+function getPreviewsForItem(it) {
   try {
-    const raw = localStorage.getItem(LS_PENDING_LOGOS);
-    if (!raw) return null;
-    const arr = JSON.parse(raw);
-    const rec = Array.isArray(arr) ? arr.find((x) => x?.id === logoId) : null;
-    return rec?.originalDataUrl || null;
-  } catch {
-    return null;
-  }
+    if (!it.slug) return { front: null, back: null };
+    const front = localStorage.getItem(LS_PREVIEW_KEY(it.slug, "front"));
+    const back  = localStorage.getItem(LS_PREVIEW_KEY(it.slug, "back"));
+    return { front: front || null, back: back || null };
+  } catch { return { front: null, back: null }; }
 }
 
-// pick a logo source for side
-function collectLogoSource(side, takeOriginalFromMemory) {
-  const id = localStorage.getItem(LS_LOGO_ID(side));
-  const altId =
-    side === "front"
-      ? localStorage.getItem(LS_LOGO_ID("back"))
-      : localStorage.getItem(LS_LOGO_ID("front"));
-  const logoId = id || altId || null;
-
-  const file = logoId ? takeOriginalFromMemory(logoId) || null : null;
-  const pendingDataUrl = logoId ? readOriginalDataUrlFromPending(logoId) || null : null;
-  const altKey = side === "front" ? "karina:logo:front:original" : "karina:logo:back:original";
-  const altDataUrl = localStorage.getItem(altKey) || null;
-
-  return { logoId, file, dataUrl: pendingDataUrl || altDataUrl || null };
+// בוחר URL מיידי אם יש (thumb/webp/original/url/downloadUrl)
+function pickImmediateUrl(meta) {
+  if (!meta) return null;
+  const cand = meta.thumbUrl || meta.webpUrl || meta.originalUrl || meta.url || meta.downloadUrl;
+  if (typeof cand === "string" && /^https?:\/\//i.test(cand)) return cand;
+  return null;
 }
 
 /* =========================================================================
-   Callable utils (logging + retry)
+   Firestore refs
 ============================================================================ */
-function logCallableError(tag, e) {
-  const code = e?.code || e?.error?.code || "unknown";
-  const message = e?.message || e?.error?.message || String(e);
-  const details = e?.details || e?.error?.details || null;
-  console.error(`[${tag}]`, { code, message, details, raw: e });
-}
-async function withRetry(fn, { tries = 2, delayMs = 500, tag = "call" } = {}) {
-  let lastErr;
-  for (let i = 0; i < tries; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-      logCallableError(`${tag}#${i + 1}/${tries}`, e);
-      const code = e?.code || "";
-      if (!/resource-exhausted|unavailable|deadline-exceeded|internal|unknown|aborted|cancelled/i.test(code)) break;
-      if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-  throw lastErr;
-}
-
-/* =========================================================================
-   Firestore refs (kept for orders/drafts, but NOT used for cart syncing)
-============================================================================ */
-function cartDocRef(userId) {
-  return doc(db, "users", userId, "carts", "current");
-}
 function orderDraftDocRef(userId) {
   return doc(db, "users", userId, "orders", "draft");
 }
 
 /* =========================================================================
-   Aggregation helpers
+   Shipping
 ============================================================================ */
-function firstHttp(...vals) {
-  return vals.find((v) => typeof v === "string" && /^https?:\/\//i.test(v)) || null;
-}
-function aggregateOrderLogos(itemsWithUrls = []) {
-  let front = null, back = null;
-  for (const row of itemsWithUrls) {
-    const L = row?.logos || {};
-    if (!front) {
-      front = firstHttp(
-        L.front?.originalUrl,
-        L.front?.url,
-        L.frontUrl,
-        L.front?.original?.url
-      );
-    }
-    if (!back) {
-      back = firstHttp(
-        L.back?.originalUrl,
-        L.back?.url,
-        L.backUrl,
-        L.back?.original?.url
-      );
-    }
-    if (front && back) break;
-  }
-  return { frontUrl: front || null, backUrl: back || null };
-}
+const SHIP_OPTIONS = {
+  standard: { label: "משלוח רגיל", cost: 20 },
+  express:  { label: "משלוח אקספרס", cost: 45 },
+  pickup:   { label: "איסוף מהמפעל", cost: 0 },
+};
 
 /* =========================================================================
    Component
 ============================================================================ */
 export default function Cart() {
   const navigate = useNavigate();
+  const storage = getStorage();
 
   const [items, setItems] = useState([]);
   const [shipping, setShipping] = useState(() => {
-    try {
-      return localStorage.getItem(LS_SHIP_KEY) || "standard";
-    } catch {
-      return "standard";
-    }
+    try { return localStorage.getItem(LS_SHIP_KEY) || "standard"; }
+    catch { return "standard"; }
   });
   const [shippingAddress, setShippingAddress] = useState(() => readAddressFromLS());
   const [loading, setLoading] = useState(false);
   const [uid, setUid] = useState(null);
-  const saveTimer = useRef(null);
   const busyRef = useRef(false);
-  const { takeOriginalFromMemory } = useLogosQueue();
 
-  /* ---------- effects ---------- */
+  // לוגואים פר־שורה (מה-LS)
+  const [itemLogosMap, setItemLogosMap] = useState(() => readItemLogosMap());
+
+  // URLים שנפתרו בפועל להצגה (אחרי getDownloadURL אם צריך)
+  // מבנה: { [lineId]: { front: string|null, back: string|null } }
+  const [resolvedLogos, setResolvedLogos] = useState({});
+
   useEffect(() => {
     setItems(readCartFromLS());
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUid(u?.uid || null);
-    });
+    const unsub = onAuthStateChanged(auth, (u) => setUid(u?.uid || null));
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    const onRejection = (ev) => {
-      console.error("[unhandledrejection]", ev?.reason || ev);
-    };
-    const onError = (ev) => {
-      console.error("[window.error]", ev?.message || ev);
-    };
-    window.addEventListener("unhandledrejection", onRejection);
-    window.addEventListener("error", onError);
-    return () => {
-      window.removeEventListener("unhandledrejection", onRejection);
-      window.removeEventListener("error", onError);
-    };
-  }, []);
-
+  // האזנות ל-storage + אירועי custom
   useEffect(() => {
     function onStorage(e) {
       if (e.key === LS_CART_KEY) setItems(readCartFromLS());
       if (e.key === LS_SHIP_KEY) {
-        try {
-          setShipping(localStorage.getItem(LS_SHIP_KEY) || "standard");
-        } catch {}
+        try { setShipping(localStorage.getItem(LS_SHIP_KEY) || "standard"); } catch {}
       }
-      if (e.key === LS_ADDR_KEY) {
-        try {
-          setShippingAddress(readAddressFromLS());
-        } catch {}
-      }
+      if (e.key === LS_ADDR_KEY) setShippingAddress(readAddressFromLS());
+      if (e.key === LS_ITEM_LOGOS) setItemLogosMap(readItemLogosMap());
     }
-    function onCustom() {
-      setItems(readCartFromLS());
-    }
+    function onCustomCart() { setItems(readCartFromLS()); }
+    function onLogosUpdated() { setItemLogosMap(readItemLogosMap()); }
+
     window.addEventListener("storage", onStorage);
-    window.addEventListener("karina:cartUpdated", onCustom);
+    window.addEventListener("karina:cartUpdated", onCustomCart);
+    window.addEventListener("karina:itemLogosUpdated", onLogosUpdated);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("karina:cartUpdated", onCustom);
+      window.removeEventListener("karina:cartUpdated", onCustomCart);
+      window.removeEventListener("karina:itemLogosUpdated", onLogosUpdated);
     };
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(LS_SHIP_KEY, shipping);
-    } catch {}
+    try { localStorage.setItem(LS_SHIP_KEY, shipping); } catch {}
     writeAddressToLS(shippingAddress);
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipping, shippingAddress]);
+
+  // === פותר URLים אמיתיים לתצוגה עבור כל שורה ===
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveAll() {
+      const next = {};
+      for (const it of items) {
+        const meta = itemLogosMap[it.id] || {};
+        for (const side of ["front", "back"]) {
+          const m = meta?.[side] || null;
+
+          // 1) אם כבר יש http — משתמשים בו
+          let url = pickImmediateUrl(m);
+          // 2) אם אין http — ננסה לפתור מ-pathים
+          if (!url && m) {
+            const path = m.pathWebp || m.pathOriginal;
+            const gs = m.gsUriWebp || m.gsUriOriginal;
+
+            try {
+              if (path) {
+                url = await getDownloadURL(storageRef(storage, path));
+              } else if (typeof gs === "string" && gs.startsWith("gs://")) {
+                const withoutScheme = gs.replace(/^gs:\/\//, "");
+                const firstSlash = withoutScheme.indexOf("/");
+                if (firstSlash > 0) {
+                  const pathFromGs = withoutScheme.slice(firstSlash + 1);
+                  url = await getDownloadURL(storageRef(storage, pathFromGs));
+                }
+              }
+            } catch (e) {
+              url = null;
+              console.warn("resolve logo url failed", { lineId: it.id, side, err: e });
+            }
+          }
+
+          if (!next[it.id]) next[it.id] = { front: null, back: null };
+          next[it.id][side] = url || null;
+        }
+      }
+      if (!cancelled) setResolvedLogos(next);
+    }
+
+    if (items.length) resolveAll();
+    else setResolvedLogos({});
+
+    return () => { cancelled = true; };
+  }, [items, itemLogosMap, storage]);
 
   /* ---------- UI helpers ---------- */
   function updateQty(id, newQty) {
     const qty = Math.max(1, Number(newQty) || 1);
-    const next = items.map((it) => (it.id === id ? { ...it, qty } : it));
-    setItems(next);
-    saveCartToLS(next);
+    const updated = items.map((it) => (it.id === id ? { ...it, qty } : it));
+    setItems(updated);
+    saveCartToLS(updated);
   }
+
+  // אישור לפני הסרה + ניקוי מפת לוגואים
   function removeItem(id) {
-    const next = items.filter((it) => it.id !== id);
-    setItems(next);
-    saveCartToLS(next);
+    if (!window.confirm("אתה בטוח שאתה רוצה להסיר מהעגלה?")) return;
+
+    const updated = items.filter((it) => it.id !== id);
+    setItems(updated);
+    saveCartToLS(updated);
+
+    const map = { ...itemLogosMap };
+    if (map[id]) {
+      delete map[id];
+      writeItemLogosMap(map);
+      setItemLogosMap(map);
+    }
+
+    // ננקה גם את ה־cache של ה־URLים שנפתרו
+    const res = { ...resolvedLogos };
+    if (res[id]) { delete res[id]; setResolvedLogos(res); }
   }
 
   const merchandiseTotal = useMemo(
@@ -356,74 +262,45 @@ export default function Cart() {
   }, [shipping, items.length]);
   const grandTotal = useMemo(() => merchandiseTotal + shippingCost, [merchandiseTotal, shippingCost]);
 
-  function getPreviewsForItem(it) {
-    try {
-      if (!it.slug) return { front: null, back: null };
-      const front = localStorage.getItem(LS_PREVIEW_KEY(it.slug, "front"));
-      const back = localStorage.getItem(LS_PREVIEW_KEY(it.slug, "back"));
-      return { front: front || null, back: back || null };
-    } catch {
-      return { front: null, back: null };
-    }
-  }
-
-  // ensure a draft doc (kept for assets/drafts flow)
+  // יצירת/עדכון טיוטה (לשמירת מטא־דאטה)
   async function ensureDraft(uid) {
     const ref = orderDraftDocRef(uid);
     await setDoc(ref, { status: "draft", updatedAt: serverTimestamp() }, { merge: true });
     return { uid };
   }
 
-  // upload mockups + logos for one line
+  // שמירת קבצים/מטא־דאטה לשורה אחת — משתמש בלוגו מהמפה (לא מעלה שוב)
   async function saveAssetsForItem(it) {
-    if (!uid) {
-      alert("עליך להתחבר כדי לשמור קבצים.");
-      return;
-    }
-    try { await ensureAuthTokenFresh(); } catch (e) { console.error("ensureAuthTokenFresh failed", e); }
+    if (!uid) { alert("עליך להתחבר כדי לשמור קבצים."); return; }
+    try { await ensureAuthTokenFresh(); } catch {}
 
     const customer = await ensureDraft(uid);
     const orderId = "draft";
     const slug = it.slug;
-    if (!slug) {
-      alert("לפריט חסר slug — לא ניתן לשמור קבצים.");
-      return;
-    }
+    if (!slug) { alert("לפריט חסר slug — לא ניתן לשמור קבצים."); return; }
 
+    // הדמיות (כמו שהיה) — עדיפות ל־webp
     const { front, back } = getPreviewsForItem({ slug });
-
     let frontUrl = null, backUrl = null;
-    try { frontUrl = await ensurePreviewUploadedSmart({ uid: customer.uid, orderId, slug, side: "front", source: front }); } catch (e) { console.error(e); }
-    try { backUrl  = await ensurePreviewUploadedSmart({ uid: customer.uid, orderId, slug, side: "back",  source: back  }); } catch (e) { console.error(e); }
 
-    const sourceFront = collectLogoSource("front", takeOriginalFromMemory);
-    const sourceBack  = collectLogoSource("back",  takeOriginalFromMemory);
+    try {
+      if (front?.startsWith?.("data:") || front?.startsWith?.("blob:")) {
+        const up = await uploadPreview({ uid: customer.uid, orderId, slug, side: "front", source: front });
+        frontUrl = up.webp?.url || up.png?.url || null;
+      }
+    } catch {}
 
-    let frontLogo = null, backLogo = null;
-    const nf = await normalizeLogoSourceForUpload({ file: sourceFront.file, dataUrl: sourceFront.dataUrl });
-    const nb = await normalizeLogoSourceForUpload({ file: sourceBack.file,  dataUrl: sourceBack.dataUrl  });
+    try {
+      if (back?.startsWith?.("data:") || back?.startsWith?.("blob:")) {
+        const up = await uploadPreview({ uid: customer.uid, orderId, slug, side: "back", source: back });
+        backUrl = up.webp?.url || up.png?.url || null;
+      }
+    } catch {}
 
-    if (nf.file || nf.dataUrl) {
-      try {
-        frontLogo = await uploadItemLogoAssets({
-          uid: customer.uid, orderId, slug, side: "front",
-          logoId: sourceFront.logoId || "front",
-          file: nf.file || null,
-          dataUrlFallback: nf.dataUrl || null,
-        });
-      } catch (e) { console.error("upload logo front failed", e); }
-    }
-    if (nb.file || nb.dataUrl) {
-      try {
-        backLogo = await uploadItemLogoAssets({
-          uid: customer.uid, orderId, slug, side: "back",
-          logoId: sourceBack.logoId || "back",
-          file: nb.file || null,
-          dataUrlFallback: nb.dataUrl || null,
-        });
-      } catch (e) { console.error("upload logo back failed", e); }
-    }
+    // לוגו פר־שורה מתוך המפה
+    const logosMeta = itemLogosMap[it.id] || { front: null, back: null };
 
+    // עדכון המסמך בטיוטה
     const keyOf = (x) => `${x.slug || ""}__${x.color || ""}__${x.size || ""}`;
     const meKey = keyOf(it);
 
@@ -435,7 +312,7 @@ export default function Cart() {
         ? {
             ...row,
             previews: { frontUrl: frontUrl || row?.previews?.frontUrl || null, backUrl: backUrl || row?.previews?.backUrl || null },
-            logos:    { front: frontLogo || row?.logos?.front || null,        back:  backLogo  || row?.logos?.back  || null },
+            logos:    { front: logosMeta.front || row?.logos?.front || null,  back:  logosMeta.back  || row?.logos?.back  || null },
           }
         : row
     );
@@ -444,7 +321,7 @@ export default function Cart() {
     const completedRow = {
       slug: it.slug, name: it.name, price: it.price, qty: it.qty, color: it.color, size: it.size,
       previews: { frontUrl: frontUrl || null, backUrl: backUrl || null },
-      logos:    { front: frontLogo || null,   back: backLogo || null },
+      logos:    { front: logosMeta.front || null, back: logosMeta.back || null },
     };
     const finalItems = existed ? nextItems : [...nextItems, completedRow];
 
@@ -452,17 +329,15 @@ export default function Cart() {
     alert(`נשמרו הקבצים לפריט "${it.name}".`);
   }
 
-  // save ALL assets
+  // שמירת כל השורות (אם יש הדמיות/לוגואים)
   async function saveAllAssets() {
     if (!uid) { alert("עליך להתחבר כדי לשמור קבצים."); return; }
-    try { await ensureAuthTokenFresh(); } catch (e) { console.error("ensureAuthTokenFresh failed", e); }
-
+    try { await ensureAuthTokenFresh(); } catch {}
     for (const it of items) {
       const { front, back } = getPreviewsForItem(it);
       const hasPreview = Boolean(front?.startsWith?.("data:") || back?.startsWith?.("data:") || front?.startsWith?.("blob:") || back?.startsWith?.("blob:"));
-      const sf = collectLogoSource("front", takeOriginalFromMemory);
-      const sb = collectLogoSource("back",  takeOriginalFromMemory);
-      const hasLogo = Boolean(sf.file || sf.dataUrl || sb.file || sb.dataUrl);
+      const logosMeta = itemLogosMap[it.id] || {};
+      const hasLogo = Boolean(logosMeta.front || logosMeta.back);
       if (hasPreview || hasLogo) {
         try { /* eslint-disable no-await-in-loop */ await saveAssetsForItem(it); /* eslint-enable */ }
         catch (e) { console.error("saveAssetsForItem failed for", it, e); }
@@ -471,152 +346,48 @@ export default function Cart() {
     alert("ההדמיות והלוגואים נשמרו לטיוטה.");
   }
 
-  // OPTIONAL: save only logos
-  async function saveLogosOnly() {
-    if (!uid) { alert("עליך להתחבר כדי לשמור קבצים."); return; }
-    try { await ensureAuthTokenFresh(); } catch (e) { console.error("ensureAuthTokenFresh failed", e); }
-    const customer = await ensureDraft(uid);
-    const orderId = "draft";
-
-    const keyOf = (x) => `${x.slug || ""}__${x.color || ""}__${x.size || ""}`;
-    const draftSnap = await getDoc(orderDraftDocRef(uid));
-    const currentItems = Array.isArray(draftSnap.data()?.items) ? draftSnap.data().items : [];
-
-    const updates = [];
-
-    for (const it of items) {
-      const slug = it.slug;
-      if (!slug) continue;
-
-      const sf = collectLogoSource("front", takeOriginalFromMemory);
-      const sb = collectLogoSource("back",  takeOriginalFromMemory);
-      const nf = await normalizeLogoSourceForUpload({ file: sf.file, dataUrl: sf.dataUrl });
-      const nb = await normalizeLogoSourceForUpload({ file: sb.file, dataUrl: sb.dataUrl });
-
-      let frontLogo = null, backLogo = null;
-      if (nf.file || nf.dataUrl) {
-        try {
-          frontLogo = await uploadItemLogoAssets({
-            uid: customer.uid, orderId, slug, side: "front",
-            logoId: sf.logoId || "front",
-            file: nf.file || null, dataUrlFallback: nf.dataUrl || null,
-          });
-        } catch (e) { console.error("upload front logo failed", e); }
-      }
-      if (nb.file || nb.dataUrl) {
-        try {
-          backLogo = await uploadItemLogoAssets({
-            uid: customer.uid, orderId, slug, side: "back",
-            logoId: sb.logoId || "back",
-            file: nb.file || null, dataUrlFallback: nb.dataUrl || null,
-          });
-        } catch (e) { console.error("upload back logo failed", e); }
-      }
-
-      const rowKey = keyOf(it);
-      const existed = currentItems.find((r) => keyOf(r) === rowKey);
-      if (existed) {
-        updates.push({
-          ...existed,
-          logos: {
-            front: frontLogo || existed?.logos?.front || null,
-            back:  backLogo  || existed?.logos?.back  || null,
-          },
-        });
-      } else {
-        updates.push({
-          slug: it.slug, name: it.name, price: it.price, qty: it.qty, color: it.color, size: it.size,
-          previews: { frontUrl: null, backUrl: null },
-          logos:    { front: frontLogo || null, back: backLogo || null },
-        });
-      }
-    }
-
-    await setDoc(orderDraftDocRef(uid), { items: updates, updatedAt: serverTimestamp() }, { merge: true });
-    alert("הלוגואים נשמרו לטיוטה (בלי הדמיות).");
-  }
-
   /* ---------- checkout ---------- */
-// --- בתוך startCheckout: החלף את הגוף של הפונקציה ---
-// --- בתוך Cart.jsx: החלף את כל הפונקציה startCheckout ---
-async function startCheckout() {
-  if (busyRef.current) return;
-  busyRef.current = true;
-
-  try {
-    setLoading(true);
-
-    if (!uid) {
-      alert("עליך להתחבר כדי להמשיך לקופה.");
-      return;
-    }
-
-    const a = normalizeAddress(shippingAddress);
-
-    // אם לא איסוף — ודא שהשדות החיוניים מולאו
-    if (
-      items.length > 0 &&
-      shipping !== "pickup" &&
-      !(a.city.trim() && a.street.trim() && a.house.trim())
-    ) {
-      alert('אנא מלא/י עיר, רחוב ומספר בית או בחר/י "איסוף מהמפעל".');
-      return;
-    }
-
-    // ✨ התאמת פורמט הכתובת למה ש-Checkout מצפה:
-    // נבנה address מלא (טקסט חופשי), ונשמור גם city/zip.
-    const addressLine = [a.street, a.house, a.apt].filter(Boolean).join(" ").trim();
-    const addressFull = [a.city.trim(), addressLine].filter(Boolean).join(", ");
-
-    const aOut = {
-      ...a,
-      address: addressFull, // << זהו השדה שקופה קוראת כ-form.address
-    };
-
-    // שמירה ל-LocalStorage למקרה של חזרה אחורה
+  async function startCheckout() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     try {
-      localStorage.setItem(
-        "karina:shippingAddress",
-        JSON.stringify({
-          ...aOut,
-          // הבטחה שהשדות הבולטים קיימים
-          city: a.city || "",
-          zip: a.zip || "",
-        })
-      );
-    } catch {}
+      setLoading(true);
+      if (!uid) { alert("עליך להתחבר כדי להמשיך לקופה."); return; }
 
-    const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
+      const a = normalizeAddress(shippingAddress);
+      if (items.length > 0 && shipping !== "pickup" && !(a.city.trim() && a.street.trim() && a.house.trim())) {
+        alert('אנא מלא/י עיר, רחוב ומספר בית או בחר/י "איסוף מהמפעל".');
+        return;
+      }
+      const addressLine = [a.street, a.house, a.apt].filter(Boolean).join(" ").trim();
+      const addressFull = [a.city.trim(), addressLine].filter(Boolean).join(", ");
+      const aOut = { ...a, address: addressFull };
 
-    const checkoutState = {
-      items,
-      shipping: {
-        method: shipping,
-        label: shipOpt.label,
-        cost: shipOpt.cost,
-        address: aOut, // << כאן עוברת הכתובת במבנה האחיד
-      },
-      totals: { merchandiseTotal, shippingCost, grandTotal },
-      from: "cart",
-    };
+      try {
+        localStorage.setItem("karina:shippingAddress", JSON.stringify({ ...aOut, city: a.city || "", zip: a.zip || "" }));
+      } catch {}
 
-    navigate("/checkout", { state: checkoutState });
-  } catch (err) {
-    console.error(err);
-    alert("אירעה שגיאה במעבר לקופה.");
-  } finally {
-    setLoading(false);
-    busyRef.current = false;
+      const shipOpt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
+      const checkoutState = {
+        items,
+        shipping: { method: shipping, label: shipOpt.label, cost: shipOpt.cost, address: aOut },
+        totals: { merchandiseTotal, shippingCost, grandTotal },
+        from: "cart",
+      };
+      navigate("/checkout", { state: checkoutState });
+    } catch (err) {
+      console.error(err);
+      alert("אירעה שגיאה במעבר לקופה.");
+    } finally {
+      setLoading(false);
+      busyRef.current = false;
+    }
   }
-}
-
 
   /* ---------- render ---------- */
   return (
     <div className="container py-4">
       <h1 className="h3 mb-4">העגלה שלי</h1>
-      <div className="d-flex justify-content-end mb-3 gap-2">
-      </div>
 
       {items.length === 0 ? (
         <div className="alert alert-info">
@@ -624,11 +395,12 @@ async function startCheckout() {
         </div>
       ) : (
         <>
+          {/* טבלת מוצרים — רספונסיבית */}
           <div className="table-responsive">
             <table className="table align-middle">
-              <thead>
+              <thead className="d-none d-md-table-header-group">
                 <tr>
-                  <th style={{ width: 140 }}>תצוגה</th>
+                  <th style={{ width: 160 }}>תצוגה</th>
                   <th>מוצר</th>
                   <th>צבע</th>
                   <th>מידה</th>
@@ -640,37 +412,115 @@ async function startCheckout() {
               </thead>
               <tbody>
                 {items.map((it) => {
-                  const { front, back } = getPreviewsForItem(it);
+                  // meta כפי שנשמר ב-LS עבור השורה
+                  const logosMetaForLine = itemLogosMap[it.id] || {};
+
+                  // קודם ננסה URL מיידי מה-meta, אם אין – נשתמש במה שנפתר אסינכרונית
+                  const frontImmediate = pickImmediateUrl(logosMetaForLine.front);
+                  const backImmediate  = pickImmediateUrl(logosMetaForLine.back);
+
+                  const frontLogoUrl = frontImmediate || resolvedLogos[it.id]?.front || null;
+                  const backLogoUrl  = backImmediate  || resolvedLogos[it.id]?.back  || null;
+
                   return (
-                    <tr key={it.id}>
-                      <td>
-                        <div className="d-flex gap-2 align-items-center">
-                          {front ? (
-                            <div className="text-center">
-                              <img
-                                src={front}
-                                alt={`הדמיה קדמית עבור ${it.name}`}
-                                style={{ width: 60, height: 60, objectFit: "contain", borderRadius: 8, background: "#fff", border: "1px solid rgba(0,0,0,.08)", display: "block" }}
-                              />
-                              <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>קדמי</small>
-                            </div>
-                          ) : <span className="badge text-bg-secondary">אין קדמי</span>}
-                          {back ? (
-                            <div className="text-center">
-                              <img
-                                src={back}
-                                alt={`הדמיה אחורית עבור ${it.name}`}
-                                style={{ width: 60, height: 60, objectFit: "contain", borderRadius: 8, background: "#fff", border: "1px solid rgba(0,0,0,.08)", display: "block" }}
-                              />
-                              <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>אחורי</small>
-                            </div>
-                          ) : <span className="badge text-bg-secondary">אין אחורי</span>}
+                    <tr key={it.id} style={{ wordBreak: "break-word" }}>
+                      {/* תצוגה */}
+                      <td className="align-top">
+  <div className="d-flex gap-3 align-items-center">
+    {/* קדמי */}
+    <div className="text-center">
+      {frontLogoUrl ? (
+        <img
+          src={frontLogoUrl}
+          alt={`לוגו קדמי לשורה ${it.name}`}
+          title={
+            (itemLogosMap[it.id]?.front?.name) ||
+            (itemLogosMap[it.id]?.front?.contentType) ||
+            "לוגו קדמי"
+          }
+          className="cart-logo"
+        />
+      ) : (
+        <div className="cart-logo-empty" title="אין לוגו קדמי">🖼️</div>
+      )}
+      <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>
+        לוגו קדמי
+      </small>
+
+      {/* אופציונלי: כפתור החלפה יוביל לעמוד המוצר */}
+      <button
+        type="button"
+        className="btn btn-sm btn-outline-secondary mt-1"
+        onClick={() => navigate(`/product/${it.slug}`)}
+        title="החלף לוגו קדמי"
+      >
+        החלף
+      </button>
+    </div>
+
+    {/* אחורי */}
+    <div className="text-center">
+      {backLogoUrl ? (
+        <img
+          src={backLogoUrl}
+          alt={`לוגו אחורי לשורה ${it.name}`}
+          title={
+            (itemLogosMap[it.id]?.back?.name) ||
+            (itemLogosMap[it.id]?.back?.contentType) ||
+            "לוגו אחורי"
+          }
+          className="cart-logo"
+        />
+      ) : (
+        <div className="cart-logo-empty" title="אין לוגו אחורי">🖼️</div>
+      )}
+      <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>
+        לוגו אחורי
+      </small>
+
+      <button
+        type="button"
+        className="btn btn-sm btn-outline-secondary mt-1"
+        onClick={() => navigate(`/product/${it.slug}`)}
+        title="החלף לוגו אחורי"
+      >
+        החלף
+      </button>
+    </div>
+  </div>
+</td>
+
+
+                      {/* מוצר + מובייל */}
+                      <td className="fw-semibold align-top" style={{ maxWidth: 280 }}>
+                        <div className="mb-1">{it.name}</div>
+
+                        {/* מובייל בלבד: פרטי צבע/מידה/כמות/מחיר/סה״כ */}
+                        <div className="d-md-none small text-muted">
+                          <div className="d-flex flex-wrap gap-2">
+                            <span className="badge text-bg-light">צבע: {it.color || "—"}</span>
+                            <span className="badge text-bg-light">מידה: {it.size || "—"}</span>
+                            <span className="badge text-bg-light">מחיר: {fmt(it.price)} ₪</span>
+                            <span className="badge text-bg-light">סה״כ: {fmt(Number(it.price) * Number(it.qty))} ₪</span>
+                          </div>
+                          <div className="mt-2">
+                            <label className="form-label me-2 mb-0">כמות</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={it.qty}
+                              onChange={(e) => updateQty(it.id, e.target.value)}
+                              className="form-control form-control-sm"
+                              style={{ width: 120 }}
+                            />
+                          </div>
                         </div>
                       </td>
-                      <td className="fw-semibold">{it.name}</td>
-                      <td>{it.color}</td>
-                      <td>{it.size}</td>
-                      <td>
+
+                      {/* עמודות רגילות לטאבלט/דסקטופ */}
+                      <td className="d-none d-md-table-cell align-top">{it.color}</td>
+                      <td className="d-none d-md-table-cell align-top">{it.size}</td>
+                      <td className="d-none d-md-table-cell align-top">
                         <input
                           type="number"
                           min={1}
@@ -679,10 +529,16 @@ async function startCheckout() {
                           className="form-control form-control-sm w-auto"
                         />
                       </td>
-                      <td>{fmt(it.price)} ₪</td>
-                      <td>{fmt(Number(it.price) * Number(it.qty))} ₪</td>
-                      <td>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(it.id)}>
+                      <td className="d-none d-md-table-cell align-top">{fmt(it.price)} ₪</td>
+                      <td className="d-none d-md-table-cell align-top">{fmt(Number(it.price) * Number(it.qty))} ₪</td>
+
+                      {/* פעולות */}
+                      <td className="align-top">
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => removeItem(it.id)}
+                          aria-label={`הסר את ${it.name} מהעגלה`}
+                        >
                           הסר
                         </button>
                       </td>
@@ -696,7 +552,7 @@ async function startCheckout() {
           {/* משלוח + כתובת */}
           <div className="mt-3 p-3 border rounded-3">
             <h6 className="mb-3">אפשרות משלוח</h6>
-            <div className=".d-flex flex-wrap gap-4">
+            <div className="d-flex flex-wrap gap-4">{/* <-- תיקון className (ללא הנקודה) */}
               {Object.entries(SHIP_OPTIONS).map(([value, opt]) => (
                 <div className="form-check" key={value}>
                   <input
@@ -721,57 +577,33 @@ async function startCheckout() {
               <div className="row g-2">
                 <div className="col-md-6">
                   <label className="form-label">עיר</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={shippingAddress.city}
-                    onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
-                  />
+                  <input type="text" className="form-control" value={shippingAddress.city}
+                         onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })} />
                 </div>
                 <div className="col-md-6">
                   <label className="form-label">רחוב</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={shippingAddress.street}
-                    onChange={(e) => setShippingAddress({ ...shippingAddress, street: e.target.value })}
-                  />
+                  <input type="text" className="form-control" value={shippingAddress.street}
+                         onChange={(e) => setShippingAddress({ ...shippingAddress, street: e.target.value })} />
                 </div>
                 <div className="col-md-4">
                   <label className="form-label">מספר בית</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={shippingAddress.house}
-                    onChange={(e) => setShippingAddress({ ...shippingAddress, house: e.target.value })}
-                  />
+                  <input type="text" className="form-control" value={shippingAddress.house}
+                         onChange={(e) => setShippingAddress({ ...shippingAddress, house: e.target.value })} />
                 </div>
                 <div className="col-md-4">
                   <label className="form-label">דירה</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={shippingAddress.apt}
-                    onChange={(e) => setShippingAddress({ ...shippingAddress, apt: e.target.value })}
-                  />
+                  <input type="text" className="form-control" value={shippingAddress.apt}
+                         onChange={(e) => setShippingAddress({ ...shippingAddress, apt: e.target.value })} />
                 </div>
                 <div className="col-md-4">
                   <label className="form-label">מיקוד</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={shippingAddress.zip}
-                    onChange={(e) => setShippingAddress({ ...shippingAddress, zip: e.target.value })}
-                  />
+                  <input type="text" className="form-control" value={shippingAddress.zip}
+                         onChange={(e) => setShippingAddress({ ...shippingAddress, zip: e.target.value })} />
                 </div>
                 <div className="col-12">
                   <label className="form-label">הערות לשליח</label>
-                  <textarea
-                    className="form-control"
-                    rows={2}
-                    value={shippingAddress.notes}
-                    onChange={(e) => setShippingAddress({ ...shippingAddress, notes: e.target.value })}
-                  />
+                  <textarea className="form-control" rows={2} value={shippingAddress.notes}
+                            onChange={(e) => setShippingAddress({ ...shippingAddress, notes: e.target.value })} />
                 </div>
               </div>
               <small className="text-muted d-block mt-1">
@@ -782,9 +614,7 @@ async function startCheckout() {
 
           {/* סיכום ותשלום */}
           <div className="d-flex justify-content-between align-items-end mt-4 flex-wrap gap-3">
-            <Link to="/catalog" className="btn btn-outline-secondary">
-              המשך בקנייה
-            </Link>
+            <Link to="/catalog" className="btn btn-outline-secondary">המשך בקנייה</Link>
             <div className="ms-auto">
               <div className="text-end">
                 <div className="d-flex justify-content-between" style={{ minWidth: 260 }}>

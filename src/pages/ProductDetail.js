@@ -3,22 +3,34 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { LogosQueueProvider } from "../contexts/LogosQueueContext.tsx";
-// ❌ הוסר: LogoPlacementModal
 import LogoUploadModal from "../components/LogoUploadModal";
 import ColorSwatches from "../components/ColorSwatches";
 import SizePicker from "../components/SizePicker";
 import { PRODUCTS } from "../lib/products";
 
-// ✅ NEW: אימפורט ל־Auth/Firestore כדי לבדוק התחברות ותפקיד מוכר
+// Auth/Firestore
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import ProductSEO from "../components/seo/ProductSEO.js";
 
-// LS keys (שומרים רק מטא־דאטה של הלוגו שהועלה ל-Storage)
-const LS_LOGO_STORAGE_KEY = (side) => `karina:logoStorage:${side}`;
+// ===== LocalStorage keys =====
+// מטא־דאטה של הלוגו שהועלה ל-Storage (לפי מוצר+צד)
+const LS_LOGO_STORAGE_KEY = (slug, side) => `karina:logoStorage:${slug}:${side}`;
 const LS_CART_KEY = "karina:cart";
 const LS_RATING_KEY = (slug) => `karina:rating:${slug}`;
+// מפת לוגואים פר־שורת עגלה: { [lineId]: { front: Meta|null, back: Meta|null } }
+const LS_ITEM_LOGOS = "karina:itemLogos";
+function readItemLogosMap() {
+  try { return JSON.parse(localStorage.getItem(LS_ITEM_LOGOS) || "{}") || {}; } catch { return {}; }
+}
+function writeItemLogosMap(map) {
+  try {
+    localStorage.setItem(LS_ITEM_LOGOS, JSON.stringify(map));
+    // 🔔 מודיע לכל עמודי האפליקציה (ובעיקר Cart) לרענן לוגואים
+    window.dispatchEvent(new Event("karina:itemLogosUpdated"));
+  } catch {}
+}
 
 // ⭐ קומפוננטת דירוג קטנה
 function StarRater({ value, onChange, size = 24, ariaLabel = "דירוג" }) {
@@ -56,10 +68,10 @@ export default function ProductDetail() {
   const { slug } = useParams();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
 
-  // ✅ האם מותר להעלות לוגו למוצר (ברירת מחדל: כן)
+  // האם מותר להעלות לוגו למוצר (ברירת מחדל: כן)
   const canUploadLogo = product?.logoAllowed !== false;
 
-  // ✅ NEW: מצב התחברות ותפקיד מוכר
+  // התחברות ותפקיד
   const [user, setUser] = useState(null);
   const [isSeller, setIsSeller] = useState(false);
   const [checkingRole, setCheckingRole] = useState(true);
@@ -95,21 +107,21 @@ export default function ProductDetail() {
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkByColor, setBulkByColor] = useState({});
 
-  // צד (רק ציון לצד שהלוגו שייך אליו; אין הצבה)
+  // צד (לשייכות הלוגו)
   const [side, setSide] = useState("front");
 
-  // מטא־דאטה של לוגו שהועלה ל-Storage (לפי צד)
-  // מבנה: { front: { originalUrl, webpUrl, pathOriginal, pathWebp, bytes, contentType }, back: {...} }
+  // מטא־דאטה של הלוגו שהועלה ל-Storage (לפי צד)
+  // { front: Meta|null, back: Meta|null }
   const [logoStorageBySide, setLogoStorageBySide] = useState({ front: null, back: null });
 
-  // ⭐ RATING תצוגה
+  // ⭐ RATING
   const baseAvg = Number(product?.rating ?? 4.5);
   const baseCount = Number(product?.reviews ?? 120);
   const [userRating, setUserRating] = useState(0);
   const [displayAvg, setDisplayAvg] = useState(baseAvg);
   const [displayCount, setDisplayCount] = useState(baseCount);
 
-  // SEO
+  // SEO/meta
   const origin = typeof window !== "undefined" ? window.location.origin : "https://example.com";
   const canonical = `${origin}/product/${slug}`;
   const colorsList = product?.colors?.slice(0, 4)?.join(" / ") || "";
@@ -149,19 +161,18 @@ export default function ProductDetail() {
     setBulkMode(false);
     setBulkByColor({});
 
-    // טען מטא־דאטה של לוגואים מה-LS רק אם מותר לוגו; אחרת ננקה
     if (canUploadLogo) {
       try {
-        const sFront = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY("front")) || "null");
-        const sBack  = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY("back"))  || "null");
+        const sFront = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product?.slug || "unknown", "front")) || "null");
+        const sBack  = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product?.slug || "unknown", "back"))  || "null");
         setLogoStorageBySide({ front: sFront, back: sBack });
       } catch {
         setLogoStorageBySide({ front: null, back: null });
       }
     } else {
       try {
-        localStorage.removeItem(LS_LOGO_STORAGE_KEY("front"));
-        localStorage.removeItem(LS_LOGO_STORAGE_KEY("back"));
+        localStorage.removeItem(LS_LOGO_STORAGE_KEY(product?.slug || "unknown", "front"));
+        localStorage.removeItem(LS_LOGO_STORAGE_KEY(product?.slug || "unknown", "back"));
       } catch {}
       setLogoStorageBySide({ front: null, back: null });
     }
@@ -208,7 +219,7 @@ export default function ProductDetail() {
     const storage = uploaded?.storage || null;
     setLogoStorageBySide((prev) => {
       const next = { ...prev, [side]: storage };
-      try { localStorage.setItem(LS_LOGO_STORAGE_KEY(side), JSON.stringify(storage)); } catch {}
+      try { localStorage.setItem(LS_LOGO_STORAGE_KEY(product.slug, side), JSON.stringify(storage)); } catch {}
       return next;
     });
     setShowUpload(false);
@@ -216,13 +227,13 @@ export default function ProductDetail() {
 
   function resetSaved() {
     try {
-      localStorage.removeItem(LS_LOGO_STORAGE_KEY("front"));
-      localStorage.removeItem(LS_LOGO_STORAGE_KEY("back"));
+      localStorage.removeItem(LS_LOGO_STORAGE_KEY(product?.slug, "front"));
+      localStorage.removeItem(LS_LOGO_STORAGE_KEY(product?.slug, "back"));
     } catch {}
     setLogoStorageBySide({ front: null, back: null });
   }
 
-  // ✅ NEW: גארד כללי לפני הוספה לעגלה
+  // גארד לפני הוספה לעגלה
   function ensureAuthed(){
     if(!user){
       alert("עליך להתחבר כדי להוסיף פריטים לעגלה");
@@ -231,27 +242,41 @@ export default function ProductDetail() {
     return true;
   }
 
-  // עגלה — רגיל
+  // עגלה — רגיל: שומר לוגו פר־שורה (lineId)
   function addToCart() {
     if (!product) return;
-    if (!ensureAuthed()) return; // ✅ NEW
+    if (!ensureAuthed()) return;
 
     const lineId = `${product.slug}__${color}__${size}`;
     const current = readCartFromLS();
     const idx = current.findIndex((it) => it.id === lineId);
+
+    const logosForThisProduct = {
+  front: logoStorageBySide.front || JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product.slug, "front")) || "null"),
+  back:  logoStorageBySide.back  || JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product.slug, "back"))  || "null"),
+};
+const logosMap = readItemLogosMap();
+logosMap[lineId] = logosForThisProduct;
+writeItemLogosMap(logosMap);
+window.dispatchEvent(new Event("karina:itemLogosUpdated"));
+
+
     if (idx >= 0) {
       const next = [...current];
       const prevQty = Number(next[idx].qty || 0);
       next[idx] = { ...next[idx], qty: prevQty + Number(qty || 1) };
       saveCartToLS(next);
     } else {
-      // אפשר להרחיב כאן לשמור גם logoStorageBySide[front/back] בתוך שורת העגלה אם צריך
       saveCartToLS([{ id: lineId, slug: product.slug, name: product.name, price: Number(product.price) || 0, qty: Number(qty || 1), color, size, addedAt: Date.now() }, ...current]);
     }
+
+    // 🔔 עוד פינג לרענון העגלה (בטוח)
+    window.dispatchEvent(new Event("karina:itemLogosUpdated"));
+
     alert(`נוסף לעגלה: ${product.name} - ${color} / ${size} x${qty}`);
   }
 
-  // Bulk helpers
+  // Bulk: משכפל את הלוגו לכל שורה שנוספה
   const bulkForCurrentColor = bulkByColor[color] || {};
   const bulkTotalForCurrentColor = useMemo(
     () => Object.values(bulkForCurrentColor).reduce((s, n) => s + (Number(n) || 0), 0),
@@ -266,12 +291,18 @@ export default function ProductDetail() {
     const cleared = {}; product.sizes.forEach((s) => (cleared[s] = 0));
     setBulkByColor((prev) => ({ ...prev, [color]: cleared }));
   }
-  // עגלה — הזמנה מרוכזת
   function addBulkToCart() {
     if (!product) return;
-    if (!ensureAuthed()) return; // ✅ NEW
+    if (!ensureAuthed()) return;
 
     const current = readCartFromLS(); const next = [...current];
+
+    const logosForThisProduct = {
+      front: logoStorageBySide.front || JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product.slug, "front")) || "null"),
+      back:  logoStorageBySide.back  || JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product.slug, "back"))  || "null"),
+    };
+    const logosMap = readItemLogosMap();
+
     Object.entries(bulkForCurrentColor).forEach(([sizeKey, q]) => {
       const addQty = Math.max(0, Number(q) || 0); if (!addQty) return;
       const lineId = `${product.slug}__${color}__${sizeKey}`;
@@ -282,8 +313,13 @@ export default function ProductDetail() {
       } else {
         next.unshift({ id: lineId, slug: product.slug, name: product.name, price: Number(product.price) || 0, qty: addQty, color, size: sizeKey, addedAt: Date.now() });
       }
+      logosMap[lineId] = logosForThisProduct; // שמירת לוגו פר־שורה
     });
+
     saveCartToLS(next);
+    writeItemLogosMap(logosMap); // 🔔 עדכון + אירוע
+    window.dispatchEvent(new Event("karina:itemLogosUpdated"));
+
     alert(bulkTotalForCurrentColor > 0 ? `נוספו לעגלה ${bulkTotalForCurrentColor} יח' של ${product.name} בצבע ${color}.` : `לא הוזנו כמויות להזמנה מרוכזת.`);
   }
 
@@ -321,7 +357,6 @@ export default function ProductDetail() {
       price: String(product?.price ?? ""),
       availability: "https://schema.org/InStock"
     },
-    // ✅ חושפים מאפיין נוסף למנועי חיפוש
     additionalProperty: [
       { "@type": "PropertyValue", name: "logoAllowed", value: String(canUploadLogo) }
     ]
@@ -339,9 +374,15 @@ export default function ProductDetail() {
   const shownPrintArea =
     side === "front" ? product?.printArea : (product?.backPrintArea || product?.printArea);
 
-  // ✅ NEW: סטטוס הרשאות להצגה ב־UI
+  // סטטוס הרשאות להצגה
   const roleStatus = !user ? "עליך להתחבר כדי להוסיף לעגלה" : "";
   const addButtonsDisabled = !user;
+
+  const currentThumb =
+    logoStorageBySide[side]?.thumbUrl ||
+    logoStorageBySide[side]?.webpUrl ||
+    logoStorageBySide[side]?.originalUrl ||
+    null;
 
   return (
     <LogosQueueProvider>
@@ -375,7 +416,6 @@ export default function ProductDetail() {
           </>
         ) : (
           <>
-            {/* ✅ NEW: פס מידע על סטטוס הרשאות */}
             {roleStatus && (
               <div className="alert alert-info d-flex align-items-center" role="alert">
                 <span className="me-2">ℹ️</span>
@@ -410,6 +450,13 @@ export default function ProductDetail() {
                         <span className="badge text-bg-success">לוגו הועלה ונשמר לצד הזה</span>
                       ) : (
                         <span className="badge text-bg-secondary">אין לוגו שמור לצד הזה</span>
+                      )}
+                      {currentThumb && (
+                        <img
+                          src={currentThumb}
+                          alt="לוגו שמור לצד הנבחר"
+                          style={{ width: 36, height: 36, objectFit: "contain", borderRadius: 8, background: "#fff", border: "1px solid rgba(0,0,0,.08)" }}
+                        />
                       )}
                       {(logoStorageBySide.front || logoStorageBySide.back) && (
                         <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>איפוס לוגואים</button>
@@ -541,14 +588,13 @@ export default function ProductDetail() {
               </div>
             </div>
 
-            {/* מודאל העלאת לוגו בלבד (מעלה ל-Storage ושולח מטא־דאטה) */}
+            {/* מודאל העלאת לוגו — מעלה ל-Storage ומחזיר Meta */}
             {canUploadLogo && (
               <LogoUploadModal
                 show={showUpload}
                 onClose={() => setShowUpload(false)}
-                // המודאל מחזיר (preview=null, file, { storage })
                 onConfirm={(_preview, _file, uploaded) => onLogoUploaded(_preview, uploaded)}
-                orderId="draft"              // אפשר להחליף בהזדהות/הזמנה אמיתית כשיש
+                orderId="draft"
                 itemSlug={product.slug}
                 side={side}
               />
@@ -579,15 +625,15 @@ export default function ProductDetail() {
         )}
       </div>
       <ProductSEO
-  product={product}
-  canonical={canonical}
-  origin={origin}
-  description={description}
-  shownImage={shownImage}
-  canUploadLogo={canUploadLogo}
-  displayAvg={displayAvg}
-  displayCount={displayCount}
-/>
+        product={product}
+        canonical={canonical}
+        origin={origin}
+        description={description}
+        shownImage={shownImage}
+        canUploadLogo={canUploadLogo}
+        displayAvg={displayAvg}
+        displayCount={displayCount}
+      />
     </LogosQueueProvider>
   );
 }

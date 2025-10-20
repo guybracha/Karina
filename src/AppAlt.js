@@ -31,8 +31,10 @@ import Orders from "./pages/Orders";
 import AuthPage from "./pages/AuthPage";   // ✅ דף כניסה חדש
 import Legal from "./pages/Legal";
 
-import ChatWidget from "./components/ChatWidget";
-
+import "./a11y/a11y.css";
+import A11yToolkit from "./a11y/A11yToolkit";
+import ReadAloud from "./a11y/ReadAloud";
+import A11yFab from "./a11y/A11yFab"; // ⬅️ FAB נגישות
 /** מגלגל לראש בכל ניווט */
 function ScrollToTop() {
   const { pathname, search, hash } = useLocation();
@@ -90,6 +92,17 @@ export default function AppAlt() {
                 />
                 <meta property="og:image" content="/img/logo.png" />
                 <meta property="og:locale" content="he_IL" />
+                {/* Preconnect לשיפור ביצועים (Core Web Vitals) */}
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+                  <script async src="https://www.googletagmanager.com/gtag/js?id=G-SHQSKGKY2C"></script>
+                  <script>
+                    {`
+                      window.dataLayer = window.dataLayer || [];
+                      function gtag(){dataLayer.push(arguments);}
+                      gtag('js', new Date());
+                      gtag('config', 'G-SHQSKGKY2C');
+                    `}
+                  </script>
               </Helmet>
 
               <Navbar />
@@ -151,6 +164,11 @@ export default function AppAlt() {
               {/*
                 <ChatWidget onSend={handleChatSend} />
                */}
+                <div dir="ltr" id="a11y-fixed-layer">
+                    <A11yToolkit />
+                    <ReadAloud />
+                    <A11yFab />
+                 </div>
             </BrowserRouter>
           </LogosQueueProvider>
         </OrdersProvider>

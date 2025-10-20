@@ -102,12 +102,38 @@ export default function LogoUploadModal({
         logoId: "logo",      // אפשר לשנות למזהה ייחודי אם תרצה
         originalFile: fileObj,
       });
-      // storageMeta: { original: {url,path,bytes,contentType}, webp?: {url,path,bytes,contentType} }
+      // storageMeta בד"כ בסגנון:
+      // { original: {url,path,fullPath,gsUri,bytes,contentType}, webp?: {...}, thumb?: {...}, url?, path?, fullPath?, gsUri? }
 
-      // 2) שמירה מקומית (Context + LocalStorage) כדי להבטיח שהלוגו יהיה זמין גם בלי העלאה נוספת
+      // --- 2) השטחת המטא־דאטה כדי שהעגלה תדע להציג מיד ---
+      const storageFlat = {
+        // URLs ישירים
+        thumbUrl:     storageMeta?.thumb?.url     || null,
+        webpUrl:      storageMeta?.webp?.url      || null,
+        originalUrl:  storageMeta?.original?.url  || null,
+        url:          storageMeta?.url            || null,
+
+        // נתיבי Storage (למקרה שאין URL)
+        pathWebp:       storageMeta?.webp?.path      || storageMeta?.webp?.fullPath      || null,
+        pathOriginal:   storageMeta?.original?.path  || storageMeta?.original?.fullPath  || null,
+        storagePath:    storageMeta?.path            || storageMeta?.fullPath            || null,
+
+        // מזהי gs:// אופציונליים
+        gsUriWebp:     storageMeta?.webp?.gsUri     || null,
+        gsUriOriginal: storageMeta?.original?.gsUri || null,
+        gsUri:         storageMeta?.gsUri           || null,
+
+        // מידע עזר (לא חובה לעגלה, אבל טוב לשמירה)
+        bytesWebp:     storageMeta?.webp?.bytes     || null,
+        bytesOriginal: storageMeta?.original?.bytes || null,
+        contentTypeWebp:     storageMeta?.webp?.contentType     || null,
+        contentTypeOriginal: storageMeta?.original?.contentType || null,
+        side,
+      };
+
+      // 3) שמירה מקומית (Context + LocalStorage) כדי להבטיח זמינות גם בלי העלאה נוספת
       setBusyText("שומר מקומית…");
 
-      // הופך את הקובץ ל-dataURL לשמירה ב-LS (לשחזור אחרי רענון/לוגים)
       const fileToDataURL = (file) =>
         new Promise((resolve, reject) => {
           const fr = new FileReader();
@@ -120,46 +146,43 @@ export default function LogoUploadModal({
       // מזהה ייחודי ללוגו הזה (לפי צד)
       const id = `${side}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      // 2a) שומר את ה-File בזיכרון (Context)
+      // 3a) שומר את ה-File בזיכרון (Context)
       try {
         setOriginalInMemory?.(id, fileObj);
       } catch (e) {
         console.warn("[LogoUploadModal] setOriginalInMemory failed:", e);
       }
 
-      // 2b) שומר רשומה ב-LocalStorage
+      // 3b) שומר רשומה ב-LocalStorage (לוג פנימי/שחזור)
       try {
         const LS_PENDING_LOGOS = "karina:pendingLogos";
         const raw = localStorage.getItem(LS_PENDING_LOGOS);
         const arr = raw ? JSON.parse(raw) : [];
-        const rec = {
+        arr.push({
           id,
-          side,                         // front/back
-          originalDataUrl: dataUrl,     // המקור כ-dataURL
+          side,
+          originalDataUrl: dataUrl,
           name: fileObj.name,
           type: fileObj.type,
           bytes: fileObj.size,
           itemSlug: itemSlug || null,
           orderId: orderId || null,
           ts: Date.now(),
-        };
-        arr.push(rec);
+        });
         localStorage.setItem(LS_PENDING_LOGOS, JSON.stringify(arr));
-
-        // נשמור גם את מזהה הצד שנבחר לצורך שליפה מהירה ב-Cart (collectLogoSource)
         localStorage.setItem(`karina:logoId:${side}`, id);
       } catch (e) {
         console.warn("[LogoUploadModal] failed to write pending logos to LS:", e);
       }
 
-      // 3) מחזירים להורה גם Storage וגם סימון מקומי
+      // 4) החזרה להורה — מעבירים את המטא־דאטה השטוח!
       onConfirm?.(
-        null,                        // אין preview שנוצר כאן
-        fileObj,                     // ה-File המקורי (אם ההורה רוצה להציג/לוג)
-        { storage: storageMeta, local: true, id, side }
+        null,                      // אין preview כאן
+        fileObj,                   // ה-File המקורי
+        { storage: storageFlat, local: true, id, side }
       );
 
-      // אופציונלי: סגור את המודל לאחר שמירה
+      // אפשר לסגור את המודל אוטומטית אם תרצה:
       // onClose?.();
 
     } catch (e) {

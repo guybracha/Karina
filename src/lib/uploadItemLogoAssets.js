@@ -35,6 +35,10 @@ function sanitizeName(s = "") {
   return String(s).normalize("NFKD").replace(/[^\w.\-]+/g, "_").slice(0, 120);
 }
 
+/**
+ * מעלה נכסי לוגו עבור פריט/צד ומחזיר מטא-דאטה עשיר לשמירה פר־פריט.
+ * החזרה כוללת id (שווה ל-logoId שקיבלתם), ו-thumbUrl מוכן לשימוש (webp אם קיים).
+ */
 export async function uploadItemLogoAssets({
   uid,
   orderId,
@@ -55,7 +59,7 @@ export async function uploadItemLogoAssets({
   const safeId = sanitizeName(logoId);
   const ts = Date.now();
 
-  // נבנה נתיבים עקביים
+  // נתיבים עקביים באחסון
   const baseDir = `users/${uid}/orders/${orderId}/draft/assets/${safeSlug}/${side}`;
   const baseName = `_${safeSlug}_${safeId}_${ts}`;
 
@@ -94,7 +98,13 @@ export async function uploadItemLogoAssets({
       gsUriWebp = refWebp.toString();
     }
 
+    // thumbUrl עדיפות ל-webp ואז ל-original
+    const thumbUrl = webpUrl || originalUrl || gsUriWebp || gsUriOriginal;
+
     return {
+      id: logoId,              // ← לשמירה פר־פריט
+      side,
+      slug,
       pathOriginal,
       originalUrl,
       gsUriOriginal,
@@ -104,11 +114,12 @@ export async function uploadItemLogoAssets({
       pathWebp,
       webpUrl,
       gsUriWebp,
+      thumbUrl,               // ← נוח להצגה מיידית
+      uploadedAt: ts,
     };
   }
 
-  // --- מצב B: אין FILE אבל יש data URL ---
-  // דוגמה ל-data URL: data:image/png;base64,AAAA...
+  // --- מצב B: data URL ---
   const ct = dataUrlFallback.match(/^data:(.*?);/)?.[1] || "image/png";
   const ext = mimeToExt(ct, "png");
   const pathOriginal = `${baseDir}/original${baseName}.${ext}`;
@@ -124,9 +135,12 @@ export async function uploadItemLogoAssets({
   try { originalUrl = await getDownloadURL(refOriginal); } catch { originalUrl = null; }
   const gsUriOriginal = refOriginal.toString();
 
-  // אין המרה ל־WEBP כאן כי אין לנו File מקור. אם חשוב, אפשר להמיר מה-dataURL לקנבס ואז ליצור Blob → File.
+  // כאן אין המרת WEBP (אין File מקור). אפשרות להוסיף המרה דומה דרך קנבס אם תרצה.
 
   return {
+    id: logoId,
+    side,
+    slug,
     pathOriginal,
     originalUrl,
     gsUriOriginal,
@@ -136,5 +150,7 @@ export async function uploadItemLogoAssets({
     pathWebp: null,
     webpUrl: null,
     gsUriWebp: null,
+    thumbUrl: originalUrl || gsUriOriginal,   // dataURL הומר ל־storage; מצביע לקובץ
+    uploadedAt: ts,
   };
 }

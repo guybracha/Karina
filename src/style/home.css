@@ -353,3 +353,25 @@ img[loading="lazy"]{ content-visibility:auto; }
   color: #555;          /* טקסט משני מעט כהה */
 }
 
+/* === אחידות גובה לבלוקי FEATURES ("למה לבחור בקארינה?") === */
+.feature-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  min-height: 110px; /* או 120px לפי הצורך */
+  display: flex;
+  align-items: center;
+  text-align: right;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.feature-card .usp-icon {
+  font-size: 1.8rem;
+  color: var(--bs-primary);
+}
