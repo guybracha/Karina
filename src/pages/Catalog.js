@@ -3,6 +3,9 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PRODUCTS } from "../lib/products";
 import "../style/Catalog.css";
+import summer from "../img/cards/summer.png";
+import winter from "../img/cards/winter.png";
+import safety from "../img/cards/safety.png";
 
 /* ---------- עזרות ---------- */
 const CATEGORY_LABELS = {
@@ -21,19 +24,45 @@ const PAGE_SIZE = 12;
 
 /** ========= כרטיסיות פתיחה מהירה ========= **/
 const QUICK_CARDS = [
-  { kind: "season",   key: "קיץ",    title: "בגדי קיץ",    subtitle: "חולצות כותנה דקות, וסטים מאווררים", icon: "🥵" },
-  { kind: "season",   key: "חורף",   title: "בגדי חורף",   subtitle: "קפוצ’ונים, סופטשל וביגוד מחמם",     icon: "❄️" },
-  { kind: "category", key: "safety", title: "בגדי בטיחות", subtitle: "וסטים זוהרים, ציוד עבודה בטיחותי",  icon: "🦺" },
+  {
+    kind: "season",
+    key: "קיץ",
+    title: "בגדי קיץ",
+    subtitle: "חולצות כותנה דקות, וסטים מאווררים",
+    icon: "🥵",
+    img: summer, // שים בתיקיית public
+  },
+  {
+    kind: "season",
+    key: "חורף",
+    title: "בגדי חורף",
+    subtitle: "קפוצ’ונים, סופטשל וביגוד מחמם",
+    icon: "❄️",
+    img: winter,
+  },
+  {
+    kind: "category",
+    key: "safety",
+    title: "בגדי בטיחות",
+    subtitle: "וסטים זוהרים, ציוד עבודה בטיחותי",
+    icon: "🦺",
+    img: safety,
+  },
 ];
 
 function QuickCard({ card, active, onClick }) {
+  const hasBg = Boolean(card.img);
+  const bgStyle = hasBg ? { backgroundImage: `url(${card.img})` } : undefined;
+
   return (
     <button
       type="button"
-      className={`season-card season-card--plain ${active ? "is-active" : ""}`}
+      className={`season-card ${hasBg ? "season-card--with-bg season-card--portrait" : "season-card--plain"} ${active ? "is-active" : ""}`}
       onClick={onClick}
       aria-pressed={active}
+      style={bgStyle}
     >
+      {hasBg && <span className="season-card__overlay" aria-hidden="true" />}
       <div className="season-card__body">
         <div className="season-card__title">
           <span className="season-card__icon" aria-hidden="true">{card.icon}</span>

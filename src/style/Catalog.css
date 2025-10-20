@@ -381,3 +381,375 @@
   font-size: 1.1rem; line-height: 1;
 }
 
+/* ===== Season Cards – עם רקע תמונה ===== */
+.season-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.season-card--with-bg {
+  position: relative;
+  aspect-ratio: 3 / 1; /* יחס מלבני ארוך */
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  border-radius: 18px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.1);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  color: #fff;
+}
+
+.season-card--with-bg:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 42px rgba(16, 24, 40, 0.15);
+}
+
+.season-card--with-bg.is-active {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.season-card__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom right, rgba(15, 23, 42, 0.5), rgba(15, 23, 42, 0.25));
+  z-index: 1;
+}
+
+.season-card__body {
+  position: relative;
+  z-index: 2;
+  padding: 16px 20px;
+  display: grid;
+  gap: 4px;
+  text-align: start;
+}
+
+.season-card__title {
+  font-weight: 800;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.season-card__subtitle {
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+@media (max-width: 767px) {
+  .season-card--with-bg {
+    aspect-ratio: 2.4 / 1;
+  }
+}
+
+/* ===== Season Cards – וריאנט עם רקע תמונה (מלבנים ארוכים) ===== */
+.season-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.season-card{
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid #eef2f7;
+  box-shadow: 0 10px 30px rgba(16,24,40,.08);
+  transition: transform .22s cubic-bezier(.22,.61,.36,1), box-shadow .22s cubic-bezier(.22,.61,.36,1), border-color .22s ease;
+  text-align: start;
+  overflow: hidden;
+}
+
+.season-card:hover{
+  transform: translateY(-3px);
+  box-shadow: 0 16px 42px rgba(16,24,40,.12);
+}
+
+/* מלבן ארוך עם תמונה */
+.season-card--with-bg{
+  aspect-ratio: 3 / 1;                 /* מלבני ורחב */
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  display: flex;
+  align-items: flex-end;
+}
+
+@media (max-width: 767.98px){
+  .season-card--with-bg{ aspect-ratio: 2.4 / 1; }
+}
+
+.season-card__overlay{
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom right, rgba(15,23,42,.50), rgba(15,23,42,.28));
+  z-index: 0;
+  pointer-events: none;
+}
+
+.season-card__body{
+  position: relative;
+  z-index: 1;
+  padding: 16px 18px;
+  display: grid;
+  gap: 4px;
+  background: transparent;             /* כדי שהרקע יישאר התמונה */
+}
+
+.season-card__title{
+  font-weight: 800;
+  color: inherit;
+  display: flex; align-items: center; gap: .5rem;
+  font-size: 1.15rem;
+}
+
+.season-card__subtitle{
+  color: rgba(255,255,255,.9);
+  font-size: .95rem;
+}
+
+/* מצב נבחר */
+.season-card.is-active{
+  border-color: transparent;
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/* וריאנט ה"plain" הקודם נשאר נתמך (למקרה שאין תמונה) */
+.season-card--plain{
+  background: #fff;
+  display: grid;
+  grid-template-rows: auto;
+}
+
+/* איקון בכותרת */
+.season-card__icon{
+  font-size: 1.1rem; line-height: 1;
+}
+
+/* ===== Season grid: רספונסיבי (1 / 2 / 3 בטורים) ===== */
+.season-grid{
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+@media (min-width: 576px){
+  .season-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 992px){
+  .season-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ===== בסיס כרטיס ===== */
+.season-card{
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid #eef2f7;
+  box-shadow: 0 10px 30px rgba(16,24,40,.08);
+  transition: transform .22s cubic-bezier(.22,.61,.36,1), box-shadow .22s cubic-bezier(.22,.61,.36,1), border-color .22s ease;
+  text-align: start;
+  overflow: hidden;
+  background: #fff;
+}
+.season-card:hover{
+  transform: translateY(-3px);
+  box-shadow: 0 16px 42px rgba(16,24,40,.12);
+}
+
+/* ===== וריאנט עם תמונת רקע – "עומד" ===== */
+.season-card--with-bg{
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+}
+
+/* עומד: גובה רספונסיבי (גובה ננעל ע"י clamp), רוחב לפי הטור */
+.season-card--portrait{
+  /* שתופס גובה נעים בין מובייל לשולחן עבודה */
+  height: clamp(180px, 32vw, 380px);
+  display: flex;
+  align-items: flex-end;   /* טקסט בתחתית */
+  justify-content: flex-start;
+}
+
+.season-card__overlay{
+  position: absolute; inset: 0;
+  /* כהות קלה מלמעלה למטה */
+  background: linear-gradient(to top, rgba(15,23,42,.55), rgba(15,23,42,.0) 55%);
+  z-index: 0; pointer-events: none;
+}
+
+/* טקסט על הרקע */
+.season-card__body{
+  position: relative; z-index: 1;
+  width: 100%;
+  padding: 16px 18px;
+  display: grid; gap: 6px;
+  color: #fff;
+}
+.season-card__title{
+  font-weight: 800; color: #fff;
+  display: flex; align-items: center; gap: .5rem;
+  font-size: 1.15rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,.35);
+}
+.season-card__subtitle{
+  color: rgba(255,255,255,.92);
+  font-size: .95rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+
+/* מצב נבחר */
+.season-card.is-active{
+  border-color: transparent;
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/* תמיכה בכרטיס "plain" (אין תמונה) */
+.season-card--plain .season-card__body{
+  color: #0f172a;
+}
+.season-card--plain .season-card__subtitle{
+  color: #64748b;
+}
+
+/* אייקון */
+.season-card__icon{ font-size: 1.1rem; line-height: 1; }
+
+/* ===== גריד כרטיסיות – רספונסיבי (Portrait) ===== */
+.season-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+@media (max-width: 767.98px) {
+  .season-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 75%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 6px;
+    gap: 12px;
+  }
+  .season-grid > * {
+    scroll-snap-align: start;
+  }
+}
+
+/* ===== כרטיס עומד עם רקע תמונה ===== */
+.season-card--with-bg {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 24px rgba(16,24,40,.08);
+  transition: transform .25s ease, box-shadow .25s ease;
+  aspect-ratio: 3 / 4;           /* יחס עומד – Portrait */
+  color: #fff;
+  display: flex;
+  align-items: flex-end;
+}
+
+.season-card--with-bg:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(16,24,40,.12);
+}
+
+/* שכבת כהות לתמונת הרקע */
+.season-card__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(15,23,42,.6), rgba(15,23,42,.15) 60%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* טקסט בתחתית הכרטיס */
+.season-card__body {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding: 14px 16px;
+  display: grid;
+  gap: 4px;
+  text-align: start;
+}
+
+.season-card__title {
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  text-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+
+.season-card__subtitle {
+  font-size: .9rem;
+  color: rgba(255,255,255,.9);
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+
+/* מצב נבחר */
+.season-card.is-active {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/* ווריאנט בלי תמונה נשאר כרגיל */
+.season-card--plain {
+  background: #fff;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+}
+
+/* === קרוסלת מובייל: רוחב עקבי לכרטיסים === */
+@media (max-width: 767.98px){
+  .season-grid{
+    display: grid;
+    grid-auto-flow: column;
+    /* רוחב קבוע ואחיד לכל כרטיס: בין 220px ל-78% מהרוחב */
+    grid-auto-columns: minmax(220px, 78%);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+    padding-bottom: 6px;
+  }
+  .season-grid > *{
+    scroll-snap-align: start;
+    /* חשוב: לא לאפשר לתוכן להגדיר מינימום רוחב */
+    min-width: 0;
+  }
+}
+
+/* מוודאים שגם בכרטיס עצמו התוכן לא מרחיב רוחב */
+.season-card{
+  box-sizing: border-box;
+  min-width: 0;            /* מונע דחיפת רוחב ע"י תוכן */
+}
+
+/* גוף הטקסט – לא ידחוף את הכרטיס */
+.season-card__body{
+  min-width: 0;
+}
+
+/* אופציונלי: מגבלה עד 2 שורות כדי לא לייצר גובה/לחץ על האספקט-ריישיו */
+.season-card__title,
+.season-card__subtitle{
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
