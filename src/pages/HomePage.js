@@ -62,6 +62,69 @@ function computeTopCategories(products) {
 /* ==================== קומפוננטה ==================== */
 
 export default function HomePage() {
+  // ===== SEO =====
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "https://example.com";
+  const canonical = `${origin}/`;
+  const siteName = "Karina";
+  const pageTitle = "קארינה – הדפסה על חולצות וביגוד עבודה ממותג";
+  const pageDesc =
+    "הדפסה על חולצות וביגוד עבודה לעסקים וצוותים: DTF/רקמה/סובלימציה, ליווי אישי, אספקה מהירה ומשלוחים לכל הארץ. קבלו הדמיה לפני ייצור.";
+  const ogImage = banner; // אפשר להחליף לתמונה ייעודית של OG אם קיימת
+
+  const webSiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: siteName,
+    url: canonical,
+    inLanguage: "he-IL",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: `${origin}/catalog?query={search_term_string}`,
+      "query-input": "required name=search_term_string",
+    },
+  };
+
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "קארינה הדפסות",
+    url: canonical,
+    logo: `${origin}/img/logo1.png`,
+    sameAs: [
+      "https://wa.me/972545042443",
+    ],
+    contactPoint: [
+      {
+        "@type": "ContactPoint",
+        telephone: "+972-54-504-2443",
+        contactType: "customer service",
+        areaServed: "IL",
+        availableLanguage: ["he", "en"],
+        email: "karina.offical.israel@gmail.com",
+      },
+    ],
+  };
+
+  const siteNavigationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    itemListElement: [
+      { "@type": "SiteNavigationElement", name: "קטלוג", url: `${origin}/catalog` },
+      { "@type": "SiteNavigationElement", name: "שאלות ותשובות", url: `${origin}/faq` },
+      { "@type": "SiteNavigationElement", name: "אודות", url: `${origin}/about` },
+      { "@type": "SiteNavigationElement", name: "צור קשר", url: `${origin}/contact` },
+    ],
+  };
+
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "דף הבית", item: canonical },
+    ],
+  };
+
   // נמכרים ביותר – 8 פריטים
   const bestSellers = useMemo(() => PRODUCTS.slice(0, 8), []);
 
@@ -78,7 +141,6 @@ export default function HomePage() {
     const el = catsRef.current;
     if (!el) return;
     const maxScroll = el.scrollWidth - el.clientWidth;
-    // מרווח קטן כדי לא "לרצד" בשוליים
     setCanPrev(el.scrollLeft > 4);
     setCanNext(el.scrollLeft < maxScroll - 4);
   };
@@ -86,9 +148,7 @@ export default function HomePage() {
   const scrollByStep = (dir = 1) => {
     const el = catsRef.current;
     if (!el) return;
-    // צעד יחסי לרוחב, עם מינימום/מקסימום
     const step = Math.max(280, Math.min(520, el.clientWidth * 0.5));
-    // מכבד העדפת reduced-motion (הדפדפן יתעלם מההתנהגות אם לא נתמך)
     const behavior =
       window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
     el.scrollBy({ left: dir * step, behavior });
@@ -114,10 +174,37 @@ export default function HomePage() {
 
   return (
     <main className="homepage" dir="rtl">
+      <Helmet prioritizeSeoTags>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDesc} />
+        <link rel="canonical" href={canonical} />
+        <meta name="robots" content="index,follow,max-image-preview:large" />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={siteName} />
+        <meta property="og:locale" content="he_IL" />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDesc} />
+        <meta property="og:url" content={canonical} />
+        <meta property="og:image" content={ogImage} />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDesc} />
+        <meta name="twitter:image" content={ogImage} />
+
+        {/* Structured Data */}
+        <script type="application/ld+json">{JSON.stringify(webSiteJsonLd)}</script>
+        <script type="application/ld+json">{JSON.stringify(organizationJsonLd)}</script>
+        <script type="application/ld+json">{JSON.stringify(siteNavigationJsonLd)}</script>
+        <script type="application/ld+json">{JSON.stringify(breadcrumbJsonLd)}</script>
+      </Helmet>
+
       {/* ===== HERO ===== */}
       <section className="hero-wrap position-relative overflow-hidden">
         <picture>
-          {/* אם יש לך גרסאות webp/avif – אפשר להוסיף כאן <source> */}
           <img
             src={banner}
             alt="צוות עובדים עם מדי עבודה ממותגים"
@@ -135,19 +222,18 @@ export default function HomePage() {
           <div className="row justify-content-center">
             <div className="col-12 col-xl-10 text-center">
               <div className="hero-logo mb-3">
-              <img
-                src={logo}
-                alt="Karina Workwear Logo"
-                className="img-fluid"
-                style={{ maxHeight: "128px" }}
-                loading="eager"
-                decoding="async"
-              />
-            </div>
+                <img
+                  src={logo}
+                  alt="Karina Workwear Logo"
+                  className="img-fluid"
+                  style={{ maxHeight: "128px" }}
+                  loading="eager"
+                  decoding="async"
+                />
+              </div>
 
-              {/* הסרתי display-5 כדי לאפשר גודל זורם מה-CSS (clamp) */}
               <h1 className="fw-bolder text-white mb-3 lh-sm hero-title">
-                מיתוג שמבליט את הצוות <br></br> איכות שמחזיקה בכביסה
+                מיתוג שמבליט את הצוות <br /> איכות שמחזיקה בכביסה
               </h1>
 
               <p className="text-white-75 mb-4 hero-subtitle">
@@ -156,9 +242,9 @@ export default function HomePage() {
               </p>
 
               <div className="d-flex gap-2 justify-content-center">
-              <NavLink to="/contact" className="btn btn-primary">דברו איתנו</NavLink>
-              <NavLink to="/catalog" className="btn btn-primary">עיינו בקטלוג</NavLink>
-            </div>
+                <NavLink to="/contact" className="btn btn-primary">דברו איתנו</NavLink>
+                <NavLink to="/catalog" className="btn btn-primary">עיינו בקטלוג</NavLink>
+              </div>
 
               <ul className="list-inline mt-4 mb-0 text-white-75 small hero-kpis" aria-label="יתרונות משלימים">
                 <li className="list-inline-item me-3">
@@ -178,21 +264,20 @@ export default function HomePage() {
 
       {/* ===== למה קרינה ===== */}
       <div className="row g-4 text-center text-md-start" role="list">
-  {FEATURES.map((f) => (
-    <div key={f.title} className="col-6 col-lg-4 d-flex" role="listitem">
-      <div className="feature-card usp d-flex align-items-center justify-content-center justify-content-md-start gap-3 flex-grow-1">
-        <span className="usp-icon" aria-hidden="true">
-          <i className={`bi ${f.icon}`} />
-        </span>
-        <div>
-          <div className="fw-bold">{f.title}</div>
-          <div className="text-muted small">{f.text}</div>
-        </div>
+        {FEATURES.map((f) => (
+          <div key={f.title} className="col-6 col-lg-4 d-flex" role="listitem">
+            <div className="feature-card usp d-flex align-items-center justify-content-center justify-content-md-start gap-3 flex-grow-1">
+              <span className="usp-icon" aria-hidden="true">
+                <i className={`bi ${f.icon}`} />
+              </span>
+              <div>
+                <div className="fw-bold">{f.title}</div>
+                <div className="text-muted small">{f.text}</div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
-    </div>
-  ))}
-</div>
-
 
       {/* ===== איך זה עובד ===== */}
       <section className="container py-6">
@@ -217,7 +302,7 @@ export default function HomePage() {
       </section>
 
       {/* ===== מי אנחנו ===== */}
-    <section className="py-6 bg-pink-soft position-relative overflow-hidden">
+      <section className="py-6 bg-pink-soft position-relative overflow-hidden">
         <div className="shape-blur-1" aria-hidden="true" />
         <div className="container">
           <div className="row g-4 align-items-center">

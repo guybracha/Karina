@@ -108,7 +108,7 @@ export default function TermsPage() {
     COMPANY_NAME: "קארינה תעשיות טקסטיל",
     COMPANY_ID: "123456789",
     COMPANY_ADDRESS: "צבי הנחל 4, אזור תעשייה עמק חפר",
-    SUPPORT_EMAIL: "karina.official.israel@gmail.com",
+    SUPPORT_EMAIL: "karina.offical.israel@gmail.com",
     SUPPORT_PHONE: "054-5042443",
     SUPPORT_HOURS: "א׳–ה׳ 09:00–17:00",
     PRIVACY_URL: "/privacy",

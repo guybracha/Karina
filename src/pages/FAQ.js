@@ -24,6 +24,13 @@ export default function FAQ() {
   const navigate = useNavigate();
   const loc = useLocation();
 
+  // SEO basics
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://example.com";
+  const canonical = `${origin}${loc.pathname}${loc.search}`;
+  const pageTitle = "שאלות נפוצות | קארינה הדפסות";
+  const pageDesc =
+    "תשובות קצרות וברורות על קבצים מומלצים להדפסה, זמני אספקה, משלוחים, תשלומים, תחזוקת בגדים מודפסים ועוד.";
+
   const faqs = useMemo(() => {
     const idify = (s) =>
       s
@@ -39,7 +46,7 @@ export default function FAQ() {
     return faqs.filter((x) => x.q.toLowerCase().includes(q) || x.a.toLowerCase().includes(q));
   }, [faqs, query]);
 
-  // פתיחה אוטומטית לפי hash בכתובת (גם בניווט פנימי)
+  // פתיחה אוטומטית לפי hash
   useEffect(() => {
     const hash = decodeURIComponent((loc.hash || "").replace("#", ""));
     if (!hash) return;
@@ -49,26 +56,50 @@ export default function FAQ() {
     }
   }, [loc.hash]);
 
-  // JSON-LD ל-SEO (FAQPage)
+  // JSON-LD
   const faqSchema = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    "mainEntity": faqs.map(({ q, a }) => ({
+    mainEntity: faqs.map(({ q, a }) => ({
       "@type": "Question",
-      "name": q,
-      "acceptedAnswer": { "@type": "Answer", "text": a }
+      name: q,
+      acceptedAnswer: { "@type": "Answer", text: a }
     }))
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "דף הבית", item: `${origin}/` },
+      { "@type": "ListItem", position: 2, name: "שאלות נפוצות", item: canonical }
+    ]
   };
 
   return (
     <div className="container py-5">
-      <Helmet>
+      <Helmet prioritizeSeoTags>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDesc} />
+        <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+        <link rel="canonical" href={canonical} />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Karina" />
+        <meta property="og:locale" content="he_IL" />
+        <meta property="og:title" content="שאלות נפוצות | קארינה הדפסות" />
+        <meta property="og:description" content={pageDesc} />
+        <meta property="og:url" content={canonical} />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="שאלות נפוצות | קארינה הדפסות" />
+        <meta name="twitter:description" content={pageDesc} />
+
+        {/* Structured Data */}
         <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
-        <title>שאלות נפוצות | קארינה הדפסות</title>
-        <meta
-          name="description"
-          content="תשובות קצרות וברורות לשאלות על קבצים להדפסה, זמני אספקה, משלוחים, תשלומים ועוד."
-        />
+        <script type="application/ld+json">{JSON.stringify(breadcrumbSchema)}</script>
       </Helmet>
 
       <header className="mb-4 text-center">
@@ -107,7 +138,7 @@ export default function FAQ() {
         </div>
       </header>
 
-      {/* אקורדיון מעודן */}
+      {/* אקורדיון */}
       <div className="accordion accordion-flush" id="faqAccordion">
         {filtered.map(({ q, a, id }, idx) => {
           const collapseId = `a-${id}`;
@@ -124,7 +155,6 @@ export default function FAQ() {
                   aria-controls={collapseId}
                   data-target-id={id}
                   onClick={() => {
-                    // עדכון ה-URL עם העוגן (ללא reload)
                     navigate(`${loc.pathname}${loc.search}#${id}`, { replace: true });
                   }}
                 >
@@ -156,10 +186,7 @@ export default function FAQ() {
                           const origin = typeof window !== "undefined" ? window.location.origin : "";
                           const shareUrl = `${origin}${loc.pathname}${loc.search}#${id}`;
                           await navigator.clipboard.writeText(shareUrl);
-                          // כאן אפשר לקרוא ל-toast אם יש
-                        } catch {
-                          // swallow
-                        }
+                        } catch {}
                       }}
                     >
                       <i className="bi bi-link-45deg me-1" /> העתק קישור לשאלה

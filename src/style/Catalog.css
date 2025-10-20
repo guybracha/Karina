@@ -1,116 +1,182 @@
-/* ==============================
-   Catalog – UI Polish
-   ============================== */
+/* -------------------------------
+   Catalog – Premium Polish Pack
+   ------------------------------- */
 
-:root{
-  --sticky-offset: 70px;        /* מרחק מההדר; עדכן לפי גובה ההדר שלך */
-  --radius-lg: 18px;
-  --shadow-soft: 0 10px 30px rgba(16,24,40,.08);
-  --shadow-soft-hover: 0 14px 36px rgba(16,24,40,.12);
-  --ease: cubic-bezier(.22,.61,.36,1);
+/* רקע עמוד עם גרדיינט עדין */
+.catalog-page-bg{
+  background:
+    /* ורוד רך f4bfd0 בפינה הימנית העליונה */
+    radial-gradient(1200px 420px at 90% -10%, rgba(244,191,208,.35), rgba(244,191,208,0) 60%),
+
+    /* ירקרק עדין מצד שמאל */
+    radial-gradient(800px 300px at 10% 0%, rgba(16,185,129,.10), transparent 60%),
+
+    /* סגול רך בתחתית */
+    radial-gradient(1200px 400px at 70% 120%, rgba(99,102,241,.12), transparent 60%),
+
+    /* בסיס בהיר */
+    linear-gradient(180deg, #f8fafc, #ffffff 45%, #f9fafb);
+  min-height: 100%;
 }
 
-/* ===== Toolbar (filters) - sticky with blur ===== */
+/* ===== Toolbar (filters) - זכוכית + הדגשה ===== */
 .catalog-toolbar{
   position: sticky;
-  top: var(--sticky-offset);
+  top: var(--sticky-offset, 70px);
   z-index: 20;
-  border-radius: 16px;
-  backdrop-filter: saturate(140%) blur(6px);
-  -webkit-backdrop-filter: saturate(140%) blur(6px);
-  background: color-mix(in oklab, #fff 86%, transparent);
-  box-shadow: var(--shadow-soft);
+  border-radius: 18px;
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
+  background: color-mix(in oklab, #ffffff 86%, transparent);
+  box-shadow: 0 12px 40px rgba(16,24,40,.10);
+  border: 1px solid color-mix(in oklab, #e5e7eb 70%, transparent);
 }
-@media (max-width: 575.98px){
-  .catalog-toolbar{ border-radius: 14px; }
-}
-
-/* קלט חיפוש – אייקון מיושר RTL */
+.catalog-toolbar .form-label{ font-weight: 700; color:#0f172a; font-size:.9rem; }
 .catalog-search{
-  padding-inline-start: 38px !important;
+  padding-inline-start: 40px !important;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+.catalog-search:focus{
+  border-color:#94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,.25);
 }
 .catalog-search-icon{
-  position: absolute; inset-inline-start: 10px; bottom: 10px; opacity: .6;
+  position: absolute; inset-inline-start: 12px; bottom: 10px; opacity: .6;
 }
 
-/* ===== Product card ===== */
+/* Pills למסננים הפעילים */
+.badge.rounded-pill.bg-light{
+  background: #f8fafc !important; border:1px solid #e5e7eb !important;
+  padding: .45rem .7rem; border-radius: 999px !important;
+}
+
+/* ===== Product cards – מודרני, מרחף, עם גבול גרדיינט דק ===== */
 .product-card{
-  border: 1px solid #eef2f7;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  position: relative;
+  border-radius: 20px;
+  overflow: clip;
   background: #fff;
-  box-shadow: var(--shadow-soft);
-  transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+  border: 1px solid #eef2f7;
+  box-shadow: 0 8px 26px rgba(2,6,23,.06);
+  transition: transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s cubic-bezier(.22,.61,.36,1), border-color .25s ease;
+  isolation: isolate;
+}
+.product-card::before{
+  content:"";
+  position:absolute; inset: -1px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(244,191,208,.45), rgba(99,102,241,.35), rgba(16,185,129,.35));
+  opacity:0; transition: opacity .25s ease;
+  z-index:0;
 }
 .product-card:hover{
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-soft-hover);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 42px rgba(2,6,23,.12);
+  border-color: transparent;
 }
+.product-card:hover::before{ opacity:.6; }
 
-/* מדיה עם יחס-צד קבוע */
+/* מדיה עם יחס צד + שכבת overlay לצפייה מהירה */
 .product-media{
   position: relative;
-  aspect-ratio: 4 / 3;           /* קבוע ויפה בכל תמונה */
+  aspect-ratio: 4 / 3;
   background: #f8fafc;
 }
 .product-media img{
   width: 100%; height: 100%;
   object-fit: contain;
-  padding: 14px;
-  transition: transform .25s var(--ease);
+  padding: 16px;
+  transition: transform .28s cubic-bezier(.22,.61,.36,1);
+  position: relative; z-index: 1;
 }
-.product-card:hover .product-media img{ transform: scale(1.02); }
+.product-card:hover .product-media img{ transform: scale(1.03); }
 
-/* תגיות (חדש/מבצע) */
+.media-overlay{
+  position:absolute; inset:0;
+  display:grid; place-items:center;
+  background: linear-gradient(to bottom, rgba(15,23,42,.0), rgba(15,23,42,.18));
+  opacity:0; transition: opacity .22s ease;
+  z-index: 2;
+}
+.product-card:hover .media-overlay{ opacity:1; }
+.quick-view{
+  border-radius: 999px; padding: .4rem .8rem;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(148,163,184,.35) !important;
+  box-shadow: 0 6px 20px rgba(2,6,23,.18);
+  font-weight:700;
+}
+
+/* תגיות (חדש/מבצע) משופרות */
 .product-badge{
   position: absolute; inset-inline-start: 10px; top: 10px;
-  border-radius: 999px; padding: 6px 10px; font-weight: 700; font-size: .8rem;
-  color: #111827; background: #fff; box-shadow: 0 6px 18px rgba(16,24,40,.12);
+  border-radius: 999px; padding: 6px 10px; font-weight: 800; font-size: .78rem;
+  color: #0f172a; background: #fff; box-shadow: 0 10px 24px rgba(2,6,23,.20);
+  z-index: 3;
 }
 .product-badge.sale{ background: #fef3f2; color: #b42318; }
-.product-badge.new { background: #ecfdf3; color: #027a48; }
+.product-badge.new { background: #ecfdf5; color: #047857; }
 
-/* מחיר פיל */
+/* מחיר – פיל כהה עם ברק קל */
 .price-pill{
   position: absolute; inset-inline-end: 10px; top: 10px;
   border-radius: 999px; padding: 6px 10px; font-weight: 800; font-size: .85rem;
-  background:#111827; color:#fff;
+  background: linear-gradient(180deg, #111827, #0b1220); color:#fff;
+  box-shadow: 0 10px 24px rgba(2,6,23,.25);
+  z-index: 3;
 }
 
 /* גוף הכרטיס */
 .product-card .card-body{
-  display: flex; flex-direction: column; gap: .4rem;
+  display: flex; flex-direction: column; gap: .5rem;
 }
+.card-title{ font-weight:800; color:#0f172a; }
 
-/* תגיות קטנות מתחת לכותרת */
-.meta-row{
-  display:flex; align-items:center; gap:.5rem; flex-wrap: wrap;
-  color:#64748b; font-size: .85rem;
+/* Chips – קטגוריה/עונה/צבע */
+.chips-row{
+  display:flex; flex-wrap:wrap; gap:.5rem;
 }
+.chip{
+  height: 28px; display:inline-flex; align-items:center; gap:.5rem;
+  border-radius: 999px; padding: 0 .7rem;
+  font-size:.78rem; font-weight:700; letter-spacing:.01em;
+  border:1px solid #e5e7eb; color:#0f172a; background:#f8fafc;
+}
+.chip.ghost{ background: #f9fafb; color:#334155; }
+.chip.dot .dot-swatch{
+  width:12px; height:12px; border-radius:999px; border:1px solid rgba(0,0,0,.15);
+}
+/* מיפוי צבעים בסיסי לפי שם (אפשר להרחיב) */
+.dot-swatch[data-color="נייבי"]{ background:#1f2a44; }
+.dot-swatch[data-color="שחור"]{ background:#111827; }
+.dot-swatch[data-color="אפור"]{ background:#6b7280; }
 
-/* דירוג כוכבים (אופציונלי אם תציג) */
-.stars{
-  --star: "★"; --empty: "☆"; font-size: .95rem; color:#f59e0b;
-}
-.stars [data-fill="0"]::before{ content: var(--empty); color:#cbd5e1; }
-.stars [data-fill="1"]::before{ content: var(--star); }
-
-/* מלאי נמוך */
-.low-stock{
-  display: grid; gap: 6px; margin-top: 2px;
-}
+/* מלאי נמוך – בר גרדיינט עם אנימציה קטנה */
+.low-stock{ display:grid; gap:6px; margin-top:2px; }
 .low-stock .bar{
-  height:6px; border-radius:999px; background:#f1f5f9; overflow:hidden;
-  position:relative;
+  height:7px; border-radius:999px; background:#eef2f7; overflow:hidden; position:relative;
 }
 .low-stock .bar > span{
-  display:block; height:100%; background: linear-gradient(90deg, #fde68a, #f59e0b);
-  width: 40%;
+  display:block; height:100%;
+  background: linear-gradient(90deg, #fde68a, #f59e0b);
+  width:40%;
+  transform-origin: left;
+  animation: pulseWidth 1.2s ease-in-out infinite alternate;
 }
+@keyframes pulseWidth{ from{ transform: scaleX(.98);} to{ transform: scaleX(1.02);} }
+.low-stock .text-muted{ color:#64748b !important; }
 
-/* כפתור */
+/* כפתורים */
 .product-card .btn{
-  min-height: 42px; border-radius: 12px;
+  min-height: 44px; border-radius: 14px; font-weight:800;
+}
+.product-card .btn.btn-primary{
+  background: linear-gradient(135deg, #4f46e5, #10b981);
+  border: none;
+}
+.product-card .btn.btn-primary:hover{
+  filter: brightness(1.05);
+  box-shadow: 0 12px 28px rgba(79,70,229,.25);
 }
 
 /* ===== Grid gaps ===== */
@@ -118,86 +184,200 @@
 @media (min-width: 768px){ .catalog-grid{ row-gap: 1.25rem; } }
 @media (min-width: 992px){ .catalog-grid{ row-gap: 1.5rem; } }
 
-/* ===== Empty state ===== */
-.empty-state{
-  background:#fff; border-radius: 18px; padding: 28px;
-  box-shadow: var(--shadow-soft);
+/* ===== Pagination – פילס יפות ===== */
+.pagination .page-item .page-link{
+  border-radius: 999px !important;
+  margin: 0 .2rem;
+  border: 1px solid #e5e7eb;
+  color:#0f172a;
+}
+.pagination .page-item.active .page-link{
+  background: linear-gradient(135deg, #4f46e5, #10b981);
+  border-color: transparent; color: #fff;
+  box-shadow: 0 8px 20px rgba(79,70,229,.25);
+}
+.pagination .page-item .page-link:hover{
+  background:#f1f5f9;
 }
 
-/* ===== Focus visible for keyboard users ===== */
-:where(a, button, .btn, select, input).focus-ring:focus-visible,
-:where(.product-card a, .product-card .btn):focus-visible{
+/* ===== Empty state ===== */
+.empty-state{
+  background:#fff; border-radius: 20px; padding: 28px;
+  box-shadow: 0 16px 46px rgba(2,6,23,.10);
+  border: 1px solid #eef2f7;
+}
+
+/* ===== Mobile Filters Drawer – ליטוש קטן ===== */
+.filters-drawer__panel{
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -12px 36px rgba(2,6,23,.18);
+}
+.filters-drawer__header{
+  position: relative;
+}
+.filters-drawer__header::after{
+  content:"";
+  position:absolute; inset-inline: calc(50% - 20px) calc(50% - 20px); top:6px;
+  width:40px; height:4px; border-radius:999px; background:#e5e7eb;
+}
+
+/* התאמות נגישות: focus */
+:where(a, button, .btn, select, input):focus-visible{
   outline: 3px solid #94a3b8; outline-offset: 2px; box-shadow: none;
 }
 
 /* כיבוד העדפת “בלי אנימציות” */
 @media (prefers-reduced-motion: reduce){
   *{ transition:none !important; animation:none !important; scroll-behavior:auto !important; }
+  .product-card:hover{ transform:none; }
 }
 
-/* ==============================
-   Mobile Filters Drawer
-   ============================== */
-
-/* כפתור "סנן" יוצג רק במובייל */
-@media (min-width: 768px){
-  .mobile-only{ display: none !important; }
+/* ===== Season Gallery ===== */
+.season-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 14px;
+}
+@media (max-width: 991.98px){
+  .season-grid{
+    grid-template-columns: repeat(3, minmax(0,1fr));
+  }
+}
+@media (max-width: 767.98px){
+  .season-grid{
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 80%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+    padding-bottom: 6px;
+  }
+  .season-grid > * { scroll-snap-align: start; }
 }
 
-/* Drawer container (fixed full-screen) */
-.filters-drawer{
-  position: fixed; inset: 0; z-index: 1080; /* מעל ה-navbar והכרטיס */
-  display: grid; grid-template-rows: 1fr auto; /* overlay + panel */
-}
-
-/* רקע כהה */
-.filters-drawer__overlay{
-  background: rgba(0,0,0,.45);
-  transition: opacity .2s ease;
-}
-
-/* פנל תחתון (bottom sheet) */
-.filters-drawer__panel{
-  position: fixed; inset-inline: 0; bottom: 0;
-  background: #fff; border-radius: 18px 18px 0 0;
-  box-shadow: 0 -12px 30px rgba(16,24,40,.16);
-  transform: translateY(100%);
-  transition: transform .28s cubic-bezier(.22,.61,.36,1);
-  max-height: min(86vh, 720px);
-  display: flex; flex-direction: column;
-}
-
-/* מצב פתוח */
-.filters-drawer.is-open .filters-drawer__overlay{ opacity: 1; }
-.filters-drawer.is-open .filters-drawer__panel{ transform: translateY(0); }
-
-/* כותרת פנל */
-.filters-drawer__header{
-  padding: 14px 16px;
-  border-bottom: 1px solid #f1f5f9;
-  display: flex; align-items: center; justify-content: space-between;
-}
-.filters-drawer__title{ margin: 0; font-weight: 700; }
-
-/* גוף פנל – גלילה נעימה */
-.filters-drawer__body{
-  padding: 14px 16px 6px;
-  overflow: auto;
-}
-
-/* אזור פעולות דביק בתחתית */
-.filters-drawer__actions{
-  position: sticky; bottom: 0;
-  padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
-  border-top: 1px solid #f1f5f9;
+.season-card{
+  position: relative;
+  display: grid;
+  grid-template-rows: 140px auto;
+  width: 100%;
+  text-align: start;
+  border: 1px solid #eef2f7;
+  border-radius: 18px;
+  overflow: hidden;
   background: #fff;
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  box-shadow: 0 10px 30px rgba(16,24,40,.08);
+  transition: transform .22s cubic-bezier(.22,.61,.36,1), box-shadow .22s cubic-bezier(.22,.61,.36,1), border-color .22s ease;
+}
+.season-card:hover{
+  transform: translateY(-3px);
+  box-shadow: 0 16px 42px rgba(16,24,40,.12);
+}
+.season-card.is-active{
+  border-color: transparent;
+}
+.season-card.is-active::after{
+  content: "";
+  position: absolute; inset: -1px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(244,191,208,.5), rgba(99,102,241,.35), rgba(16,185,129,.35));
+  z-index: 0; opacity: .7;
+  pointer-events: none;
 }
 
-/* נקיון אנימציות למי שמעדיף פחות */
-@media (prefers-reduced-motion: reduce){
-  .filters-drawer__overlay, .filters-drawer__panel{ transition: none !important; }
+.season-card__media{
+  position: relative;
+  background-size: cover;
+  background-position: center;
+}
+.season-card__fallback{ width: 100%; height: 100%; }
+
+.season-card__body{
+  position: relative;
+  z-index: 1;
+  padding: 14px 16px;
+  display: grid;
+  gap: 4px;
+  background: #fff;
+}
+.season-card__title{
+  font-weight: 800; color: #0f172a;
+  display: flex; align-items: center; gap: .5rem;
+}
+.season-card__subtitle{
+  color: #64748b; font-size: .9rem;
+}
+.season-card__icon{
+  font-size: 1.1rem; line-height: 1;
 }
 
-/* כשה-Drawer פתוח – נטרל גלילה בדף */
-.body-no-scroll{ overflow: hidden !important; touch-action: none; }
+/* בר מיון קומפקטי */
+.season-toolbar{
+  border-radius: 16px;
+  backdrop-filter: saturate(140%) blur(6px);
+  background: color-mix(in oklab, #ffffff 86%, transparent);
+  box-shadow: 0 12px 40px rgba(16,24,40,.10);
+  border: 1px solid color-mix(in oklab, #e5e7eb 70%, transparent);
+}
+
+/* ===== Season Gallery (Plain) ===== */
+.season-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 14px;
+}
+@media (max-width: 991.98px){
+  .season-grid{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+@media (max-width: 767.98px){
+  .season-grid{
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 80%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+    padding-bottom: 6px;
+  }
+  .season-grid > * { scroll-snap-align: start; }
+}
+
+.season-card{
+  position: relative;
+  width: 100%;
+  text-align: start;
+  border: 1px solid #eef2f7;
+  border-radius: 18px;
+  background: #fff;            /* לבן נקי */
+  box-shadow: 0 10px 30px rgba(16,24,40,.08);
+  transition: transform .2s cubic-bezier(.22,.61,.36,1), box-shadow .2s cubic-bezier(.22,.61,.36,1), border-color .2s ease;
+}
+.season-card:hover{
+  transform: translateY(-3px);
+  box-shadow: 0 16px 42px rgba(16,24,40,.12);
+}
+.season-card.is-active{
+  border-color: #c7d2fe;       /* הדגשה עדינה במקום גרדיינט */
+  box-shadow: 0 12px 36px rgba(99,102,241,.18);
+}
+
+/* אין שכבת מדיה/תמונה */
+.season-card__media{ display: none; }
+
+/* גוף הכרטיס */
+.season-card__body{
+  padding: 16px 18px;
+  display: grid;
+  gap: 4px;
+}
+.season-card__title{
+  font-weight: 800; color: #0f172a;
+  display: flex; align-items: center; gap: .5rem;
+}
+.season-card__subtitle{
+  color: #64748b; font-size: .9rem;
+}
+.season-card__icon{
+  font-size: 1.1rem; line-height: 1;
+}
+

@@ -240,3 +240,31 @@ html.a11y-high-contrast .a11y-fab{ filter:none !important; mix-blend-mode:normal
   }
 }
 
+
+/* מיקום אמצע-שמאל לכפתור הנגישות */
+.a11y-fab.is-left{
+  inset-inline-start: calc(1rem + env(safe-area-inset-left)); /* שמאל עם כבוד ל-notch */
+  inset-inline-end: auto;
+  top: 50%;
+  bottom: auto;                 /* מבטל את המיקום לפי-bottom */
+  transform: translateY(-50%);  /* ממרכז אנכית */
+}
+
+/* כבר יש opacity/transform. נוסיף בידוד מלא כשסגור */
+.a11y-toolbar,
+.a11y-read-toolbar{
+  pointer-events: none;
+  visibility: hidden;    /* ← מונע פוקוס של ילדים */
+}
+.a11y-toolbar.is-open,
+.a11y-read-toolbar.is-open{
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* אופציונלי: מצב הסתרה מלא ל-FAB עצמו */
+.a11y-fab.is-hidden{
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
