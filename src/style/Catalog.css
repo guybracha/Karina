@@ -753,3 +753,89 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* כרטיס מוצר בסיס */
+.product-card{
+  position: relative;
+  border: 1px solid transparent;            /* כדי שלא יזוז כשצובעים מסגרת */
+  border-radius: 20px;
+  background: #fff;
+  overflow: hidden;
+  /* אנימציה בלי שינוי לייאאוט */
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: paint;                            /* מונע ריפרושים מסביב */
+}
+
+/* אפקט רחף רק במכשירים עם hover אמיתי */
+@media (hover:hover) and (pointer:fine){
+  .product-card:hover{
+    transform: translateY(-4px);             /* לא משנים margin/padding/border-width */
+    box-shadow: 0 12px 28px rgba(0,0,0,.12);
+  }
+}
+
+/* תמונה עטופה כדי שמדדים לא ישתנו */
+.product-card .img-wrap{
+  position: relative;
+  aspect-ratio: 1 / 1;                       /* או גובה קבוע מתאים */
+  display: grid;
+  place-items: center;
+}
+.product-card .img-wrap img{
+  max-width: 100%;
+  height: auto;
+  transition: transform 180ms ease, opacity 180ms ease;
+  will-change: transform;
+}
+@media (hover:hover) and (pointer:fine){
+  .product-card:hover .img-wrap img{
+    transform: scale(1.02);                  /* לא משנה layout */
+  }
+}
+
+/* כפתור "צפייה מהירה" – אוברליי מוחלט שלא דוחף תוכן */
+.product-card .quick-view{
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;                       /* שלא יתפוס עכבר בגלילה */
+  transition: opacity 160ms ease, transform 160ms ease;
+  will-change: opacity, transform;
+}
+@media (hover:hover) and (pointer:fine){
+  .product-card:hover .quick-view{
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, -56%);
+  }
+}
+
+/* אם היה border על hover – לתת מראש שקוף במקום להוסיף/להוריד */
+.product-card.is-hover-border{
+  border: 1px solid transparent;
+}
+.product-card.is-hover-border:hover{
+  border-color: rgba(0,0,0,.06);
+}
+
+/* מכבים hover בזמן גלילה אקטיבית (מוסיף class מה-JS למטה) */
+html.is-scrolling .product-card:hover{
+  transform: none;
+  box-shadow: none;
+}
+html.is-scrolling .product-card:hover .quick-view{
+  opacity: 0; visibility: hidden; transform: translate(-50%,-50%);
+}
+
+/* כבוד להעדפת המשתמש */
+@media (prefers-reduced-motion: reduce){
+  .product-card,
+  .product-card .img-wrap img,
+  .product-card .quick-view { transition: none !important; }
+}

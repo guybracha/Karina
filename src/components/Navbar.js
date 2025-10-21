@@ -6,6 +6,7 @@ import logo from "../img/logo.png";
 import useDebounce from "../hooks/useDebounce";
 import { searchProducts } from "../lib/searchService";
 import { PRODUCTS } from "../lib/products";
+import { getDiscountPct } from "../lib/pricing";
 
 const LS_CART_KEY = "karina:cart";
 const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
@@ -42,6 +43,19 @@ function saveCartToLS(next) {
     localStorage.setItem(LS_CART_KEY, JSON.stringify(normalized));
     window.dispatchEvent(new Event("karina:cartUpdated"));
   } catch {}
+}
+
+// ===== תמחור מדרגות לעגלה =====
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+function priceRow(it) {
+  const p = PRODUCTS.find((x) => x.slug === it.slug);
+  const baseUnit = Number(p?.price ?? it.price ?? 0);
+  const qty = Math.max(1, Number(it.qty) || 1);
+  const dPct = getDiscountPct(qty); // 0..0.5
+  const unitAfter = round2(baseUnit * (1 - dPct));
+  const lineTotal = round2(unitAfter * qty);
+  const saved = round2(baseUnit * qty - lineTotal);
+  return { baseUnit, qty, dPct, unitAfter, lineTotal, saved };
 }
 
 export default function Navbar() {
@@ -103,14 +117,25 @@ export default function Navbar() {
     };
   }, []);
 
-  // סכימה
+  // סכימה — עם מדרגות הנחה
   const cartCount = useMemo(
     () => cart.reduce((sum, it) => sum + Number(it.qty || 0), 0),
     [cart]
   );
-  const cartTotal = useMemo(
-    () => cart.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.qty || 0), 0),
+
+  const pricingRows = useMemo(
+    () => cart.map((it) => ({ id: it.id, slug: it.slug, name: it.name, ...priceRow(it) })),
     [cart]
+  );
+
+  const cartTotal = useMemo(
+    () => pricingRows.reduce((s, r) => s + r.lineTotal, 0),
+    [pricingRows]
+  );
+
+  const cartSaved = useMemo(
+    () => pricingRows.reduce((s, r) => s + r.saved, 0),
+    [pricingRows]
   );
 
   // תצוגת תמונה לפריט (מתואם לעגלה: front → back → תמונת מוצר)
@@ -363,18 +388,6 @@ export default function Navbar() {
                         )}
                       </button>
                     ))}
-                    <div className="dropdown-divider" />
-                    <button
-                      className="dropdown-item fw-semibold"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        navigate(`/catalog?query=${encodeURIComponent(q)}`);
-                        setOpen(false);
-                        closeNav();
-                      }}
-                    >
-                      הצג את כל התוצאות עבור “{q}”
-                    </button>
                   </div>
                 )}
               </div>
@@ -427,42 +440,59 @@ export default function Navbar() {
                 ) : (
                   <>
                     <ul className="list-unstyled mb-2" style={{ maxHeight: "50vh", overflowY: "auto" }}>
-                      {cart.slice(0, 6).map((it) => (
-                        <li key={it.id} className="px-3 py-2 d-flex align-items-center gap-2">
-                          <img
-                            src={getThumbForItem(it)}
-                            alt=""
-                            width="48"
-                            height="48"
-                            style={{ objectFit: "contain", background: "#fff", border: "1px solid rgba(0,0,0,.08)", borderRadius: 8 }}
-                          />
-                          <div className="flex-grow-1">
-                            <div className="small fw-semibold text-truncate">{it.name}</div>
-                            <div className="small text-muted text-truncate">
-                              {it.color} • {it.size}
+                      {cart.slice(0, 6).map((it) => {
+                        const row = priceRow(it);
+                        return (
+                          <li key={it.id} className="px-3 py-2 d-flex align-items-center gap-2">
+                            <img
+                              src={getThumbForItem(it)}
+                              alt=""
+                              width="48"
+                              height="48"
+                              style={{ objectFit: "contain", background: "#fff", border: "1px solid rgba(0,0,0,.08)", borderRadius: 8 }}
+                            />
+                            <div className="flex-grow-1">
+                              <div className="small fw-semibold text-truncate">{it.name}</div>
+                              <div className="small text-muted text-truncate">
+                                {it.color} • {it.size}
+                              </div>
                             </div>
-                          </div>
-                          <div className="d-flex align-items-center gap-2">
-                            <div className="small text-nowrap">
-                              {Number(it.qty)}× {Number(it.price).toLocaleString("he-IL")} ₪
+                            <div className="d-flex align-items-center gap-2 text-nowrap">
+                              <div className="small">
+                                {Number(it.qty)}×{" "}
+                                {row.dPct > 0 ? (
+                                  <>
+                                    <s>{row.baseUnit.toLocaleString("he-IL")} ₪</s>{" "}
+                                    <strong>{row.unitAfter.toLocaleString("he-IL")} ₪</strong>
+                                  </>
+                                ) : (
+                                  <>{row.baseUnit.toLocaleString("he-IL")} ₪</>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-danger"
+                                title="הסר מהעגלה"
+                                onClick={() => removeFromCart(it.id)}
+                              >
+                                ✕
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-danger"
-                              title="הסר מהעגלה"
-                              onClick={() => removeFromCart(it.id)}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </li>
-                      ))}
+                          </li>
+                        );
+                      })}
                     </ul>
                     <div className="dropdown-divider" />
                     <div className="px-3 py-2 d-flex justify-content-between align-items-center">
-                      <strong>סה״כ:</strong>
+                      <strong>סה״כ (אחרי הנחות):</strong>
                       <span className="fw-bold">{cartTotal.toLocaleString("he-IL")} ₪</span>
                     </div>
+                    {cartSaved > 0 && (
+                      <div className="px-3 pb-1 d-flex justify-content-between align-items-center text-success small">
+                        <span>חסכת עד כה:</span>
+                        <strong>{cartSaved.toLocaleString("he-IL")} ₪</strong>
+                      </div>
+                    )}
                     <div className="px-3 pb-2 d-flex gap-2">
                       <NavLink
                         to="/cart"

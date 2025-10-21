@@ -22,36 +22,60 @@ function clamp(v, min, max) {
 }
 const PAGE_SIZE = 12;
 
+/* נרמול עונות */
+const SEASON_NORMALIZE_ONE = (raw) => {
+  if (!raw) return "";
+  const s = String(raw).trim().toLowerCase()
+    .replace(/[\u200f\u200e]/g, "")
+    .replace(/\s+/g, "");
+  if (["קיץ","summer"].includes(s))   return "קיץ";
+  if (["חורף","winter"].includes(s)) return "חורף";
+  if (["כלהשנה","allyear","all-year","yearround","year-round"].includes(s)) return "כל השנה";
+  if (["אין","none","-"].includes(s)) return "אין";
+  return raw; // ייתכן שכבר בעברית תקינה
+};
+
+/** מפצל ערך עונה מרובה ("קיץ, חורף" / "קיץ|חורף" / "קיץ/חורף") למערך מנורמל */
+function explodeSeasons(raw) {
+  if (raw == null) return [];
+  return String(raw)
+    .split(/[,/|]+/g)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map(SEASON_NORMALIZE_ONE);
+}
+
+/** האם מוצר מתאים לעונה שנבחרה */
+function seasonMatches(productSeasonRaw, chosenSeasonRaw) {
+  const chosen = SEASON_NORMALIZE_ONE(chosenSeasonRaw);
+  if (!chosen) return true; // אין סינון
+  const productSeasons = explodeSeasons(productSeasonRaw);
+  if (productSeasons.includes(chosen)) return true;
+  // "כל השנה" תמיד נכנס כשבוחרים קיץ/חורף
+  if (["קיץ","חורף"].includes(chosen) && productSeasons.includes("כל השנה")) return true;
+  return false;
+}
+
+/** הנחת מדרגות — כל 5 יח׳ עוד 5% (תקרה 50%) */
+function discountPctForQty(qty, stepSize = 5, stepPct = 5, cap = 50) {
+  if (!Number.isFinite(qty) || qty <= 1) return 0;
+  const steps = Math.floor((qty - 1) / stepSize);
+  return Math.max(0, Math.min(cap, steps * stepPct));
+}
+function unitAfterDiscount(basePrice, qty) {
+  const pct = discountPctForQty(qty);
+  return Math.round((Number(basePrice) || 0) * (1 - pct / 100));
+}
+
 /** ========= כרטיסיות פתיחה מהירה ========= **/
 const QUICK_CARDS = [
-  {
-    kind: "season",
-    key: "קיץ",
-    title: "בגדי קיץ",
-    subtitle: "חולצות כותנה דקות, וסטים מאווררים",
-    icon: "🥵",
-    img: summer, // שים בתיקיית public
-  },
-  {
-    kind: "season",
-    key: "חורף",
-    title: "בגדי חורף",
-    subtitle: "קפוצ’ונים, סופטשל וביגוד מחמם",
-    icon: "❄️",
-    img: winter,
-  },
-  {
-    kind: "category",
-    key: "safety",
-    title: "בגדי בטיחות",
-    subtitle: "וסטים זוהרים, ציוד עבודה בטיחותי",
-    icon: "🦺",
-    img: safety,
-  },
+  { kind: "season", key: "קיץ",   title: "בגדי קיץ",   subtitle: "חולצות דקות ודרייפיט", icon: "🥵", img: summer },
+  { kind: "season", key: "חורף",  title: "בגדי חורף",  subtitle: "קפוצ׳ונים וסופטשל",    icon: "❄️", img: winter },
+  { kind: "category", key: "safety", title: "בגדי בטיחות", subtitle: "וסטים זוהרים וקסדות", icon: "🦺", img: safety },
 ];
 
 function QuickCard({ card, active, onClick }) {
-  const hasBg = Boolean(card.img);
+  const hasBg = Boolean(card.img); // 👈 זה מה שחסר
   const bgStyle = hasBg ? { backgroundImage: `url(${card.img})` } : undefined;
 
   return (
@@ -74,6 +98,7 @@ function QuickCard({ card, active, onClick }) {
   );
 }
 
+
 /* ---------- קומפוננטה ---------- */
 export default function Catalog() {
   const [params, setParams] = useSearchParams();
@@ -87,13 +112,10 @@ export default function Catalog() {
   const [sort, setSort]         = useState(params.get("sort") || "popular");
   const [page, setPage]         = useState(Number(params.get("page") || 1));
 
-  // האם המשתמש בחר כרטיסייה (מפתח להצגת המוצרים)
   const hasPicked = Boolean(season || category);
-
-  // עוגן לגלילה אחרי בחירה
   const productsAnchorRef = useRef(null);
 
-  // Drawer (נשאר, לא בשימוש כרגע)
+  // Drawer (לשימוש עתידי)
   const [isDrawerOpen, setDrawerOpen] = useState(false);
   const firstFocusableRef = useRef(null);
   const openDrawer  = () => setDrawerOpen(true);
@@ -114,6 +136,31 @@ export default function Catalog() {
       document.body.classList.remove("body-no-scroll");
     };
   }, [isDrawerOpen]);
+
+  // מכבים :hover בזמן גלילה
+  useEffect(() => {
+    const root = document.documentElement;
+    let rafId = 0;
+    let clearId;
+    const onScroll = () => {
+      root.classList.add("is-scrolling");
+      if (rafId) cancelAnimationFrame(rafId);
+      if (clearId) clearTimeout(clearId);
+      rafId = requestAnimationFrame(() => {
+        clearId = setTimeout(() => {
+          root.classList.remove("is-scrolling");
+          rafId = 0;
+        }, 140);
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      root.classList.remove("is-scrolling");
+      if (rafId) cancelAnimationFrame(rafId);
+      if (clearId) clearTimeout(clearId);
+    };
+  }, []);
 
   // סנכרון כתובת
   useEffect(() => {
@@ -136,15 +183,14 @@ export default function Catalog() {
     return PRODUCTS.filter((p) => {
       const matchQuery =
         !q ||
-        p.name.toLowerCase().includes(q) ||
+        (p.name && p.name.toLowerCase().includes(q)) ||
         (p.description && p.description.toLowerCase().includes(q));
+
       const matchColor     = !color || (Array.isArray(p.colors) && p.colors.includes(color));
       const matchSize      = !size  || (Array.isArray(p.sizes)  && p.sizes.includes(size));
       const matchCategory  = !category || p.category === category;
-      const matchSeason =
-        !season ||
-        p.season === season ||
-        (["קיץ", "חורף"].includes(season) && p.season === "כל השנה");
+      const matchSeason    = seasonMatches(p.season, season);
+
       return matchQuery && matchColor && matchSize && matchCategory && matchSeason;
     });
   }, [query, color, size, category, season]);
@@ -170,7 +216,7 @@ export default function Catalog() {
     [sorted, currentPage]
   );
 
-  // reset page on major changes
+  // reset page על שינויים משמעותיים
   useEffect(() => { setPage(1); }, [query, color, size, category, season, sort]);
 
   function clearAll() {
@@ -182,7 +228,6 @@ export default function Catalog() {
     setQuery(""); setColor(""); setSize(""); setSort("popular");
     if (card.kind === "season") { setSeason(card.key); setCategory(""); }
     else if (card.kind === "category") { setCategory(card.key); setSeason(""); }
-
     requestAnimationFrame(() => {
       productsAnchorRef.current?.scrollIntoView({
         behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth",
@@ -225,7 +270,7 @@ export default function Catalog() {
           ))}
         </section>
 
-        {/* בר מיון – מוצג רק לאחר בחירה */}
+        {/* בר מיון – רק לאחר בחירה */}
         {hasPicked && (
           <div className="card p-2 mb-3 season-toolbar">
             <div className="d-flex align-items-center gap-2">
@@ -266,7 +311,7 @@ export default function Catalog() {
         {/* עוגן לגלילה */}
         <div ref={productsAnchorRef} aria-hidden="true" />
 
-        {/* גריד המוצרים – רק אחרי בחירה */}
+        {/* גריד מוצרים */}
         {hasPicked ? (
           paged.length > 0 ? (
             <>
@@ -277,39 +322,68 @@ export default function Catalog() {
                   const low = hasStock && stock <= 8;
                   const barPct = hasStock ? Math.max(12, Math.min(100, Math.round((stock / 30) * 100))) : 0;
                   const titleId = `product-title-${p.slug || idx}`;
+                  const price6  = unitAfterDiscount(p.price ?? 0, 6);
+                  const price11 = unitAfterDiscount(p.price ?? 0, 11);
+                  const hasBack = Boolean(p.backImg);
 
                   return (
-                    <div className="col-6 col-md-4 col-lg-3" role="listitem" key={p.slug}>
+                    <div className="col-6 col-md-4 col-lg-3" role="listitem" key={p.slug || idx}>
                       <div className="card product-card h-100 product-card--linkable" tabIndex={-1} aria-labelledby={titleId}>
                         {p.sale && <span className="product-badge sale">-{p.sale}%</span>}
                         {!p.sale && p.isNew && <span className="product-badge new">חדש</span>}
+                        {!p.logoAllowed && <span className="product-badge no-logo" title="מוצר זה אינו מאפשר הדפסת לוגו">ללא הדפסה</span>}
+
                         <span className="price-pill">{formatCurrency(p.price)}</span>
 
+                        {/* --- מדיה: תמונה קדמית בלבד, בלי צד אחורי --- */}
                         <div className="product-media">
-                          <img src={p.img} alt={p.name} loading="lazy" decoding="async" />
+                          <img
+                            src={p.img}
+                            alt={p.name}
+                            loading="lazy"
+                            decoding="async"
+                            className="img-front"
+                          />
                           <div className="media-overlay">
-                            <Link to={`/product/${p.slug}`} className="btn btn-light btn-sm quick-view" aria-label={`צפייה מהירה ב${p.name}`}>
+                            <Link
+                              to={`/product/${p.slug}`}
+                              className="btn btn-light btn-sm quick-view"
+                              aria-label={`צפייה מהירה ב${p.name}`}
+                            >
                               <i className="bi bi-eye" aria-hidden="true" /> צפייה מהירה
                             </Link>
                           </div>
                         </div>
 
-                        <div className="card-body">
+
+                        <div className="card-body d-flex flex-column">
                           <h6 id={titleId} className="card-title mb-1">{p.name}</h6>
 
-                          <div className="chips-row">
+                          <div className="chips-row mb-1">
                             <span className="chip ghost">{CATEGORY_LABELS[p.category] || "כללי"}</span>
-                            <span className="chip ghost">{p.season}</span>
+                            <span className="chip ghost">{String(p.season)}</span>
+                            {p.type && <span className="chip ghost">{p.type}</span>}
                             {Array.isArray(p.colors) && p.colors.length > 0 && (
                               <span className="chip dot">
                                 <span className="dot-swatch" data-color={p.colors[0]} title={p.colors[0]} />
                                 {p.colors[0]}
                               </span>
                             )}
+                            {Array.isArray(p.sizes) && p.sizes.length > 0 && (
+                              <span className="chip ghost">מידות: {p.sizes.join(" / ")}</span>
+                            )}
+                            {p.logoAllowed && <span className="chip success" title="מוצר מאפשר הדפסה">אפשר הדפסה</span>}
+                          </div>
+
+                          {/* טיזר מדרגות הנחה */}
+                          <div className="discount-teaser text-muted small">
+                            <span className="me-2">הנחות כמות:</span>
+                            <span className="badge bg-light text-dark border me-1">6+ {formatCurrency(price6)}</span>
+                            <span className="badge bg-light text-dark border">11+ {formatCurrency(price11)}</span>
                           </div>
 
                           {low && (
-                            <div className="low-stock">
+                            <div className="low-stock mt-1">
                               <div className="bar"><span style={{ width: `${barPct}%` }} /></div>
                               <span className="text-muted small">נשארו רק {stock} במלאי</span>
                             </div>
@@ -357,7 +431,6 @@ export default function Catalog() {
             </div>
           )
         ) : (
-          // מצב טרום-בחירה – לא מציגים מוצרים כלל
           <div className="text-muted small mb-4">בחרו כרטיסיה כדי לראות מוצרים משויכים.</div>
         )}
       </div>

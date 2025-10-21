@@ -12,7 +12,8 @@ export default function LogoUploadModal({
   orderId,           // מזהה הזמנה פעילה
   itemSlug,          // למשל "tshirt-gray"
   side = "front",    // "front" | "back"
-  accept = "image/*,application/pdf,image/svg+xml",
+  // ★ תואם לכללי האבטחה: PNG/JPEG/WEBP/PDF בלבד (ללא SVG)
+  accept = "image/png,image/jpeg,image/webp,application/pdf",
   maxSizeMB = 10,
 }) {
   const [fileObj, setFileObj] = useState(null);
@@ -33,21 +34,30 @@ export default function LogoUploadModal({
     setBusyText("");
   }
 
+  // ★ ולידציה תואמת rules: אין SVG, רק PNG/JPEG/WEBP/PDF
   const readFile = useCallback((file) => {
     if (!file) return;
+
     if (file.size > maxSizeMB * 1024 * 1024) {
       setError(`קובץ גדול מדי. מגבלה: ${maxSizeMB}MB`);
       return;
     }
-    const _isImg = file.type.startsWith("image/") || /\.svg$/i.test(file.name || "");
-    const _isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
-    if (!_isImg && !_isPdf) {
-      setError("יש לבחור קובץ תמונה (PNG/JPG/SVG) או PDF.");
+
+    const isPdfLocal =
+      file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
+
+    const isAllowedImage =
+      ["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
+      /\.(png|jpe?g|webp)$/i.test(file.name || "");
+
+    if (!(isPdfLocal || isAllowedImage)) {
+      setError("יש לבחור קובץ תמונה (PNG/JPG/WEBP) או PDF. (SVG חסום מטעמי אבטחה)");
       return;
     }
+
     setError("");
     setFileObj(file);
-    setIsPdf(_isPdf);
+    setIsPdf(isPdfLocal);
   }, [maxSizeMB]);
 
   const onInputChange = (e) => readFile(e.target.files?.[0]);
@@ -57,6 +67,7 @@ export default function LogoUploadModal({
     if (!show) return;
     const area = dropRef.current;
     if (!area) return;
+
     const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
     const onDrop = (e) => { prevent(e); readFile(e.dataTransfer.files?.[0]); area.classList.remove("border-primary"); };
     const onEnter = (e) => { prevent(e); area.classList.add("border-primary"); };
@@ -102,28 +113,22 @@ export default function LogoUploadModal({
         logoId: "logo",      // אפשר לשנות למזהה ייחודי אם תרצה
         originalFile: fileObj,
       });
-      // storageMeta בד"כ בסגנון:
-      // { original: {url,path,fullPath,gsUri,bytes,contentType}, webp?: {...}, thumb?: {...}, url?, path?, fullPath?, gsUri? }
 
-      // --- 2) השטחת המטא־דאטה כדי שהעגלה תדע להציג מיד ---
+      // 2) השטחת מטא־דאטה
       const storageFlat = {
-        // URLs ישירים
         thumbUrl:     storageMeta?.thumb?.url     || null,
         webpUrl:      storageMeta?.webp?.url      || null,
         originalUrl:  storageMeta?.original?.url  || null,
         url:          storageMeta?.url            || null,
 
-        // נתיבי Storage (למקרה שאין URL)
-        pathWebp:       storageMeta?.webp?.path      || storageMeta?.webp?.fullPath      || null,
-        pathOriginal:   storageMeta?.original?.path  || storageMeta?.original?.fullPath  || null,
-        storagePath:    storageMeta?.path            || storageMeta?.fullPath            || null,
+        pathWebp:     storageMeta?.webp?.path     || storageMeta?.webp?.fullPath     || null,
+        pathOriginal: storageMeta?.original?.path || storageMeta?.original?.fullPath || null,
+        storagePath:  storageMeta?.path           || storageMeta?.fullPath           || null,
 
-        // מזהי gs:// אופציונליים
         gsUriWebp:     storageMeta?.webp?.gsUri     || null,
         gsUriOriginal: storageMeta?.original?.gsUri || null,
         gsUri:         storageMeta?.gsUri           || null,
 
-        // מידע עזר (לא חובה לעגלה, אבל טוב לשמירה)
         bytesWebp:     storageMeta?.webp?.bytes     || null,
         bytesOriginal: storageMeta?.original?.bytes || null,
         contentTypeWebp:     storageMeta?.webp?.contentType     || null,
@@ -131,7 +136,7 @@ export default function LogoUploadModal({
         side,
       };
 
-      // 3) שמירה מקומית (Context + LocalStorage) כדי להבטיח זמינות גם בלי העלאה נוספת
+      // 3) שמירה מקומית (Context + LocalStorage)
       setBusyText("שומר מקומית…");
 
       const fileToDataURL = (file) =>
@@ -143,17 +148,14 @@ export default function LogoUploadModal({
         });
       const dataUrl = await fileToDataURL(fileObj);
 
-      // מזהה ייחודי ללוגו הזה (לפי צד)
       const id = `${side}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      // 3a) שומר את ה-File בזיכרון (Context)
       try {
         setOriginalInMemory?.(id, fileObj);
       } catch (e) {
         console.warn("[LogoUploadModal] setOriginalInMemory failed:", e);
       }
 
-      // 3b) שומר רשומה ב-LocalStorage (לוג פנימי/שחזור)
       try {
         const LS_PENDING_LOGOS = "karina:pendingLogos";
         const raw = localStorage.getItem(LS_PENDING_LOGOS);
@@ -175,19 +177,18 @@ export default function LogoUploadModal({
         console.warn("[LogoUploadModal] failed to write pending logos to LS:", e);
       }
 
-      // 4) החזרה להורה — מעבירים את המטא־דאטה השטוח!
+      // 4) החזרה להורה
       onConfirm?.(
         null,                      // אין preview כאן
         fileObj,                   // ה-File המקורי
         { storage: storageFlat, local: true, id, side }
       );
 
-      // אפשר לסגור את המודל אוטומטית אם תרצה:
       // onClose?.();
 
     } catch (e) {
       console.error(e);
-      setError("העלאת הלוגו/שמירה מקומית נכשלה");
+      setError(`העלאת הלוגו/שמירה מקומית נכשלה${e?.message ? `: ${e.message}` : ""}`);
     } finally {
       setBusyText("");
     }
@@ -219,7 +220,7 @@ export default function LogoUploadModal({
             {!fileObj ? (
               <>
                 <p className="mb-3">
-                  גררו לכאן קובץ <strong>PNG/JPG/SVG</strong> או <strong>PDF</strong>, או בחרו ידנית
+                  גררו לכאן קובץ <strong>PNG/JPG/WEBP</strong> או <strong>PDF</strong>, או בחרו ידנית
                 </p>
                 <div className="d-flex justify-content-center gap-2">
                   <button className="btn btn-outline-primary" onClick={() => inputRef.current?.click()} disabled={!!busyText}>
@@ -236,6 +237,9 @@ export default function LogoUploadModal({
                 </div>
                 <div className="text-muted small mt-2">
                   מגבלת גודל: {maxSizeMB}MB
+                </div>
+                <div className="text-muted small mt-1">
+                  (SVG אינו נתמך מטעמי אבטחה)
                 </div>
               </>
             ) : (

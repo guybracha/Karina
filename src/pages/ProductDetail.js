@@ -5,133 +5,70 @@ import { Helmet } from "react-helmet-async";
 import { LogosQueueProvider } from "../contexts/LogosQueueContext.tsx";
 import LogoUploadModal from "../components/LogoUploadModal";
 import ColorSwatches from "../components/ColorSwatches";
-import SizePicker from "../components/SizePicker";
+// ❌ הוסר SizePicker כי אין יותר בחירה בודדת
+// import SizePicker from "../components/SizePicker";
 import { PRODUCTS } from "../lib/products";
+import { getDiscountPct } from "../lib/pricing";
 
-// Auth/Firestore
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import ProductSEO from "../components/seo/ProductSEO.js";
 
 // ===== LocalStorage keys =====
 const LS_LOGO_STORAGE_KEY = (slug, side) => `karina:logoStorage:${slug}:${side}`;
 const LS_CART_KEY = "karina:cart";
 const LS_RATING_KEY = (slug) => `karina:rating:${slug}`;
-// מפת לוגואים פר־שורת עגלה
 const LS_ITEM_LOGOS = "karina:itemLogos";
-// === Logo Placement === הצבה/סקייל של הלוגו על שטח ההדפסה
 const LS_PLACEMENT_KEY = (slug, side) => `karina:logoPlacement:${slug}:${side}`;
-function readItemLogosMap() {
-  try { return JSON.parse(localStorage.getItem(LS_ITEM_LOGOS) || "{}") || {}; } catch { return {}; }
-}
-function writeItemLogosMap(map) {
-  try {
-    localStorage.setItem(LS_ITEM_LOGOS, JSON.stringify(map));
-    window.dispatchEvent(new Event("karina:itemLogosUpdated"));
-  } catch {}
-}
+function readItemLogosMap() { try { return JSON.parse(localStorage.getItem(LS_ITEM_LOGOS) || "{}") || {}; } catch { return {}; } }
+function writeItemLogosMap(map) { try { localStorage.setItem(LS_ITEM_LOGOS, JSON.stringify(map)); window.dispatchEvent(new Event("karina:itemLogosUpdated")); } catch {} }
 
-// ⭐ קומפוננטת דירוג קטנה
-function StarRater({ value, onChange, size = 24, ariaLabel = "דירוג" }) {
-  const [hover, setHover] = useState(0);
-  const stars = [1, 2, 3, 4, 5];
-  return (
-    <div role="radiogroup" aria-label={ariaLabel} className="d-inline-flex align-items-center" onMouseLeave={() => setHover(0)}>
-      {stars.map((s) => {
-        const active = (hover || value) >= s;
-        return (
-          <button
-            key={s}
-            type="button"
-            className="btn p-0 border-0 bg-transparent"
-            role="radio"
-            aria-checked={value === s}
-            aria-label={`${s} מתוך 5`}
-            onMouseEnter={() => setHover(s)}
-            onClick={() => onChange(s)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(s); } }}
-            style={{ lineHeight: 1, width: size, height: size, cursor: "pointer" }}
-            title={`${s} כוכבים`}
-          >
-            <span style={{ display: "inline-block", width: size, height: size, color: active ? "#f59f00" : "#e5e7eb", fontSize: size * 0.9 }}>★</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/* === Logo Placement Modal ===
-   מציג תמונת המוצר עם מלבן "אזור הדפסה" ומאפשר לגרור/להגדיל את הלוגו בתוכו.
-   - printArea: { x, y, w, h } ביחידות: 0–1 (אחוזים) או פיקסלים יחסית לתמונה
-                 אופציונלית גם { widthCm, heightCm } להערכת DPI
-*/
+/* === Logo Placement Modal === */
 function LogoPlacementModal({
-  show,
-  onClose,
-  productName,
-  productImg,
-  logoUrl,
-  side = "front",
-  printArea,             // אופציונלי
-  initialPlacement,      // { xPct, yPct, scalePct } – שמור מ־LS
-  onSavePlacement,       // מחזיר אובייקט להצבה
+  show, onClose, productName, productImg, logoUrl, side = "front",
+  printArea, initialPlacement, onSavePlacement,
 }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
   const logoRef = useRef(null);
 
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
-  const [areaRect, setAreaRect] = useState({ x: 0, y: 0, w: 0, h: 0 }); // בפיקסלים בתוך הקונטיינר
+  const [areaRect, setAreaRect] = useState({ x: 0, y: 0, w: 0, h: 0 });
   const [dragging, setDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [placement, setPlacement] = useState({ xPct: 0.5, yPct: 0.5, scalePct: 60 }); // אחוז מגודל האזור
+  const [placement, setPlacement] = useState({ xPct: 0.5, yPct: 0.5, scalePct: 60 });
   const [logoNatural, setLogoNatural] = useState({ w: 0, h: 0 });
   const [dpiReport, setDpiReport] = useState({ x: 0, y: 0, verdict: "unknown" });
 
-  // קביעת מלבן אזור ההדפסה מתוך product.printArea/backPrintArea או ברירת מחדל
   function computeAreaRect(containerW, containerH, area) {
     if (!area || (!area.w && !area.h)) {
-      const w = containerW * 0.5;
-      const h = containerH * 0.6;
-      const x = (containerW - w) / 2;
-      const y = containerH * 0.18;
+      const w = containerW * 0.5; const h = containerH * 0.6;
+      const x = (containerW - w) / 2; const y = containerH * 0.18;
       return { x, y, w, h };
     }
     const isFrac = (v) => typeof v === "number" && v > 0 && v <= 1;
     const toPx = (v, total) => (isFrac(v) ? v * total : (typeof v === "number" ? v : 0));
     const w = toPx(area.w, containerW) || containerW * 0.5;
     const h = toPx(area.h, containerH) || containerH * 0.6;
-    let x = toPx(area.x, containerW);
-    let y = toPx(area.y, containerH);
+    let x = toPx(area.x, containerW); let y = toPx(area.y, containerH);
     if (!(x > 0)) x = (containerW - w) / 2;
     if (!(y > 0)) y = (containerH - h) / 5;
     return { x, y, w, h };
   }
 
-  // שמירה/טעינה של מיקום התחלתי
-  useEffect(() => {
-    if (initialPlacement) setPlacement(initialPlacement);
-  }, [initialPlacement]);
-
-  // גודל קונטיינר + אזור הדפסה
+  useEffect(() => { if (initialPlacement) setPlacement(initialPlacement); }, [initialPlacement]);
   useEffect(() => {
     function recalc() {
-      const el = containerRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const w = rect.width;
-      const h = Math.max(420, Math.min(640, (rect.width * 4) / 3)); // יחס 4:3 בערך
-      setContainerSize({ w, h });
-      setAreaRect(computeAreaRect(w, h, printArea));
+      const el = containerRef.current; if (!el) return;
+      const rect = el.getBoundingClientRect(); const w = rect.width;
+      const h = Math.max(420, Math.min(640, (rect.width * 4) / 3));
+      setContainerSize({ w, h }); setAreaRect(computeAreaRect(w, h, printArea));
     }
-    recalc();
-    window.addEventListener("resize", recalc);
+    recalc(); window.addEventListener("resize", recalc);
     return () => window.removeEventListener("resize", recalc);
   }, [printArea, show]);
 
-  // קריאת גודל מקורי של הלוגו
   useEffect(() => {
     if (!logoUrl) return;
     const im = new Image();
@@ -139,78 +76,45 @@ function LogoPlacementModal({
     im.src = logoUrl;
   }, [logoUrl]);
 
-  // גרירה
   function onPointerDown(e) {
     if (!logoRef.current) return;
     const logoRect = logoRef.current.getBoundingClientRect();
-    setDragging(true);
-    setDragOffset({ x: e.clientX - logoRect.left, y: e.clientY - logoRect.top });
+    setDragging(true); setDragOffset({ x: e.clientX - logoRect.left, y: e.clientY - logoRect.top });
   }
   function onPointerMove(e) {
-    if (!dragging) return;
-    if (!containerRef.current) return;
-    const cont = containerRef.current.getBoundingClientRect();
-    const area = areaRect;
-    const logoEl = logoRef.current;
-    if (!logoEl) return;
-    const logoW = logoEl.offsetWidth;
-    const logoH = logoEl.offsetHeight;
-
-    // גבולות: בתוך areaRect
-    let nx = e.clientX - cont.left - dragOffset.x;
-    let ny = e.clientY - cont.top - dragOffset.y;
-    nx = Math.max(area.x, Math.min(area.x + area.w - logoW, nx));
-    ny = Math.max(area.y, Math.min(area.y + area.h - logoH, ny));
-
-    const cx = nx + logoW / 2;
-    const cy = ny + logoH / 2;
-    setPlacement((prev) => ({
-      ...prev,
-      xPct: (cx - area.x) / area.w,
-      yPct: (cy - area.y) / area.h,
-    }));
+    if (!dragging || !containerRef.current) return;
+    const cont = containerRef.current.getBoundingClientRect(); const area = areaRect; const logoEl = logoRef.current; if (!logoEl) return;
+    const logoW = logoEl.offsetWidth; const logoH = logoEl.offsetHeight;
+    let nx = e.clientX - cont.left - dragOffset.x; let ny = e.clientY - cont.top - dragOffset.y;
+    nx = Math.max(area.x, Math.min(area.x + area.w - logoW, nx)); ny = Math.max(area.y, Math.min(area.y + area.h - logoH, ny));
+    const cx = nx + logoW / 2; const cy = ny + logoH / 2;
+    setPlacement((prev) => ({ ...prev, xPct: (cx - area.x) / area.w, yPct: (cy - area.y) / area.h }));
   }
   function onPointerUp() { setDragging(false); }
+  function setScalePct(v) { const val = Math.max(10, Math.min(100, Number(v) || 60)); setPlacement((prev) => ({ ...prev, scalePct: val })); }
 
-  // סקייל עם סלאידר
-  function setScalePct(v) {
-    const val = Math.max(10, Math.min(100, Number(v) || 60));
-    setPlacement((prev) => ({ ...prev, scalePct: val }));
-  }
-
-  // חישוב DPI משוער: בהינתן area width/height בצ״מ; אם אין – 30×35 ס״מ
   useEffect(() => {
     const wCm = (printArea?.widthCm && printArea?.widthCm > 0) ? printArea.widthCm : 30;
     const hCm = (printArea?.heightCm && printArea?.heightCm > 0) ? printArea.heightCm : 35;
-    const logoWcm = (placement.scalePct / 100) * wCm;
-    const logoHcm = (placement.scalePct / 100) * hCm;
-    const wIn = logoWcm / 2.54;
-    const hIn = logoHcm / 2.54;
-    const dpiX = logoNatural.w && wIn ? (logoNatural.w / wIn) : 0;
-    const dpiY = logoNatural.h && hIn ? (logoNatural.h / hIn) : 0;
+    const logoWcm = (placement.scalePct / 100) * wCm; const logoHcm = (placement.scalePct / 100) * hCm;
+    const wIn = logoWcm / 2.54; const hIn = logoHcm / 2.54;
+    const dpiX = logoNatural.w && wIn ? (logoNatural.w / wIn) : 0; const dpiY = logoNatural.h && hIn ? (logoNatural.h / hIn) : 0;
     const minDpi = Math.min(dpiX, dpiY);
-    let verdict = "unknown";
-    if (minDpi >= 200) verdict = "מצוין";
-    else if (minDpi >= 150) verdict = "סביר";
-    else if (minDpi > 0) verdict = "נמוך";
+    let verdict = "unknown"; if (minDpi >= 200) verdict = "מצוין"; else if (minDpi >= 150) verdict = "סביר"; else if (minDpi > 0) verdict = "נמוך";
     setDpiReport({ x: Math.round(dpiX), y: Math.round(dpiY), verdict });
   }, [placement.scalePct, logoNatural, printArea]);
 
   if (!show) return null;
 
-  // מיקומי פיקסלים של הלוגו מתוך placement
   const logoPx = (() => {
     const lw = (placement.scalePct / 100) * areaRect.w;
     const lh = (placement.scalePct / 100) * areaRect.h;
-    const cx = areaRect.x + placement.xPct * areaRect.w;
-    const cy = areaRect.y + placement.yPct * areaRect.h;
+    const cx = areaRect.x + placement.xPct * areaRect.w; const cy = areaRect.y + placement.yPct * areaRect.h;
     return { w: lw, h: lh, left: cx - lw / 2, top: cy - lh / 2 };
   })();
 
-  // ודא שהלוגו בתוך האזור גם אחרי שינוי סקייל
   const clampedLogoPx = {
-    w: Math.min(logoPx.w, areaRect.w),
-    h: Math.min(logoPx.h, areaRect.h),
+    w: Math.min(logoPx.w, areaRect.w), h: Math.min(logoPx.h, areaRect.h),
     left: Math.min(Math.max(logoPx.left, areaRect.x), areaRect.x + areaRect.w - Math.min(logoPx.w, areaRect.w)),
     top: Math.min(Math.max(logoPx.top, areaRect.y), areaRect.y + areaRect.h - Math.min(logoPx.h, areaRect.h)),
   };
@@ -235,25 +139,19 @@ function LogoPlacementModal({
             ) : (
               <>
                 <div ref={containerRef} className="position-relative w-100 mx-auto" style={{ maxWidth: 860, userSelect: "none" }}>
-                  {/* תמונת החולצה */}
                   <div style={{ width: "100%", height: containerSize.h, position: "relative", borderRadius: 12, overflow: "hidden", background: "#f8fafc", border: "1px solid #eef2f7" }}>
                     {productImg && (
                       <img ref={imgRef} src={productImg} alt={productName} style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"contain", pointerEvents:"none" }} />
                     )}
-
-                    {/* אזור הדפסה */}
                     <div
                       style={{
-                        position:"absolute",
-                        left: areaRect.x, top: areaRect.y, width: areaRect.w, height: areaRect.h,
+                        position:"absolute", left: areaRect.x, top: areaRect.y, width: areaRect.w, height: areaRect.h,
                         border: "2px dashed rgba(79,70,229,.6)",
                         background: "repeating-linear-gradient(45deg, rgba(99,102,241,.06), rgba(99,102,241,.06) 10px, rgba(99,102,241,.1) 10px, rgba(99,102,241,.1) 20px)",
                         borderRadius: 12
                       }}
                       aria-label="אזור הדפסה"
                     />
-
-                    {/* לוגו ניתן לגרירה */}
                     <img
                       ref={logoRef}
                       src={logoUrl}
@@ -265,24 +163,17 @@ function LogoPlacementModal({
                         position: "absolute",
                         left: clampedLogoPx.left, top: clampedLogoPx.top,
                         width: clampedLogoPx.w, height: clampedLogoPx.h,
-                        objectFit: "contain",
-                        cursor: "grab",
+                        objectFit: "contain", cursor: "grab",
                         filter: "drop-shadow(0 4px 12px rgba(2,6,23,.2))",
                       }}
                     />
                   </div>
                 </div>
 
-                {/* בקרי סקייל + דוח DPI */}
                 <div className="row g-3 align-items-center mt-3">
                   <div className="col-md-6">
                     <label className="form-label fw-semibold">גודל הלוגו ביחס לאזור ההדפסה: {placement.scalePct}%</label>
-                    <input
-                      type="range" min={10} max={100} step={1}
-                      className="form-range"
-                      value={placement.scalePct}
-                      onChange={(e) => setScalePct(e.target.value)}
-                    />
+                    <input type="range" min={10} max={100} step={1} className="form-range" value={placement.scalePct} onChange={(e) => setScalePct(e.target.value)} />
                   </div>
                   <div className="col-md-6">
                     <div className="p-3 border rounded-3 bg-light">
@@ -303,15 +194,7 @@ function LogoPlacementModal({
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-light" onClick={onClose}>ביטול</button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!logoUrl}
-              onClick={() => {
-                onSavePlacement(placement, dpiReport);
-                onClose();
-              }}
-            >
+            <button type="button" className="btn btn-primary" disabled={!logoUrl} onClick={() => { onSavePlacement(placement, dpiReport); onClose(); }}>
               שמור הצבה
             </button>
           </div>
@@ -323,18 +206,38 @@ function LogoPlacementModal({
 
 export default function ProductDetail() {
   const [showUpload, setShowUpload] = useState(false);
-  // === Logo Placement ===
   const [showPlacement, setShowPlacement] = useState(false);
 
   const { slug } = useParams();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
-
   const canUploadLogo = product?.logoAllowed !== false;
 
-  // התחברות ותפקיד
+  // auth
   const [user, setUser] = useState(null);
   const [isSeller, setIsSeller] = useState(false);
   const [checkingRole, setCheckingRole] = useState(true);
+  const [ensureDraftErr, setEnsureDraftErr] = useState("");
+
+  async function ensureUserAndDraft(u) {
+    if (!u) return;
+    try {
+      setEnsureDraftErr("");
+      await setDoc(doc(db, "users", u.uid), {
+        uid: u.uid,
+        email: u.email || null,
+        displayName: u.displayName || null,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      await setDoc(doc(db, "users", u.uid, "orders", "draft"), {
+        status: "draft",
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.error("[ensureUserAndDraft] failed:", e);
+      setEnsureDraftErr("לא ניתן להכין הזמנת טיוטה להעלאת לוגו. נסו לרענן או להתחבר מחדש.");
+    }
+  }
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -343,6 +246,7 @@ export default function ProductDetail() {
       setCheckingRole(true);
       try {
         if (u) {
+          await ensureUserAndDraft(u);
           const snap = await getDoc(doc(db, "users", u.uid));
           const data = snap.exists() ? snap.data() : {};
           const sellerFlag =
@@ -360,20 +264,17 @@ export default function ProductDetail() {
 
   // בחירות מוצר
   const [color, setColor] = useState(product?.colors?.[0] || "");
-  const [size, setSize]   = useState(product?.sizes?.[0] || "");
-  const [qty, setQty]     = useState(1);
-
-  // Bulk
-  const [bulkMode, setBulkMode] = useState(false);
-  const [bulkByColor, setBulkByColor] = useState({});
+  // ❌ אין בחירה ידנית — אין size/qty
+  // const [size, setSize]   = useState(product?.sizes?.[0] || "");
+  // const [qty, setQty]     = useState(1);
 
   // צד
   const [side, setSide] = useState("front");
 
-  // לוגו ב־Storage פר צד
+  // לוגו
   const [logoStorageBySide, setLogoStorageBySide] = useState({ front: null, back: null });
 
-  // ⭐ RATING
+  // דירוג (נשאר)
   const baseAvg = Number(product?.rating ?? 4.5);
   const baseCount = Number(product?.reviews ?? 120);
   const [userRating, setUserRating] = useState(0);
@@ -401,33 +302,20 @@ export default function ProductDetail() {
     [product, currentKey]
   );
 
-  function readCartFromLS() {
-    try { return JSON.parse(localStorage.getItem(LS_CART_KEY) || "[]") ?? []; } catch { return []; }
-  }
-  function saveCartToLS(next) {
-    try {
-      localStorage.setItem(LS_CART_KEY, JSON.stringify(next));
-      window.dispatchEvent(new Event("karina:cartUpdated"));
-    } catch {}
-  }
+  function readCartFromLS() { try { return JSON.parse(localStorage.getItem(LS_CART_KEY) || "[]") ?? []; } catch { return []; } }
+  function saveCartToLS(next) { try { localStorage.setItem(LS_CART_KEY, JSON.stringify(next)); window.dispatchEvent(new Event("karina:cartUpdated")); } catch {} }
 
   // אתחול במעבר מוצר
   useEffect(() => {
     setColor(product?.colors?.[0] || "");
-    setSize(product?.sizes?.[0] || "");
-    setQty(1);
     setSide("front");
-    setBulkMode(false);
-    setBulkByColor({});
 
     if (canUploadLogo) {
       try {
         const sFront = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product?.slug || "unknown", "front")) || "null");
         const sBack  = JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product?.slug || "unknown", "back"))  || "null");
         setLogoStorageBySide({ front: sFront, back: sBack });
-      } catch {
-        setLogoStorageBySide({ front: null, back: null });
-      }
+      } catch { setLogoStorageBySide({ front: null, back: null }); }
     } else {
       try {
         localStorage.removeItem(LS_LOGO_STORAGE_KEY(product?.slug || "unknown", "front"));
@@ -436,29 +324,19 @@ export default function ProductDetail() {
       setLogoStorageBySide({ front: null, back: null });
     }
 
-    // ⭐ RATING
     try {
       const ur = Number(localStorage.getItem(LS_RATING_KEY(product?.slug || "")) || 0);
       setUserRating(ur || 0);
-      if (ur > 0) {
-        setDisplayAvg(((baseAvg * baseCount) + ur) / (baseCount + 1));
-        setDisplayCount(baseCount + 1);
-      } else {
-        setDisplayAvg(baseAvg);
-        setDisplayCount(baseCount);
-      }
-    } catch {
-      setUserRating(0);
-      setDisplayAvg(baseAvg);
-      setDisplayCount(baseCount);
-    }
+      if (ur > 0) { setDisplayAvg(((baseAvg * baseCount) + ur) / (baseCount + 1)); setDisplayCount(baseCount + 1); }
+      else { setDisplayAvg(baseAvg); setDisplayCount(baseCount); }
+    } catch { setUserRating(0); setDisplayAvg(baseAvg); setDisplayCount(baseCount); }
 
-    setShowUpload(false);
-    setShowPlacement(false);
+    setShowUpload(false); setShowPlacement(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.slug, canUploadLogo]);
 
-  // ודא bulk map
+  // Bulk בלבד
+  const [bulkByColor, setBulkByColor] = useState({});
   useEffect(() => {
     if (!product?.sizes || !color) return;
     setBulkByColor((prev) => {
@@ -473,7 +351,6 @@ export default function ProductDetail() {
     });
   }, [color, product?.sizes]);
 
-  // מטפל בתוצאת העלאה: שומר רק מטא־דאטה של Storage
   function onLogoUploaded(_dataUrl, uploaded) {
     if (!canUploadLogo) { alert("לא ניתן להעלות לוגו לפריט זה."); setShowUpload(false); return; }
     const storage = uploaded?.storage || null;
@@ -484,7 +361,6 @@ export default function ProductDetail() {
     });
     setShowUpload(false);
   }
-
   function resetSaved() {
     try {
       localStorage.removeItem(LS_LOGO_STORAGE_KEY(product?.slug, "front"));
@@ -494,8 +370,6 @@ export default function ProductDetail() {
     } catch {}
     setLogoStorageBySide({ front: null, back: null });
   }
-
-  // גארד
   function ensureAuthed(){
     if(!user){
       alert("עליך להתחבר כדי להוסיף פריטים לעגלה");
@@ -504,38 +378,19 @@ export default function ProductDetail() {
     return true;
   }
 
-  // עגלה — רגיל
-  function addToCart() {
-    if (!product) return;
-    if (!ensureAuthed()) return;
-
-    const lineId = `${product.slug}__${color}__${size}`;
-    const current = readCartFromLS();
-    const idx = current.findIndex((it) => it.id === lineId);
-
-    const logosForThisProduct = {
-      front: logoStorageBySide.front || JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product.slug, "front")) || "null"),
-      back:  logoStorageBySide.back  || JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product.slug, "back"))  || "null"),
-    };
-    const logosMap = readItemLogosMap();
-    logosMap[lineId] = logosForThisProduct;
-    writeItemLogosMap(logosMap);
-    window.dispatchEvent(new Event("karina:itemLogosUpdated"));
-
-    if (idx >= 0) {
-      const next = [...current];
-      const prevQty = Number(next[idx].qty || 0);
-      next[idx] = { ...next[idx], qty: prevQty + Number(qty || 1) };
-      saveCartToLS(next);
-    } else {
-      saveCartToLS([{ id: lineId, slug: product.slug, name: product.name, price: Number(product.price) || 0, qty: Number(qty || 1), color, size, addedAt: Date.now() }, ...current]);
-    }
-
-    window.dispatchEvent(new Event("karina:itemLogosUpdated"));
-    alert(`נוסף לעגלה: ${product.name} - ${color} / ${size} x${qty}`);
+  // breakdown helper
+  function addToBreakdown(breakdown, colorKey, sizeKey, qtyToAdd) {
+    const safeQty = Math.max(0, Number(qtyToAdd) || 0);
+    const next = breakdown ? { ...breakdown } : { byColorSize: {}, colorTotals: {}, sizeTotals: {} };
+    const byColor = next.byColorSize[colorKey] ? { ...next.byColorSize[colorKey] } : {};
+    byColor[sizeKey] = (Number(byColor[sizeKey]) || 0) + safeQty;
+    next.byColorSize = { ...next.byColorSize, [colorKey]: byColor };
+    next.colorTotals[colorKey] = (Number(next.colorTotals[colorKey]) || 0) + safeQty;
+    next.sizeTotals[sizeKey]   = (Number(next.sizeTotals[sizeKey])   || 0) + safeQty;
+    return next;
   }
 
-  // Bulk
+  // חישובי באלק
   const bulkForCurrentColor = bulkByColor[color] || {};
   const bulkTotalForCurrentColor = useMemo(
     () => Object.values(bulkForCurrentColor).reduce((s, n) => s + (Number(n) || 0), 0),
@@ -550,40 +405,73 @@ export default function ProductDetail() {
     const cleared = {}; product.sizes.forEach((s) => (cleared[s] = 0));
     setBulkByColor((prev) => ({ ...prev, [color]: cleared }));
   }
+
+  // הוספה לעגלה — רק מרוכז
   function addBulkToCart() {
     if (!product) return;
     if (!ensureAuthed()) return;
 
-    const current = readCartFromLS(); const next = [...current];
+    const lineId = product.slug; // ריכוז לפי מוצר
+    const current = readCartFromLS();
+    const next = [...current];
+    let idx = next.findIndex((it) => it.id === lineId);
+
+    // לוגואים לפי מוצר
     const logosForThisProduct = {
       front: logoStorageBySide.front || JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product.slug, "front")) || "null"),
       back:  logoStorageBySide.back  || JSON.parse(localStorage.getItem(LS_LOGO_STORAGE_KEY(product.slug, "back"))  || "null"),
     };
     const logosMap = readItemLogosMap();
 
+    // סה"כ לבאלק של הצבע הנוכחי
+    const totalAdd = Object.values(bulkForCurrentColor).reduce((s, n) => s + (Number(n) || 0), 0);
+
+    if (totalAdd <= 0) {
+      alert(`לא הוזנו כמויות להזמנה מרוכזת.`);
+      return;
+    }
+
+    // הכנת שורת מוצר אם אינה קיימת
+    if (idx < 0) {
+      next.unshift({
+        id: lineId,
+        slug: product.slug,
+        name: product.name,
+        price: Number(product.price) || 0,
+        qty: 0,
+        lastSelected: { color, size: null },
+        variants: { byColorSize: {}, colorTotals: {}, sizeTotals: {} },
+        addedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      idx = 0;
+    }
+
+    // עדכון כמות כוללת + בירוק־דאון לכל המידות שהוזנו
+    let updated = { ...next[idx] };
+    updated.qty = Number(updated.qty || 0) + totalAdd;
+
     Object.entries(bulkForCurrentColor).forEach(([sizeKey, q]) => {
-      const addQty = Math.max(0, Number(q) || 0); if (!addQty) return;
-      const lineId = `${product.slug}__${color}__${sizeKey}`;
-      const idx = next.findIndex((it) => it.id === lineId);
-      if (idx >= 0) {
-        const prevQty = Number(next[idx].qty || 0);
-        next[idx] = { ...next[idx], qty: prevQty + addQty };
-      } else {
-        next.unshift({ id: lineId, slug: product.slug, name: product.name, price: Number(product.price) || 0, qty: addQty, color, size: sizeKey, addedAt: Date.now() });
-      }
-      logosMap[lineId] = logosForThisProduct;
+      const addQty = Math.max(0, Number(q) || 0);
+      if (!addQty) return;
+      updated.variants = addToBreakdown(updated.variants, color, sizeKey, addQty);
     });
 
+    updated.lastSelected = { color, size: null };
+    updated.updatedAt = Date.now();
+    next[idx] = updated;
+
     saveCartToLS(next);
+
+    // שמירת לוגואים תחת מפתח המוצר
+    logosMap[lineId] = logosForThisProduct;
     writeItemLogosMap(logosMap);
     window.dispatchEvent(new Event("karina:itemLogosUpdated"));
 
-    alert(bulkTotalForCurrentColor > 0 ? `נוספו לעגלה ${bulkTotalForCurrentColor} יח' של ${product.name} בצבע ${color}.` : `לא הוזנו כמויות להזמנה מרוכזת.`);
+    alert(`נוספו לעגלה ${totalAdd} יח' של ${product.name} (לצבע ${color}) — שורה אחת מרוכזת למוצר.`);
   }
 
-  const canAdd = Boolean(color) && Boolean(size) && qty > 0;
-
-  // ⭐ RATING
+  // דירוג
   function handleRate(stars) {
     const clamped = Math.max(1, Math.min(5, Number(stars) || 0));
     try { localStorage.setItem(LS_RATING_KEY(product.slug), String(clamped)); } catch {}
@@ -592,7 +480,19 @@ export default function ProductDetail() {
     setDisplayCount(baseCount + 1);
   }
 
-  // JSON-LD
+  // תמחור מדרגות (מבוסס על כמות באלק לצבע הנוכחי)
+  const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const effectiveQty = Math.max(0, Number(bulkTotalForCurrentColor || 0));
+  const curDiscPct = getDiscountPct(effectiveQty);
+  const unitAfter   = round2((Number(product?.price) || 0) * (1 - curDiscPct));
+  const lineTotal   = round2(unitAfter * effectiveQty);
+
+  const step = 5;
+  const currentTier = effectiveQty > 0 ? Math.floor((effectiveQty - 1) / step) : 0;
+  const nextAt      = (currentTier + 1) * step + 1;
+  const moreToNext  = effectiveQty > 0 ? Math.max(0, nextAt - effectiveQty) : step + 1;
+  const nextPct     = Math.round(getDiscountPct(nextAt) * 100);
+
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -629,19 +529,14 @@ export default function ProductDetail() {
     ],
   };
 
-  const shownPrintArea =
-    side === "front" ? product?.printArea : (product?.backPrintArea || product?.printArea);
-
-  const roleStatus = !user ? "עליך להתחבר כדי להוסיף לעגלה" : "";
+  const shownPrintArea = side === "front" ? product?.printArea : (product?.backPrintArea || product?.printArea);
   const addButtonsDisabled = !user;
 
   const currentThumb =
     logoStorageBySide[side]?.thumbUrl ||
     logoStorageBySide[side]?.webpUrl ||
-    logoStorageBySide[side]?.originalUrl ||
-    null;
+    logoStorageBySide[side]?.originalUrl || null;
 
-  // === Logo Placement === טען הצבה שמורה (אם יש)
   const [placementBySide, setPlacementBySide] = useState({ front: null, back: null });
   useEffect(() => {
     try {
@@ -652,11 +547,8 @@ export default function ProductDetail() {
   }, [product?.slug]);
 
   function savePlacementForSide(sideKey, placement, dpiReport) {
-    try {
-      localStorage.setItem(LS_PLACEMENT_KEY(product.slug, sideKey), JSON.stringify(placement));
-    } catch {}
+    try { localStorage.setItem(LS_PLACEMENT_KEY(product.slug, sideKey), JSON.stringify(placement)); } catch {}
     setPlacementBySide((prev) => ({ ...prev, [sideKey]: placement }));
-    // פינג סמלי – יאפשר לעגלת ההזמנות/הפקה למשוך הצבה משוערת
     window.dispatchEvent(new CustomEvent("karina:logoPlacementSaved", { detail: { slug: product.slug, side: sideKey, placement, dpiReport } }));
   }
 
@@ -692,18 +584,6 @@ export default function ProductDetail() {
           </>
         ) : (
           <>
-            {roleStatus && (
-              <div className="alert alert-info d-flex align-items-center" role="alert">
-                <span className="me-2">ℹ️</span>
-                <span>{roleStatus}</span>
-                {!user && (
-                  <Link className="btn btn-sm btn-primary ms-auto" to="/auth">
-                    התחברות
-                  </Link>
-                )}
-              </div>
-            )}
-
             <div className="row g-4">
               {/* תצוגה */}
               <div className="col-12 col-lg-6">
@@ -734,7 +614,7 @@ export default function ProductDetail() {
                           style={{ width: 36, height: 36, objectFit: "contain", borderRadius: 8, background: "#fff", border: "1px solid rgba(0,0,0,.08)" }}
                         />
                       )}
-                      {(logoStorageBySide.front || logoStorageBySide.back) && (
+                      {(logoStorageBySide[side]) && (
                         <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>איפוס לוגואים</button>
                       )}
                     </>
@@ -747,126 +627,138 @@ export default function ProductDetail() {
               {/* פרטים ובחירות */}
               <div className="col-12 col-lg-6">
                 <h1 className="h3 mb-1">{product.name}</h1>
-                <p className="lead mb-1">{product.price} ₪</p>
+
+                {/* מחיר בסיס + תמחור מדרגות */}
+                <p className="lead mb-1">{round2(product.price)} ₪ ליחידה</p>
+                <div className="small mb-1">
+                  {effectiveQty > 0 ? (
+                    <div className="text-success">
+                      הנחת כמות: <strong>{Math.round(curDiscPct * 100)}%</strong>
+                      {" · "}מחיר יחידה לאחר הנחה: <strong>{unitAfter} ₪</strong>
+                      {" · "}סה״כ לשורה: <strong>{lineTotal} ₪</strong>
+                    </div>
+                  ) : (
+                    <div className="text-muted">
+                      מדרגות הנחה: כל 5 יחידות נוספות ⇒ 5% הנחה (עד 50%).
+                    </div>
+                  )}
+                  <div className="text-muted">
+                    {effectiveQty > 0 ? (
+                      moreToNext > 0
+                        ? <>עוד <strong>{moreToNext}</strong> יח׳ ל־{nextAt} יח׳, וההנחה תגדל ל־<strong>{nextPct}%</strong>.</>
+                        : <>את/ה כבר במדרגה המקסימלית לכמות הנוכחית.</>
+                    ) : (
+                      <>הכנס/י כמויות כדי לראות את ההנחה.</>
+                    )}
+                  </div>
+                </div>
+
                 <small className="text-muted d-block mb-3">לא כולל משלוח</small>
 
+                {/* בחירת צבע */}
                 <div className="mb-3">
                   <ColorSwatches colors={product.colors} value={color} onChange={setColor} />
                 </div>
 
-                <div className="form-check form-switch mb-3">
-                  <input className="form-check-input" type="checkbox" id="bulkToggle" checked={bulkMode} onChange={(e) => setBulkMode(e.target.checked)} />
-                  <label className="form-check-label" htmlFor="bulkToggle">הזמנה מרוכזת לפי מידות (לצבע הנוכחי)</label>
+                {/* 🚩 רק הזמנה מרוכזת לפי מידות */}
+                <div className="card mb-3">
+                  <div className="card-body">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <h6 className="mb-0">כמויות לפי מידה — צבע: <span className="fw-semibold">{color}</span></h6>
+                      <button className="btn btn-sm btn-outline-secondary" onClick={clearBulkForColor}>איפוס כמויות לצבע זה</button>
+                    </div>
+                    <div className="table-responsive">
+                      <table className="table table-sm align-middle">
+                        <thead><tr>{(product.sizes || []).map((s) => (<th key={s} className="text-center">{s}</th>))}</tr></thead>
+                        <tbody>
+                          <tr>
+                            {(product.sizes || []).map((s) => (
+                              <td key={s} className="text-center">
+                                <input
+                                  type="number" min={0}
+                                  value={(bulkByColor[color] || {})[s] ?? 0}
+                                  onChange={(e) => setBulkQty(s, e.target.value)}
+                                  className="form-control form-control-sm text-center"
+                                  style={{ width: 90, marginInline: "auto" }}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* סיכום מחיר לבאלק */}
+                    <div className="d-flex justify-content-between align-items-center">
+                      <div className="small">
+                        {bulkTotalForCurrentColor > 0 ? (
+                          <>
+                            סה״כ יחידות לצבע זה: <strong>{bulkTotalForCurrentColor}</strong>
+                            {" · "}הנחה: <strong>{Math.round(getDiscountPct(bulkTotalForCurrentColor) * 100)}%</strong>
+                            {" · "}מחיר יחידה אחרי הנחה:{" "}
+                            <strong>
+                              {round2((Number(product.price) || 0) * (1 - getDiscountPct(bulkTotalForCurrentColor)))} ₪
+                            </strong>
+                            {" · "}סה״כ:{" "}
+                            <strong>
+                              {round2(
+                                (Number(product.price) || 0) *
+                                (1 - getDiscountPct(bulkTotalForCurrentColor)) *
+                                bulkTotalForCurrentColor
+                              )} ₪
+                            </strong>
+                          </>
+                        ) : (
+                          <>הכנס כמויות כדי לראות מחיר לאחר הנחה.</>
+                        )}
+                      </div>
+                      <div>
+                        <button
+                          className="btn btn-primary"
+                          onClick={addBulkToCart}
+                          disabled={bulkTotalForCurrentColor === 0 || addButtonsDisabled}
+                          title={
+                            checkingRole ? "בודק הרשאות…" :
+                            !user ? "עליך להתחבר" :
+                            !isSeller ? "רק מוכרים יכולים להוסיף לעגלה" :
+                            undefined
+                          }
+                        >
+                          הוסף לעגלה (מרוכז)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {!bulkMode ? (
-                  <>
-                    <div className="mb-3"><SizePicker sizes={product.sizes} value={size} onChange={setSize} /></div>
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold">כמות</label>
-                      <input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} className="form-control w-auto" />
-                    </div>
-
-                    {canUploadLogo ? (
-                      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                        <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>
-                          העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
-                        </button>
-                        {/* === Logo Placement === */}
-                        <button
-                          type="button"
-                          className="btn btn-outline-primary"
-                          disabled={!currentThumb}
-                          title={currentThumb ? "" : "יש להעלות לוגו קודם"}
-                          onClick={() => setShowPlacement(true)}
-                        >
-                          בדיקת התאמת לוגו
-                        </button>
-                        {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
-                      </div>
-                    ) : (
-                      <div className="alert alert-secondary py-2 small">לפריט זה לא ניתן להעלות לוגו.</div>
-                    )}
-
+                {/* העלאת לוגו / בדיקת התאמה */}
+                {canUploadLogo ? (
+                  <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
                     <button
-                      className="btn btn-primary btn-lg"
-                      onClick={addToCart}
-                      disabled={!canAdd || addButtonsDisabled}
-                      title={ !canAdd ? "בחר צבע ומידה" : (!user ? "עליך להתחבר" : undefined) }
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      onClick={async () => {
+                        if (!user) { alert("עליך להתחבר לפני העלאת לוגו."); return; }
+                        await ensureUserAndDraft(user);
+                        setShowUpload(true);
+                      }}
                     >
-                      הוסף לעגלה
+                      העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
                     </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="card mb-3">
-                      <div className="card-body">
-                        <div className="d-flex justify-content-between align-items-center mb-2">
-                          <h6 className="mb-0">כמויות לפי מידה — צבע: <span className="fw-semibold">{color}</span></h6>
-                          <button className="btn btn-sm btn-outline-secondary" onClick={clearBulkForColor}>איפוס כמויות לצבע זה</button>
-                        </div>
-                        <div className="table-responsive">
-                          <table className="table table-sm align-middle">
-                            <thead><tr>{(product.sizes || []).map((s) => (<th key={s} className="text-center">{s}</th>))}</tr></thead>
-                            <tbody>
-                              <tr>
-                                {(product.sizes || []).map((s) => (
-                                  <td key={s} className="text-center">
-                                    <input
-                                      type="number" min={0}
-                                      value={(bulkByColor[color] || {})[s] ?? 0}
-                                      onChange={(e) => setBulkQty(s, e.target.value)}
-                                      className="form-control form-control-sm text-center"
-                                      style={{ width: 90, marginInline: "auto" }}
-                                    />
-                                  </td>
-                                ))}
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                        <div className="d-flex justify-content-between align-items-center">
-                          <div className="text-muted small">ניתן לעבור לצבע אחר, למלא כמויות, ולהוסיף לעגלה בנפרד.</div>
-                          <div>
-                            <span className="me-3">סה״כ יחידות לצבע זה: <strong>{bulkTotalForCurrentColor}</strong></span>
-                            <button
-                              className="btn btn-primary"
-                              onClick={addBulkToCart}
-                              disabled={bulkTotalForCurrentColor === 0 || addButtonsDisabled}
-                              title={
-                                checkingRole ? "בודק הרשאות…" :
-                                !user ? "עליך להתחבר" :
-                                !isSeller ? "רק מוכרים יכולים להוסיף לעגלה" :
-                                undefined
-                              }
-                            >
-                              הוסף לעגלה (מרוכז)
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary"
+                      disabled={!currentThumb}
+                      title={currentThumb ? "" : "יש להעלות לוגו קודם"}
+                      onClick={() => setShowPlacement(true)}
+                    >
+                      בדיקת התאמת לוגו
+                    </button>
+                    {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
+                  </div>
+                ) : null}
 
-                    {canUploadLogo ? (
-                      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                        <button type="button" className="btn btn-outline-secondary" onClick={() => setShowUpload(true)}>
-                          העלה לוגו ({side === "front" ? "קדמי" : "אחורי"})
-                        </button>
-                        {/* === Logo Placement === */}
-                        <button
-                          type="button"
-                          className="btn btn-outline-primary"
-                          disabled={!currentThumb}
-                          title={currentThumb ? "" : "יש להעלות לוגו קודם"}
-                          onClick={() => setShowPlacement(true)}
-                        >
-                          בדיקת התאמת לוגו
-                        </button>
-                        {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
-                      </div>
-                    ) : null}
-                  </>
-                )}
+                {ensureDraftErr && <div className="alert alert-warning mt-3 py-2 small">{ensureDraftErr}</div>}
 
                 <hr className="my-4" />
                 <div>
@@ -896,7 +788,7 @@ export default function ProductDetail() {
               />
             )}
 
-            {/* === Logo Placement === מודאל הצבת לוגו */}
+            {/* מודאל הצבת לוגו */}
             {canUploadLogo && (
               <LogoPlacementModal
                 show={showPlacement}
@@ -907,10 +799,9 @@ export default function ProductDetail() {
                 logoUrl={
                   logoStorageBySide[side]?.originalUrl ||
                   logoStorageBySide[side]?.webpUrl ||
-                  logoStorageBySide[side]?.thumbUrl ||
-                  ""
+                  logoStorageBySide[side]?.thumbUrl || ""
                 }
-                printArea={shownPrintArea /* יכול לכלול: {x,y,w,h,widthCm,heightCm} */}
+                printArea={shownPrintArea}
                 initialPlacement={placementBySide[side] || { xPct: 0.5, yPct: 0.5, scalePct: 60 }}
                 onSavePlacement={(pl, dpi) => savePlacementForSide(side, pl, dpi)}
               />

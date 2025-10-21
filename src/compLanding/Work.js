@@ -6,7 +6,6 @@ import longTriko from "../img/work/longTriko.png";
 import hoodiePocket from "../img/work/hoodiePocket.png";
 import drifitShort from "../img/work/drifitShort.png";
 import drifitLong from "../img/work/drifitLong.png";
-import hoodieTriko from "../img/work/hoodieTriko.png";
 import polo from "../img/work/polo.png";
 import coat from "../img/work/coat1.png";
 import cargoPants from "../img/work/cargoPants.png";
@@ -20,7 +19,6 @@ export default function Work() {
     { src: hoodiePocket, alt: "קפוצ'ון עם כיס",       season: "winter" },
     { src: drifitShort,  alt: "דרייפיט קצר",          season: "summer" },
     { src: drifitLong,   alt: "דרייפיט ארוך",         season: "summer" }, // אם תרצה: 'all'
-    { src: hoodieTriko,  alt: "קפוצ'ון טריקו",        season: "summer" },
     { src: polo,         alt: "פולו",                 season: "summer" },
     { src: coat,         alt: "מעיל",                 season: "winter" },
     { src: cargoPants,   alt: "מכנסי דגמ\"ח",         season: "all" }, // אפשר 'all'

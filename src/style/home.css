@@ -375,3 +375,37 @@ img[loading="lazy"]{ content-visibility:auto; }
   font-size: 1.8rem;
   color: var(--bs-primary);
 }
+
+/* ===== USP (6 אייקונים) ===== */
+.usp {
+  background: #fff;
+  border-radius: 16px;
+  padding: clamp(10px, 2.8vw, 16px);
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  /* גובה אחיד נעים בשבירת שורות */
+  min-height: 76px;
+}
+
+.usp-icon {
+  /* גודל אייקון רספונסיבי */
+  width: clamp(36px, 7.5vw, 48px);
+  height: clamp(36px, 7.5vw, 48px);
+  border-radius: 12px;
+  background: #f1f5f9;        /* slate-100 */
+  flex: 0 0 auto;
+}
+.usp-icon i {
+  font-size: clamp(18px, 4vw, 22px);
+  line-height: 1;
+}
+
+/* שיפור ריווח במובייל */
+@media (max-width: 575.98px) {
+  .usp .fw-bold { font-size: 0.95rem; }
+  .usp .small   { font-size: 0.8rem; }
+}
+
+/* בדסקטופ – מעט יותר "כרטיס" */
+@media (min-width: 768px) {
+  .usp { padding: 14px 16px; }
+}

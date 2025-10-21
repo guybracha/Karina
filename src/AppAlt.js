@@ -35,6 +35,11 @@ import "./a11y/a11y.css";
 import A11yToolkit from "./a11y/A11yToolkit";
 import ReadAloud from "./a11y/ReadAloud";
 import A11yFab from "./a11y/A11yFab"; // ⬅️ FAB נגישות
+
+/** ====================== קבועים ====================== */
+const GA_ID = "G-SHQSKGKY2C";
+const IS_PROD = process.env.NODE_ENV === "production";
+
 /** מגלגל לראש בכל ניווט */
 function ScrollToTop() {
   const { pathname, search, hash } = useLocation();
@@ -43,6 +48,79 @@ function ScrollToTop() {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [pathname, search, hash]);
   return null;
+}
+
+/** שולח page_view ל-GA4 בכל שינוי נתיב (SPA) */
+function GAListener() {
+  const { pathname, search } = useLocation();
+  React.useEffect(() => {
+    if (!window.gtag) return;
+    window.gtag("config", GA_ID, { page_path: pathname + (search || "") });
+  }, [pathname, search]);
+  return null;
+}
+
+/** Helmet-Root דינמי: canonical, OG/Twitter, GA scripts, preconnect ועוד */
+function RootSEO() {
+  const { pathname, search } = useLocation();
+  const base =
+    (typeof window !== "undefined" && window.location?.origin) ||
+    "https://karina.co.il";
+  const url = base + pathname + (search || "");
+
+  const ogImage = `${base}/img/logo.png`; // עדיף מוחלט ל-social
+  const title = "קארינה חולצות מודפסות";
+  const description =
+    "תצוגת פיתוח לדפים החדשים של קארינה: קטלוג, מוצר, עגלה, תשלום ועוד.";
+
+  return (
+    <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
+      {/* --- Title & Description כלליים (דפים ספציפיים יכולים להחליף) --- */}
+      <title>{title}</title>
+      <meta name="description" content={description} />
+
+      {/* --- Canonical דינמי ומוחלט --- */}
+      <link rel="canonical" href={url} />
+
+      {/* --- Open Graph --- */}
+      <meta property="og:type" content="website" />
+      <meta property="og:locale" content="he_IL" />
+      <meta property="og:title" content={title} />
+      <meta property="og:description" content={description} />
+      <meta property="og:url" content={url} />
+      <meta property="og:image" content={ogImage} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+
+      {/* --- Twitter --- */}
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content={title} />
+      <meta name="twitter:description" content={description} />
+      <meta name="twitter:image" content={ogImage} />
+
+      {/* --- A11y/UX --- */}
+      <meta name="theme-color" content="#ffffff" />
+      <link rel="icon" href="/favicon.ico" />
+
+      {/* --- Preconnects לפונטים (שיפור CWV) --- */}
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+
+      {/* --- GA4 base scripts --- */}
+      <script async src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}></script>
+      <script>
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', '${GA_ID}');
+        `}
+      </script>
+
+      {/* --- חסימת אינדוקס ב-staging/preview --- */}
+      {!IS_PROD && <meta name="robots" content="noindex,nofollow" />}
+    </Helmet>
+  );
 }
 
 export default function AppAlt() {
@@ -77,38 +155,16 @@ export default function AppAlt() {
           {/* ⬇️ עטיפה גלובלית לכל העץ כדי ש־useLogosQueue יעבוד בכל הדפים */}
           <LogosQueueProvider>
             <BrowserRouter>
-              <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
-                <title>קארינה חולצות מודפסות</title>
-                <meta
-                  name="description"
-                  content="תצוגת פיתוח לדפים החדשים של קארינה: קטלוג, מוצר, עגלה, תשלום ועוד."
-                />
-                <link rel="canonical" href="https://karina.co.il/preview" />
-                <meta property="og:type" content="website" />
-                <meta property="og:title" content="קארינה חולצות מודפסות" />
-                <meta
-                  property="og:description"
-                  content="תצוגת פיתוח לדפים החדשים של האתר."
-                />
-                <meta property="og:image" content="/img/logo.png" />
-                <meta property="og:locale" content="he_IL" />
-                {/* Preconnect לשיפור ביצועים (Core Web Vitals) */}
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-                  <script async src="https://www.googletagmanager.com/gtag/js?id=G-SHQSKGKY2C"></script>
-                  <script>
-                    {`
-                      window.dataLayer = window.dataLayer || [];
-                      function gtag(){dataLayer.push(arguments);}
-                      gtag('js', new Date());
-                      gtag('config', 'G-SHQSKGKY2C');
-                    `}
-                  </script>
-              </Helmet>
+              {/* ✅ SEO/OG/GA שורשי ודינמי */}
+              <RootSEO />
 
               <Navbar />
 
               <main className="min-vh-100">
                 <ScrollToTop />
+                {/* ✅ דיווח page_view בכל ניווט */}
+                <GAListener />
+
                 <Routes>
                   {/* ציבורי */}
                   <Route path="/" element={<HomePage />} />
@@ -161,14 +217,13 @@ export default function AppAlt() {
               </main>
 
               <Footer />
-              {/*
-                <ChatWidget onSend={handleChatSend} />
-               */}
-                <div dir="ltr" id="a11y-fixed-layer">
-                    <A11yToolkit />
-                    <ReadAloud />
-                    <A11yFab />
-                 </div>
+              {/* <ChatWidget onSend={handleChatSend} /> */}
+
+              <div dir="ltr" id="a11y-fixed-layer">
+                <A11yToolkit />
+                <ReadAloud />
+                <A11yFab />
+              </div>
             </BrowserRouter>
           </LogosQueueProvider>
         </OrdersProvider>

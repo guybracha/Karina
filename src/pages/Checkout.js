@@ -6,6 +6,10 @@ import { storage, auth, ensureAuthTokenFresh, db } from "../firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useLogosQueue } from "../contexts/LogosQueueContext.tsx";
 
+// ✅ תמחור ומוצרים (לחישוב ההנחה כאן בצ'קאאוט)
+import { PRODUCTS } from "../lib/products";
+import { getDiscountPct } from "../lib/pricing";
+
 const LS_CART_KEY = "karina:cart";
 const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
 
@@ -124,6 +128,19 @@ function ResponsiveIframe({ src, title = "Credit2000", onLoad }) {
   );
 }
 
+// ===== תמחור לשורה אחת (מדרגות) – כמו בעגלת הקניות =====
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+function priceRow(it) {
+  const p = PRODUCTS.find((x) => x.slug === it.slug);
+  const baseUnit = Number(p?.price ?? it.price ?? 0);
+  const qty = Math.max(1, Number(it.qty) || 1);
+  const dPct = getDiscountPct(qty);          // 0..0.5
+  const unitAfter = round2(baseUnit * (1 - dPct));
+  const lineTotal = round2(unitAfter * qty);
+  const saved = round2(baseUnit * qty - lineTotal);
+  return { baseUnit, qty, dPct, unitAfter, lineTotal, saved };
+}
+
 export default function Checkout() {
   const { state } = useLocation() || {};
   const fallback = useCartFallback();
@@ -132,8 +149,14 @@ export default function Checkout() {
   const shipping = state?.shipping || { method: "pickup", label: "איסוף מהמפעל", cost: 0, address: {} };
   const totals = state?.totals || fallback.totals;
 
+  // חישוב הנחות לפי השורות שהגיעו (לצורך תצוגה בצ'קאאוט)
+  const pricingRows = useMemo(() => items.map((it) => ({ id: it.id, name: it.name, ...priceRow(it) })), [items]);
+  const computedMerchandiseTotal = useMemo(() => pricingRows.reduce((s, r) => s + r.lineTotal, 0), [pricingRows]);
+  const computedTotalSaved = useMemo(() => pricingRows.reduce((s, r) => s + r.saved, 0), [pricingRows]);
+
   const grandTotal =
-    totals?.grandTotal ?? items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+    totals?.grandTotal ??
+    (computedMerchandiseTotal + Number(totals?.shippingCost || 0));
 
   // האם הגיעו פרטי משלוח מהעגלה? (עיר+רחוב+בית או address מוכן)
   const shippingAddress = shipping?.address || {};
@@ -325,13 +348,36 @@ export default function Checkout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readyFromCart, items, totals, state, grandTotal]);
 
-  const lineTotal = (it) => (Number(it.price) || 0) * (Number(it.qty) || 0);
+  const lineTotalRaw = (it) => (Number(it.price) || 0) * (Number(it.qty) || 0);
 
   // כפתור חזרה מהאייפריים
   const handleCloseIframe = useCallback(() => {
     setIframeSrc("");
     setIframeReady(false);
   }, []);
+
+  // ממיר את מפת byColorSize למערך רשומות מפורטות {color, size, qty, unitAfter, lineTotal}
+  function expandVariantBreakdown(variants, unitAfter) {
+    const out = [];
+    if (!variants || typeof variants !== "object" || !variants.byColorSize) return out;
+    const byColorSize = variants.byColorSize || {};
+    Object.entries(byColorSize).forEach(([color, sizesMap = {}]) => {
+      Object.entries(sizesMap).forEach(([size, qtyRaw]) => {
+        const qty = Math.max(0, Number(qtyRaw) || 0);
+        if (!qty) return;
+        out.push({
+          color,
+          size,
+          qty,
+          unitAfter: round2(unitAfter),
+          lineTotal: round2(unitAfter * qty),
+        });
+      });
+    });
+    // אופציונלי: מיון לפי צבע ואז מידה
+    out.sort((a, b) => (a.color || "").localeCompare(b.color || "", "he") || (a.size || "").localeCompare(b.size || "", "he"));
+    return out;
+  }
 
   /* =========================
      Order doc creation
@@ -356,24 +402,39 @@ export default function Checkout() {
       uid,
       createdAt: serverTimestamp(),
       status: "paid",
+      autoEmailOnCreate: true,
       provider: "credit2000",
       txId: txId || null,
       totals: {
-        merchandiseTotal: Number(totals?.merchandiseTotal || 0),
+        merchandiseTotal: Number((totals?.merchandiseTotal ?? computedMerchandiseTotal) || 0),
         shippingCost: Number(totals?.shippingCost || 0),
         grandTotal: Number(grandTotal || 0),
+        totalSaved: Number((totals?.totalSaved ?? computedTotalSaved) || 0),
       },
       shipping: shipping || null,
-      items: cartItems.map((it) => ({
-        id: it.id,
-        slug: it.slug,
-        name: it.name,
-        price: Number(it.price) || 0,
-        qty: Number(it.qty) || 0,
-        color: it.color || null,
-        size: it.size || null,
-        lineTotal: lineTotal(it),
-      })),
+      items: cartItems.map((it) => {
+        const pr = priceRow(it);
+        const variantInfo = (it.variants && typeof it.variants === "object") ? it.variants : null;
+        const sizeSplit = expandVariantBreakdown(variantInfo, pr.unitAfter);
+
+        return {
+          id: it.id,
+          slug: it.slug,
+          name: it.name,
+          price: Number(it.price) || 0,
+          qty: Number(it.qty) || 0,
+          color: it.color || null,
+          size: it.size || null,
+          baseUnit: pr.baseUnit,          // מחיר בסיס ליח'
+          unitAfter: pr.unitAfter,        // מחיר יחידה אחרי הנחה
+          discountPct: pr.dPct,           // 0..0.5
+          lineTotal: pr.lineTotal,        // סה״כ לשורה לאחר הנחה
+          saved: pr.saved,                // חיסכון לשורה
+          // ✅ פיצול לפי צבע/מידה:
+          variants: variantInfo || null,  // { byColorSize, colorTotals, sizeTotals }
+          sizeSplit,                      // [{ color, size, qty, unitAfter, lineTotal }, ...]
+        };
+      }),
       logos: {
         // ✅ NEW: המיפוי הפר־פריט כפי שהתבקש
         byItemFromCart,
@@ -535,30 +596,77 @@ export default function Checkout() {
           <div className="card shadow-sm p-4">
             <h5 className="mb-3">סיכום הזמנה</h5>
             <ul className="list-group list-group-flush mb-3">
-              {items.map((it) => (
-                <li key={it.id} className="list-group-item d-flex justify-content-between align-items-center">
-                  <div>
-                    {it.name}{" "}
-                    <small className="text-muted">
-                      x{it.qty}
-                      {it.color ? ` • ${it.color}` : ""}
-                      {it.size ? ` • ${it.size}` : ""}
-                    </small>
-                  </div>
-                  <div>{(Number(it.price) || 0) * (Number(it.qty) || 0)} ₪</div>
-                </li>
-              ))}
+              {items.map((it) => {
+                const pr = priceRow(it);
+                const originalLine = round2(pr.baseUnit * pr.qty);
+                return (
+                  <li key={it.id} className="list-group-item">
+                    <div className="d-flex justify-content-between align-items-start">
+                      <div>
+                        <div className="fw-semibold">
+                          {it.name}{" "}
+                          <small className="text-muted">
+                            x{pr.qty}
+                            {it.color ? ` • ${it.color}` : ""}
+                            {it.size ? ` • ${it.size}` : ""}
+                          </small>
+                        </div>
+
+                        {/* ↓ אזכור ההנחה מתחת למחיר המקורי */}
+                        <div className="small mt-1">
+                          {pr.dPct > 0 ? (
+                            <>
+                              <div className="text-muted">
+                                מחיר לפני הנחה: <s>{originalLine} ₪</s>
+                              </div>
+                              <div className="text-success">
+                                אחרי הנחה: <strong>{pr.lineTotal} ₪</strong>{" "}
+                                <span className="ms-1">(הנחה {Math.round(pr.dPct * 100)}% — חסכת {pr.saved} ₪)</span>
+                              </div>
+                              <div className="text-muted">
+                                מחיר יחידה לאחר הנחה: {pr.unitAfter} ₪
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-muted">
+                              מחיר לפני הנחה: <strong>{originalLine} ₪</strong> (אין הנחת כמות)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-end">
+                        {pr.dPct > 0 ? (
+                          <>
+                            <div className="text-muted"><s>{originalLine} ₪</s></div>
+                            <div className="fw-bold">{pr.lineTotal} ₪</div>
+                          </>
+                        ) : (
+                          <div className="fw-bold">{originalLine} ₪</div>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
 
             <div className="text-end">
-              {"merchandiseTotal" in (totals || {}) && (
-                <div className="d-flex justify-content-between">
-                  <span className="text-muted">סה״כ מוצרים:</span>
-                  <strong>{Number(totals.merchandiseTotal || 0)} ₪</strong>
+              <div className="d-flex justify-content-between">
+                <span className="text-muted">סה״כ מוצרים (אחרי הנחות):</span>
+                <strong>{round2(totals?.merchandiseTotal ?? computedMerchandiseTotal)} ₪</strong>
+              </div>
+
+              {/* סיכום חיסכון כולל */}
+              {(totals?.totalSaved ?? computedTotalSaved) > 0 && (
+                <div className="d-flex justify-content-between text-success">
+                  <span>חסכת:</span>
+                  <strong>{round2(totals?.totalSaved ?? computedTotalSaved)} ₪</strong>
                 </div>
               )}
+
               {"shippingCost" in (totals || {}) && (
-                <div className="d-flex justify-content-between">
+                <div className="d-flex justify-content_between">
                   <span className="text-muted">
                     משלוח {shipping?.label ? `(${shipping.label})` : ""}
                   </span>

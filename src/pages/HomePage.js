@@ -263,21 +263,27 @@ export default function HomePage() {
       </section>
 
       {/* ===== למה קרינה ===== */}
-      <div className="row g-4 text-center text-md-start" role="list">
-        {FEATURES.map((f) => (
-          <div key={f.title} className="col-6 col-lg-4 d-flex" role="listitem">
-            <div className="feature-card usp d-flex align-items-center justify-content-center justify-content-md-start gap-3 flex-grow-1">
-              <span className="usp-icon" aria-hidden="true">
-                <i className={`bi ${f.icon}`} />
-              </span>
-              <div>
-                <div className="fw-bold">{f.title}</div>
-                <div className="text-muted small">{f.text}</div>
-              </div>
-            </div>
+<section className="container py-4">
+  <div
+    className="row row-cols-2 row-cols-md-3 g-3 g-md-4 text-center text-md-start"
+    role="list"
+  >
+    {FEATURES.map((f) => (
+      <div key={f.title} className="col d-flex" role="listitem">
+        <div className="usp feature-card d-flex align-items-center justify-content-center justify-content-md-start gap-3 w-100">
+          <span className="usp-icon d-inline-flex align-items-center justify-content-center" aria-hidden="true">
+            <i className={`bi ${f.icon}`} />
+          </span>
+          <div className="text-wrap">
+            <div className="fw-bold">{f.title}</div>
+            <div className="text-muted small">{f.text}</div>
           </div>
-        ))}
+        </div>
       </div>
+    ))}
+  </div>
+</section>
+
 
       {/* ===== איך זה עובד ===== */}
       <section className="container py-6">

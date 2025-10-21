@@ -12,6 +12,10 @@ import { getStorage, ref as storageRef, getDownloadURL } from "firebase/storage"
 // ---- (לשימוש בהדמיות בלבד) ----
 import { uploadPreview } from "../lib/uploadPreview";
 
+// ---- מחירון ומוצרים ----
+import { PRODUCTS } from "../lib/products";
+import { getDiscountPct } from "../lib/pricing";
+
 /* =========================================================================
    LS keys & helpers
 ============================================================================ */
@@ -20,7 +24,7 @@ const LS_SHIP_KEY = "karina:shipping";
 const LS_ADDR_KEY = "karina:shippingAddress";
 const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
 
-// מפה של לוגו פר־שורה: { [lineId]: { front: Meta|null, back: Meta|null } }
+// מפה של לוגו פר־מוצר: { [slug]: { front: Meta|null, back: Meta|null } }
 const LS_ITEM_LOGOS = "karina:itemLogos";
 function readItemLogosMap() {
   try { return JSON.parse(localStorage.getItem(LS_ITEM_LOGOS) || "{}") || {}; } catch { return {}; }
@@ -40,6 +44,8 @@ function fmt(n) {
   try { return Number(n || 0).toLocaleString(LOCALE_HE); }
   catch { return Number(n || 0).toLocaleString(); }
 }
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
 function defaultAddress() { return { city: "", street: "", house: "", apt: "", zip: "", notes: "" }; }
 function normalizeAddress(x) {
   if (!x) return defaultAddress();
@@ -59,25 +65,116 @@ function writeAddressToLS(a) {
   try { localStorage.setItem(LS_ADDR_KEY, JSON.stringify(normalizeAddress(a))); } catch {}
 }
 
-function isValidItem(x) { return x && typeof x === "object" && "id" in x && "name" in x; }
+/* ---------- cart normalization & consolidation (one row per product) ---------- */
+function isValidItem(x) { return x && typeof x === "object" && ("id" in x || "slug" in x) && "name" in x; }
 function normalizeCartArray(arr) {
   if (!Array.isArray(arr)) return [];
   return arr.filter(isValidItem).map((it) => ({
     ...it,
+    // דואגים שתמיד יהיה slug
+    slug: typeof it.slug === "string" && it.slug ? it.slug : (typeof it.id === "string" ? it.id.split("__")[0] : ""),
+    // qty/price לשימוש פנימי; המחיר המעודכן נשלף מ-PRODUCTS
     qty: Math.max(1, Number(it.qty) || 1),
     price: Number(it.price) || 0,
-    color: typeof it.color === "string" ? it.color : it.color ?? "",
-    size: typeof it.size === "string" ? it.size : it.size ?? "",
-    slug: typeof it.slug === "string" ? it.slug : it.slug ?? "",
+    color: typeof it.color === "string" ? it.color : "",
+    size:  typeof it.size  === "string" ? it.size  : "",
+    variants: it.variants || null,
   }));
 }
+
+// breakdown helpers (תואם ProductDetail)
+function addToBreakdown(breakdown, colorKey, sizeKey, qtyToAdd) {
+  const safeQty = Math.max(0, Number(qtyToAdd) || 0);
+  const next = breakdown ? { ...breakdown } : { byColorSize: {}, colorTotals: {}, sizeTotals: {} };
+
+  const c = colorKey || "—";
+  const s = sizeKey || "—";
+
+  const byColor = next.byColorSize[c] ? { ...next.byColorSize[c] } : {};
+  byColor[s] = (Number(byColor[s]) || 0) + safeQty;
+  next.byColorSize = { ...next.byColorSize, [c]: byColor };
+
+  next.colorTotals[c] = (Number(next.colorTotals[c]) || 0) + safeQty;
+  next.sizeTotals[s]  = (Number(next.sizeTotals[s])  || 0) + safeQty;
+
+  return next;
+}
+function mergeVariants(a, b) {
+  if (!a) return b || null;
+  if (!b) return a || null;
+  let out = { byColorSize: {}, colorTotals: {}, sizeTotals: {} };
+  const push = (src) => {
+    if (!src?.byColorSize) return;
+    for (const [c, sizes] of Object.entries(src.byColorSize)) {
+      for (const [s, q] of Object.entries(sizes || {})) {
+        out = addToBreakdown(out, c, s, Number(q) || 0);
+      }
+    }
+  };
+  push(a); push(b);
+  return out;
+}
+
+function consolidateCartByProduct(list) {
+  const bySlug = new Map();
+  for (const it of list) {
+    const slug = it.slug || "";
+    if (!slug) continue;
+
+    if (!bySlug.has(slug)) {
+      bySlug.set(slug, {
+        id: slug,
+        slug,
+        name: it.name,
+        price: it.price,
+        qty: 0,
+        variants: null,
+        lastSelected: it.lastSelected || null,
+        addedAt: it.addedAt || Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+    const row = { ...bySlug.get(slug) };
+    row.qty = Number(row.qty || 0) + Math.max(1, Number(it.qty) || 1);
+
+    // מיזוג פירוט מידות/צבעים:
+    let v = row.variants || null;
+    if (it.variants) v = mergeVariants(v, it.variants);
+    if (it.color || it.size) {
+      v = addToBreakdown(v, it.color || "—", it.size || "—", Math.max(1, Number(it.qty) || 1));
+    }
+
+    row.variants = v;
+    row.lastSelected = it.lastSelected || row.lastSelected || null;
+    row.updatedAt = Date.now();
+    bySlug.set(slug, row);
+  }
+  return Array.from(bySlug.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
 function readCartFromLS() {
-  try { return normalizeCartArray(JSON.parse(localStorage.getItem(LS_CART_KEY) || "[]")); }
-  catch { return []; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_CART_KEY) || "[]");
+    const norm = normalizeCartArray(raw);
+    return consolidateCartByProduct(norm);
+  } catch {
+    return [];
+  }
 }
 function saveCartToLS(next) {
   try {
-    const norm = normalizeCartArray(next);
+    // נשמר במבנה הנוכחי (מאוחד). אפשר גם לשמר "variants" לשימוש עתידי.
+    const norm = next.map((it) => ({
+      id: it.slug, // שורה אחת לכל מוצר
+      slug: it.slug,
+      name: it.name,
+      qty: Math.max(1, Number(it.qty) || 1),
+      price: Number(it.price) || 0,
+      variants: it.variants || null,
+      lastSelected: it.lastSelected || null,
+      addedAt: it.addedAt || Date.now(),
+      updatedAt: Date.now(),
+    }));
     localStorage.setItem(LS_CART_KEY, JSON.stringify(norm));
     window.dispatchEvent(new Event("karina:cartUpdated"));
   } catch {}
@@ -99,6 +196,45 @@ function pickImmediateUrl(meta) {
   const cand = meta.thumbUrl || meta.webpUrl || meta.originalUrl || meta.url || meta.downloadUrl;
   if (typeof cand === "string" && /^https?:\/\//i.test(cand)) return cand;
   return null;
+}
+
+/* -------- תמחור לשורה אחת (מדרגות) -------- */
+function priceRow(it) {
+  const p = PRODUCTS.find((x) => x.slug === it.slug);
+  const baseUnit = Number(p?.price ?? it.price ?? 0);
+  const qty = Math.max(1, Number(it.qty) || 1);
+  const dPct = getDiscountPct(qty);          // 0..0.5
+  const unitAfter = round2(baseUnit * (1 - dPct));
+  const lineTotal = round2(unitAfter * qty);
+  const saved = round2(baseUnit * qty - lineTotal);
+  return { baseUnit, qty, dPct, unitAfter, lineTotal, saved };
+}
+
+/* =========================================================================
+   Size totals helpers for UI
+============================================================================ */
+function buildSizeTotalsForSlug(items, slug) {
+  const totals = {};
+  for (const row of items) {
+    if (row.slug !== slug) continue;
+    if (row?.variants?.byColorSize) {
+      for (const sizes of Object.values(row.variants.byColorSize)) {
+        for (const [sz, q] of Object.entries(sizes || {})) {
+          totals[sz] = (totals[sz] || 0) + (Number(q) || 0);
+        }
+      }
+      continue;
+    }
+    const sz = row.size || "—";
+    totals[sz] = (totals[sz] || 0) + Math.max(1, Number(row.qty) || 1);
+  }
+  return totals;
+}
+function getSizeTotalsFromItemOrAll(items, it) {
+  if (it?.variants?.sizeTotals && Object.keys(it.variants.sizeTotals).length > 0) {
+    return it.variants.sizeTotals;
+  }
+  return buildSizeTotalsForSlug(items, it.slug);
 }
 
 /* =========================================================================
@@ -134,11 +270,11 @@ export default function Cart() {
   const [uid, setUid] = useState(null);
   const busyRef = useRef(false);
 
-  // לוגואים פר־שורה (מה-LS)
+  // לוגואים פר־מוצר (מה-LS), מפתח = slug
   const [itemLogosMap, setItemLogosMap] = useState(() => readItemLogosMap());
 
   // URLים שנפתרו בפועל להצגה (אחרי getDownloadURL אם צריך)
-  // מבנה: { [lineId]: { front: string|null, back: string|null } }
+  // מבנה: { [slug]: { front: string|null, back: string|null } }
   const [resolvedLogos, setResolvedLogos] = useState({});
 
   useEffect(() => {
@@ -176,7 +312,7 @@ export default function Cart() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipping, shippingAddress]);
 
-  // === פותר URLים אמיתיים לתצוגה עבור כל שורה ===
+  // === פותר URLים אמיתיים לתצוגה עבור כל מוצר ===
   useEffect(() => {
     let cancelled = false;
 
@@ -252,14 +388,27 @@ export default function Cart() {
     if (res[id]) { delete res[id]; setResolvedLogos(res); }
   }
 
-  const merchandiseTotal = useMemo(
-    () => items.reduce((s, it) => s + Number(it.price || 0) * Number(it.qty || 0), 0),
+  /* ===== סיכומי סל לפי מדרגות ===== */
+  const pricingRows = useMemo(
+    () => items.map((it) => ({ id: it.id, name: it.name, ...priceRow(it) })),
     [items]
   );
+
+  const merchandiseTotal = useMemo(
+    () => pricingRows.reduce((s, r) => s + r.lineTotal, 0),
+    [pricingRows]
+  );
+
+  const totalSaved = useMemo(
+    () => pricingRows.reduce((s, r) => s + r.saved, 0),
+    [pricingRows]
+  );
+
   const shippingCost = useMemo(() => {
     const opt = SHIP_OPTIONS[shipping] || SHIP_OPTIONS.standard;
     return items.length === 0 ? 0 : Number(opt.cost || 0);
   }, [shipping, items.length]);
+
   const grandTotal = useMemo(() => merchandiseTotal + shippingCost, [merchandiseTotal, shippingCost]);
 
   // יצירת/עדכון טיוטה (לשמירת מטא־דאטה)
@@ -269,67 +418,71 @@ export default function Cart() {
     return { uid };
   }
 
-  // שמירת קבצים/מטא־דאטה לשורה אחת — משתמש בלוגו מהמפה (לא מעלה שוב)
+  // שמירת קבצים/מטא־דאטה לכל מוצר (slug אחד) — משתמש בלוגו מהמפה
   async function saveAssetsForItem(it) {
     if (!uid) { alert("עליך להתחבר כדי לשמור קבצים."); return; }
     try { await ensureAuthTokenFresh(); } catch {}
 
-    const customer = await ensureDraft(uid);
+    const { uid: userId } = await ensureDraft(uid);
     const orderId = "draft";
     const slug = it.slug;
     if (!slug) { alert("לפריט חסר slug — לא ניתן לשמור קבצים."); return; }
 
-    // הדמיות (כמו שהיה) — עדיפות ל־webp
-    const { front, back } = getPreviewsForItem({ slug });
+    // הדמיות — עדיפות ל-webp
+    const previews = getPreviewsForItem({ slug });
     let frontUrl = null, backUrl = null;
 
     try {
-      if (front?.startsWith?.("data:") || front?.startsWith?.("blob:")) {
-        const up = await uploadPreview({ uid: customer.uid, orderId, slug, side: "front", source: front });
+      if (previews.front?.startsWith?.("data:") || previews.front?.startsWith?.("blob:")) {
+        const up = await uploadPreview({ uid: userId, orderId, slug, side: "front", source: previews.front });
         frontUrl = up.webp?.url || up.png?.url || null;
       }
     } catch {}
 
     try {
-      if (back?.startsWith?.("data:") || back?.startsWith?.("blob:")) {
-        const up = await uploadPreview({ uid: customer.uid, orderId, slug, side: "back", source: back });
+      if (previews.back?.startsWith?.("data:") || previews.back?.startsWith?.("blob:")) {
+        const up = await uploadPreview({ uid: userId, orderId, slug, side: "back", source: previews.back });
         backUrl = up.webp?.url || up.png?.url || null;
       }
     } catch {}
 
-    // לוגו פר־שורה מתוך המפה
+    // לוגו פר־מוצר מתוך המפה (מפתח = slug)
     const logosMeta = itemLogosMap[it.id] || { front: null, back: null };
 
-    // עדכון המסמך בטיוטה
-    const keyOf = (x) => `${x.slug || ""}__${x.color || ""}__${x.size || ""}`;
-    const meKey = keyOf(it);
+    // שליפת טיוטה ועדכון לפי slug אחד
+    const draftRef = orderDraftDocRef(uid);
+    const snap = await getDoc(draftRef);
+    const curItems = Array.isArray(snap.data()?.items) ? snap.data().items : [];
 
-    const currentDraftSnap = await getDoc(orderDraftDocRef(uid));
-    const currentItems = Array.isArray(currentDraftSnap.data()?.items) ? currentDraftSnap.data().items : [];
+    const rowIndex = curItems.findIndex((r) => r?.slug === slug);
+    const baseRow = rowIndex >= 0 ? { ...curItems[rowIndex] } : {};
 
-    const nextItems = currentItems.map((row) =>
-      keyOf(row) === meKey
-        ? {
-            ...row,
-            previews: { frontUrl: frontUrl || row?.previews?.frontUrl || null, backUrl: backUrl || row?.previews?.backUrl || null },
-            logos:    { front: logosMeta.front || row?.logos?.front || null,  back:  logosMeta.back  || row?.logos?.back  || null },
-          }
-        : row
-    );
-
-    const existed = nextItems.some((r) => keyOf(r) === meKey);
-    const completedRow = {
-      slug: it.slug, name: it.name, price: it.price, qty: it.qty, color: it.color, size: it.size,
-      previews: { frontUrl: frontUrl || null, backUrl: backUrl || null },
-      logos:    { front: logosMeta.front || null, back: logosMeta.back || null },
+    const updatedRow = {
+      slug,
+      name: it.name,
+      price: it.price,     // אינדיקטיבי בלבד; החישוב מתבצע בפרונט
+      qty: it.qty,         // כמות כוללת לכל המוצר
+      variants: it.variants || null, // breakdown למידות/צבעים
+      previews: {
+        frontUrl: frontUrl || baseRow?.previews?.frontUrl || null,
+        backUrl:  backUrl  || baseRow?.previews?.backUrl  || null,
+      },
+      logos: {
+        front: logosMeta.front || baseRow?.logos?.front || null,
+        back:  logosMeta.back  || baseRow?.logos?.back  || null,
+      },
+      updatedAt: Date.now(),
     };
-    const finalItems = existed ? nextItems : [...nextItems, completedRow];
 
-    await setDoc(orderDraftDocRef(uid), { items: finalItems, updatedAt: serverTimestamp() }, { merge: true });
+    const nextItems = [...curItems];
+    if (rowIndex >= 0) nextItems[rowIndex] = updatedRow;
+    else nextItems.push(updatedRow);
+
+    await setDoc(draftRef, { items: nextItems, updatedAt: serverTimestamp() }, { merge: true });
     alert(`נשמרו הקבצים לפריט "${it.name}".`);
   }
 
-  // שמירת כל השורות (אם יש הדמיות/לוגואים)
+  // שמירת כל המוצרים (אם יש הדמיות/לוגואים)
   async function saveAllAssets() {
     if (!uid) { alert("עליך להתחבר כדי לשמור קבצים."); return; }
     try { await ensureAuthTokenFresh(); } catch {}
@@ -371,7 +524,7 @@ export default function Cart() {
       const checkoutState = {
         items,
         shipping: { method: shipping, label: shipOpt.label, cost: shipOpt.cost, address: aOut },
-        totals: { merchandiseTotal, shippingCost, grandTotal },
+        totals: { merchandiseTotal, shippingCost, grandTotal, totalSaved },
         from: "cart",
       };
       navigate("/checkout", { state: checkoutState });
@@ -402,8 +555,7 @@ export default function Cart() {
                 <tr>
                   <th style={{ width: 160 }}>תצוגה</th>
                   <th>מוצר</th>
-                  <th>צבע</th>
-                  <th>מידה</th>
+                  <th>חלוקה לפי מידה</th>
                   <th style={{ width: 120 }}>כמות</th>
                   <th>מחיר ליחידה</th>
                   <th>סה״כ</th>
@@ -412,114 +564,132 @@ export default function Cart() {
               </thead>
               <tbody>
                 {items.map((it) => {
-                  // meta כפי שנשמר ב-LS עבור השורה
                   const logosMetaForLine = itemLogosMap[it.id] || {};
-
-                  // קודם ננסה URL מיידי מה-meta, אם אין – נשתמש במה שנפתר אסינכרונית
                   const frontImmediate = pickImmediateUrl(logosMetaForLine.front);
                   const backImmediate  = pickImmediateUrl(logosMetaForLine.back);
-
                   const frontLogoUrl = frontImmediate || resolvedLogos[it.id]?.front || null;
                   const backLogoUrl  = backImmediate  || resolvedLogos[it.id]?.back  || null;
+
+                  // תמחור לשורה
+                  const row = priceRow(it);
+                  const sizeTotals = getSizeTotalsFromItemOrAll(items, it);
+                  const sizeKeys = Object.keys(sizeTotals || {});
 
                   return (
                     <tr key={it.id} style={{ wordBreak: "break-word" }}>
                       {/* תצוגה */}
                       <td className="align-top">
-  <div className="d-flex gap-3 align-items-center">
-    {/* קדמי */}
-    <div className="text-center">
-      {frontLogoUrl ? (
-        <img
-          src={frontLogoUrl}
-          alt={`לוגו קדמי לשורה ${it.name}`}
-          title={
-            (itemLogosMap[it.id]?.front?.name) ||
-            (itemLogosMap[it.id]?.front?.contentType) ||
-            "לוגו קדמי"
-          }
-          className="cart-logo"
-        />
-      ) : (
-        <div className="cart-logo-empty" title="אין לוגו קדמי">🖼️</div>
-      )}
-      <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>
-        לוגו קדמי
-      </small>
+                        <div className="d-flex gap-3 align-items-center">
+                          {/* קדמי */}
+                          <div className="text-center">
+                            {frontLogoUrl ? (
+                              <img
+                                src={frontLogoUrl}
+                                alt={`לוגו קדמי לשורה ${it.name}`}
+                                title={(itemLogosMap[it.id]?.front?.name) || (itemLogosMap[it.id]?.front?.contentType) || "לוגו קדמי"}
+                                className="cart-logo"
+                              />
+                            ) : (
+                              <div className="cart-logo-empty" title="אין לוגו קדמי">🖼️</div>
+                            )}
+                            <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>לוגו קדמי</small>
+                            <button type="button" className="btn btn-sm btn-outline-secondary mt-1" onClick={() => navigate(`/product/${it.slug}`)}>החלף</button>
+                          </div>
 
-      {/* אופציונלי: כפתור החלפה יוביל לעמוד המוצר */}
-      <button
-        type="button"
-        className="btn btn-sm btn-outline-secondary mt-1"
-        onClick={() => navigate(`/product/${it.slug}`)}
-        title="החלף לוגו קדמי"
-      >
-        החלף
-      </button>
-    </div>
-
-    {/* אחורי */}
-    <div className="text-center">
-      {backLogoUrl ? (
-        <img
-          src={backLogoUrl}
-          alt={`לוגו אחורי לשורה ${it.name}`}
-          title={
-            (itemLogosMap[it.id]?.back?.name) ||
-            (itemLogosMap[it.id]?.back?.contentType) ||
-            "לוגו אחורי"
-          }
-          className="cart-logo"
-        />
-      ) : (
-        <div className="cart-logo-empty" title="אין לוגו אחורי">🖼️</div>
-      )}
-      <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>
-        לוגו אחורי
-      </small>
-
-      <button
-        type="button"
-        className="btn btn-sm btn-outline-secondary mt-1"
-        onClick={() => navigate(`/product/${it.slug}`)}
-        title="החלף לוגו אחורי"
-      >
-        החלף
-      </button>
-    </div>
-  </div>
-</td>
-
+                          {/* אחורי */}
+                          <div className="text-center">
+                            {backLogoUrl ? (
+                              <img
+                                src={backLogoUrl}
+                                alt={`לוגו אחורי לשורה ${it.name}`}
+                                title={(itemLogosMap[it.id]?.back?.name) || (itemLogosMap[it.id]?.back?.contentType) || "לוגו אחורי"}
+                                className="cart-logo"
+                              />
+                            ) : (
+                              <div className="cart-logo-empty" title="אין לוגו אחורי">🖼️</div>
+                            )}
+                            <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>לוגו אחורי</small>
+                            <button type="button" className="btn btn-sm btn-outline-secondary mt-1" onClick={() => navigate(`/product/${it.slug}`)}>החלף</button>
+                          </div>
+                        </div>
+                      </td>
 
                       {/* מוצר + מובייל */}
                       <td className="fw-semibold align-top" style={{ maxWidth: 280 }}>
                         <div className="mb-1">{it.name}</div>
 
-                        {/* מובייל בלבד: פרטי צבע/מידה/כמות/מחיר/סה״כ */}
+                        {/* מובייל בלבד: פירוט מידות + מחיר/סה"כ/כמות */}
                         <div className="d-md-none small text-muted">
+                          {sizeKeys.length ? (
+                            <div className="mb-2">
+                              <div className="text-muted">מידות:</div>
+                              <div className="d-flex flex-wrap gap-2">
+                                {sizeKeys.map((sz) => (
+                                  <span key={sz} className="badge text-bg-light">{sz}: {sizeTotals[sz]}</span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
                           <div className="d-flex flex-wrap gap-2">
-                            <span className="badge text-bg-light">צבע: {it.color || "—"}</span>
-                            <span className="badge text-bg-light">מידה: {it.size || "—"}</span>
-                            <span className="badge text-bg-light">מחיר: {fmt(it.price)} ₪</span>
-                            <span className="badge text-bg-light">סה״כ: {fmt(Number(it.price) * Number(it.qty))} ₪</span>
+                            <span className="badge text-bg-light">
+                              מחיר: {row.dPct > 0 ? (<><s>{fmt(row.baseUnit)}</s> → <strong>{fmt(row.unitAfter)}</strong></>) : (<>{fmt(row.baseUnit)}</>)} ₪
+                            </span>
+                            <span className="badge text-bg-light">סה״כ: {fmt(row.lineTotal)} ₪</span>
                           </div>
                           <div className="mt-2">
-                            <label className="form-label me-2 mb-0">כמות</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={it.qty}
-                              onChange={(e) => updateQty(it.id, e.target.value)}
-                              className="form-control form-control-sm"
-                              style={{ width: 120 }}
-                            />
-                          </div>
+                          <label className="form-label me-2 mb-0">כמות</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={it.qty}
+                            readOnly
+                            onKeyDown={(e) => e.preventDefault()}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            className="form-control form-control-sm"
+                            style={{ width: 120, pointerEvents: "none", cursor: "not-allowed" }}
+                            title="הכמות נקבעת לפי חלוקת המידות/בחירת המוצר"
+                            aria-readonly="true"
+                          />
+                        </div>
+
+                          {row.dPct > 0 && (
+                            <div className="mt-1 text-success small">הנחת כמות: {Math.round(row.dPct * 100)}% (חסכת {fmt(row.saved)} ₪)</div>
+                          )}
                         </div>
                       </td>
 
-                      {/* עמודות רגילות לטאבלט/דסקטופ */}
-                      <td className="d-none d-md-table-cell align-top">{it.color}</td>
-                      <td className="d-none d-md-table-cell align-top">{it.size}</td>
+                      {/* חלוקה לפי מידה (דסקטופ) */}
+                      <td className="d-none d-md-table-cell align-top" style={{ maxWidth: 340 }}>
+                        {sizeKeys.length ? (
+                          <div className="small">
+                            <div className="d-flex flex-wrap gap-2">
+                              {sizeKeys.map((sz) => (
+                                <span key={sz} className="badge text-bg-light">
+                                  {sz}: <strong className="ms-1">{sizeTotals[sz]}</strong>
+                                </span>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary mt-2"
+                              onClick={() => navigate(`/product/${it.slug}`)}
+                              title="עריכת פירוט המידות בדף המוצר"
+                            >
+                              ערוך מידות
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-muted small">
+                            אין פירוט לפי מידה.{" "}
+                            <button type="button" className="btn btn-link p-0 align-baseline" onClick={() => navigate(`/product/${it.slug}`)}>
+                              הוסף בדף המוצר
+                            </button>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* כמות כוללת */}
                       <td className="d-none d-md-table-cell align-top">
                         <input
                           type="number"
@@ -528,9 +698,28 @@ export default function Cart() {
                           onChange={(e) => updateQty(it.id, e.target.value)}
                           className="form-control form-control-sm w-auto"
                         />
+                        {row.dPct > 0 && (
+                          <div className="small text-success mt-1">הנחה: {Math.round(row.dPct * 100)}%</div>
+                        )}
                       </td>
-                      <td className="d-none d-md-table-cell align-top">{fmt(it.price)} ₪</td>
-                      <td className="d-none d-md-table-cell align-top">{fmt(Number(it.price) * Number(it.qty))} ₪</td>
+
+                      {/* מחיר ליחידה */}
+                      <td className="d-none d-md-table-cell align-top">
+                        {row.dPct > 0 ? (
+                          <>
+                            <div><s>{fmt(row.baseUnit)} ₪</s></div>
+                            <div><strong>{fmt(row.unitAfter)} ₪</strong></div>
+                          </>
+                        ) : (
+                          <>{fmt(row.baseUnit)} ₪</>
+                        )}
+                      </td>
+
+                      {/* סה"כ לשורה */}
+                      <td className="d-none d-md-table-cell align-top">
+                        <strong>{fmt(row.lineTotal)} ₪</strong>
+                        {row.saved > 0 && <div className="small text-success">חיסכון: {fmt(row.saved)} ₪</div>}
+                      </td>
 
                       {/* פעולות */}
                       <td className="align-top">
@@ -552,7 +741,7 @@ export default function Cart() {
           {/* משלוח + כתובת */}
           <div className="mt-3 p-3 border rounded-3">
             <h6 className="mb-3">אפשרות משלוח</h6>
-            <div className="d-flex flex-wrap gap-4">{/* <-- תיקון className (ללא הנקודה) */}
+            <div className="d-flex flex-wrap gap-4">
               {Object.entries(SHIP_OPTIONS).map(([value, opt]) => (
                 <div className="form-check" key={value}>
                   <input
@@ -617,11 +806,17 @@ export default function Cart() {
             <Link to="/catalog" className="btn btn-outline-secondary">המשך בקנייה</Link>
             <div className="ms-auto">
               <div className="text-end">
-                <div className="d-flex justify-content-between" style={{ minWidth: 260 }}>
-                  <span className="text-muted">סה״כ מוצרים:</span>
+                <div className="d-flex justify-content-between" style={{ minWidth: 280 }}>
+                  <span className="text-muted">סה״כ מוצרים (אחרי הנחות):</span>
                   <strong>{fmt(merchandiseTotal)} ₪</strong>
                 </div>
-                <div className="d-flex justify-content-between" style={{ minWidth: 260 }}>
+                {totalSaved > 0 && (
+                  <div className="d-flex justify-content-between text-success" style={{ minWidth: 280 }}>
+                    <span>חסכת עד כה:</span>
+                    <strong>{fmt(totalSaved)} ₪</strong>
+                  </div>
+                )}
+                <div className="d-flex justify-content-between" style={{ minWidth: 280 }}>
                   <span className="text-muted">משלוח ({SHIP_OPTIONS[shipping]?.label || "—"}):</span>
                   <strong>{fmt(shippingCost)} ₪</strong>
                 </div>

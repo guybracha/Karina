@@ -118,8 +118,8 @@ export default function TermsPage() {
     SHIPPING_DAYS: "3–7",
     CANCEL_DAYS: "14",
     EXCLUDED_PRODUCTS: "מוצרים בהזמנה אישית/הדפסות לפי מידה/מוצרי היגיינה",
-    PAYMENT_METHODS: "כרטיס אשראי ו-Bit",
-    PSP_NAME: "Tranzila",
+    PAYMENT_METHODS: "כרטיס אשראי",
+    PSP_NAME: "Credit 2000",
     LIABILITY_CAP: "2,000 ₪"
   });
 
