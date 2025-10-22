@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
   registerWithEmail,
-  signInWithGoogle, // פונקציה שלך מה services/auth – יכולה להיות popup עם fallback ל-redirect
+  signInWithGoogle, // popup עם fallback ל-redirect בתוך ה-service
 } from "../services/auth";
 import { ensureUserDoc } from "../services/users";
 import { auth } from "../firebase";
@@ -12,70 +12,84 @@ import { auth } from "../firebase";
 import {
   getAdditionalUserInfo,
   getRedirectResult,
+  onAuthStateChanged,
   signOut,
 } from "firebase/auth";
 
 // נשמור בבאפר קטן את מצב ההסכמה לדיוור בעת התחלת Google (כדי לחזור לאחר redirect)
 const LS_GOOGLE_CONSENT_KEY = "karina:auth:googleConsent";
 
+/* ============ Helpers ============ */
 function friendlyError(e) {
   const code = e?.code || "";
   const msg = e?.message || "";
 
-  // App Check / fetch בעיות נפוצות
-  if (code.includes("appCheck") || /app\-check/i.test(code) || /fetch-status-error/i.test(msg)) {
-    return "נראה שיש בעיית App Check / רשת. רעננו את העמוד ונסו שוב. ודאו שהדומיין מאושר ושהדפדפן לא חוסם.";
+  // App Check / רשת
+  if (code.includes("appCheck") || /app\-check/i.test(msg) || /fetch-status-error/i.test(msg)) {
+    return "נראה שיש בעיית App Check / רשת. רעננו את העמוד וודאו שהדפדפן לא חוסם.";
   }
-
-  // דפדפן וחלונות קופצים
+  // Popup
   if (code === "auth/popup-blocked") return "הדפדפן חסם את חלון ההתחברות. בטלו חסימה או השתמשו בכניסה בעזרת Redirect.";
   if (code === "auth/popup-closed-by-user") return "חלון Google נסגר לפני השלמת ההתחברות.";
   if (code === "auth/cancelled-popup-request") return "בקשת התחברות קודמת בוטלה.";
-
-  // הרשאות/קרדנצ'יאל
+  // אימות/קרדנצ'יאל
   if (code === "auth/invalid-credential") return "פרטי ההתחברות שגויים.";
   if (code === "auth/user-not-found") return "לא נמצא משתמש עם האימייל הזה.";
   if (code === "auth/wrong-password") return "הסיסמה שגויה.";
   if (code === "auth/too-many-requests") return "יותר מדי ניסיונות. נסו שוב מאוחר יותר.";
-
-  // השגיאה הנפוצה בלוקאל כשיש Redirect URI/דומיין/קאש לא מסונכרן
+  // Misc
   if (code === "auth/internal-error") {
-    return "שגיאה פנימית באימות. נסו לרענן, לנקות אחסון אתר (Application→Clear storage) ולבדוק שה-Redirect URI ו-doman מורשים ל-localhost.";
+    return "שגיאה פנימית באימות. נסו לרענן, לנקות אחסון אתר (Application→Clear storage) ולבדוק שהדומיין/Redirect מאושרים.";
   }
-
   return msg || "שגיאה לא צפויה. נסו שוב.";
 }
 
+// מסייע לאחזר user גם אם services מחזיר UserCredential
+const pickUser = (res) => (res?.user ? res.user : res);
+
+/* ============ Component ============ */
 export default function AuthPage() {
   const [tab, setTab] = useState("login"); // "login" | "register"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [error, setError] = useState(null);
+  const [info, setInfo] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/account";
 
+  // אם כבר מחוברים – ננווט פנימה
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        // אם כבר מחובר, לא צריך לחכות לפעולה ידנית
+        navigate(from, { replace: true });
+      }
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function afterAuth(user, extra = null) {
-  const u = user || auth.currentUser;
-  if (!u) return;
+    const u = user || auth.currentUser;
+    if (!u) return;
 
-  // ניווט מיידי – לא מחכים ל-Firestore
-  navigate(from, { replace: true });
+    // ניווט מיידי – לא מחכים ל-Firestore
+    navigate(from, { replace: true });
 
-  // יצירת/מיזוג מסמך המשתמש ברקע (עם תקרת זמן קצרה)
-  try {
-    await Promise.race([
-      ensureUserDoc(u, extra || undefined),
-      new Promise((resolve) => setTimeout(resolve, 800)), // לא לעכב את ה־UI
-    ]);
-  } catch (e) {
-    console.warn("[Auth] ensureUserDoc failed (background):", e?.code || e?.message || e);
+    // יצירת/מיזוג מסמך המשתמש ברקע (עם תקרת זמן קצרה)
+    try {
+      await Promise.race([
+        ensureUserDoc(u, extra || undefined),
+        new Promise((resolve) => setTimeout(resolve, 800)), // לא לעכב את ה־UI
+      ]);
+    } catch (e) {
+      console.warn("[Auth] ensureUserDoc failed (background):", e?.code || e?.message || e);
+    }
   }
-}
-
 
   // --- טיפול בתוצאת Redirect (אם popup לא זמין/נחסם) ---
   useEffect(() => {
@@ -92,7 +106,6 @@ export default function AuthPage() {
         localStorage.removeItem(LS_GOOGLE_CONSENT_KEY);
 
         if (isNew && !wantConsent) {
-          // משתמש חדש שלא נתן הסכמה – נבטל ונוודא שהטאב הוא "register"
           try { await signOut(auth); } catch {}
           setTab("register");
           setError("נראה שזו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים (ניתן להסרה בכל עת). סמנו את הצ׳קבוקס והמשיכו.");
@@ -109,7 +122,6 @@ export default function AuthPage() {
 
         await afterAuth(res.user, extra);
       } catch (e) {
-        // אם אין redirect פעיל, רוב הסיכויים שנקבל null; שגיאה אמיתית – נציג
         if (e?.code) setError(friendlyError(e));
       }
     })();
@@ -120,9 +132,12 @@ export default function AuthPage() {
   async function handleLogin(e) {
     e.preventDefault();
     setError(null);
+    setInfo(null);
     setLoading(true);
     try {
-      const { user } = await loginWithEmail(email.trim(), password);
+      const res = await loginWithEmail(email.trim(), password);
+      const user = pickUser(res);
+      if (!user) throw new Error("Login returned no user.");
       await afterAuth(user);
     } catch (err) {
       setError(friendlyError(err));
@@ -134,6 +149,7 @@ export default function AuthPage() {
   async function handleRegister(e) {
     e.preventDefault();
     setError(null);
+    setInfo(null);
 
     if (!marketingOptIn) {
       setError("יש לאשר קבלת דיוורים וחומר פרסומי כדי להירשם.");
@@ -142,9 +158,9 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      const user = await registerWithEmail(email.trim(), password);
-      // אפשר לשלוח אימייל אימות כאן אם לא נעשה בשכבת ה-service
-      // alert("Verification email sent");
+      const res = await registerWithEmail(email.trim(), password);
+      const user = pickUser(res);
+      if (!user) throw new Error("Register returned no user.");
 
       await afterAuth(user, {
         marketingConsent: true,
@@ -161,22 +177,23 @@ export default function AuthPage() {
   // --- Google ---
   async function handleGoogle() {
     setError(null);
+    setInfo(null);
 
-    // אם אנחנו בטאב הרשמה – מחייבים הסכמה מראש
     const mustConsent = (tab === "register");
     if (mustConsent && !marketingOptIn) {
       setError("יש לאשר קבלת דיוורים וחומר פרסומי כדי להירשם.");
       return;
     }
 
-    // נשמור מה המשתמש בחר רגע לפני שנצא ל-redirect (אם זה מה שיהיה)
+    // נשמור את ההסכמה כדי לקרוא אותה אחרי redirect
     localStorage.setItem(LS_GOOGLE_CONSENT_KEY, (marketingOptIn ? "1" : "0"));
 
     setLoading(true);
     try {
-      const res = await signInWithGoogle(); // עשוי להחזיר תוצאה (popup) או לצאת ל-redirect (undefined)
+      const res = await signInWithGoogle(); // אם זה redirect, res יהיה undefined
       if (!res?.user) {
-        // במקרה redirect – נמתין ל-getRedirectResult ב-useEffect
+        // redirect – ה-useEffect של getRedirectResult יטפל בהמשך
+        setInfo("מועברים להשלמת התחברות…");
         return;
       }
 
@@ -232,6 +249,11 @@ export default function AuthPage() {
       {error && (
         <div className="alert alert-danger" role="alert">
           {error}
+        </div>
+      )}
+      {info && (
+        <div className="alert alert-info" role="alert">
+          {info}
         </div>
       )}
 
