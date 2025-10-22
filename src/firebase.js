@@ -59,7 +59,7 @@ function resolveFirebaseConfig() {
       ...cfg,
       apiKey: cfg.apiKey ? "<set>" : "<missing>",
       appId:  cfg.appId  ? "<set>" : "<missing>",
-    });
+    }); 
     if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא קובץ .env.local תקין.");
     if (cfg.storageBucket && !/\.(appspot|firebasestorage)\.app$/i.test(cfg.storageBucket)) {
       console.warn("⚠️ storageBucket לא נראה תקין. צפה ל: <project>.appspot.com או <project>.firebasestorage.app");
