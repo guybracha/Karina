@@ -333,6 +333,109 @@ export default function Account() {
         <Link to="/catalog" className="btn btn-outline-primary">המשך בקניות</Link>
         <button className="btn btn-danger" onClick={handleLogout}>התנתק</button>
       </div>
+
+      {/* ========= Edit Profile MODAL ========= */}
+      {showEdit && (
+        <div
+          className="modal d-block"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="editProfileTitle"
+          onClick={() => setShowEdit(false)}
+          style={{ background: "rgba(0,0,0,0.5)" }}
+        >
+          <div
+            className="modal-dialog modal-dialog-centered"
+            role="document"
+            onClick={(e) => e.stopPropagation()} // למנוע סגירה בלחיצה בתוך התיבה
+          >
+            <div className="modal-content">
+              <form onSubmit={handleSaveProfile}>
+                <div className="modal-header">
+                  <h5 className="modal-title" id="editProfileTitle">עריכת פרטי קשר</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    aria-label="Close"
+                    onClick={() => setShowEdit(false)}
+                  />
+                </div>
+
+                <div className="modal-body">
+                  {saveErr && <div className="alert alert-danger mb-3">{saveErr}</div>}
+                  {saveMsg && <div className="alert alert-success mb-3">{saveMsg}</div>}
+
+                  <div className="mb-3">
+                    <label className="form-label">שם מלא</label>
+                    <input
+                      className="form-control"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label">אימייל</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                    />
+                    <div className="form-text">שינוי אימייל עלול לדרוש סיסמה (אימות מחדש).</div>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label">טלפון</label>
+                    <input
+                      className="form-control"
+                      value={editPhoneNumber}
+                      onChange={(e) => setEditPhoneNumber(e.target.value)}
+                      placeholder="05x-xxxxxxx"
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label">חברה</label>
+                    <input
+                      className="form-control"
+                      value={editCompany}
+                      onChange={(e) => setEditCompany(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label">סיסמה (רק אם תידרש לאימות מחדש)</label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      value={reauthPassword}
+                      onChange={(e) => setReauthPassword(e.target.value)}
+                      placeholder="הקלד/י סיסמה לשינוי אימייל במידת הצורך"
+                    />
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setShowEdit(false)}
+                    disabled={saving}
+                  >
+                    ביטול
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={saving}>
+                    {saving ? "שומר…" : "שמור"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ========= /Edit Profile MODAL ========= */}
     </div>
   );
 }
