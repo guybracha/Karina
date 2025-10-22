@@ -26,7 +26,7 @@ import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import {
   initializeAppCheck,
-  ReCaptchaEnterpriseProvider,            // ← Enterprise בלבד
+  ReCaptchaEnterpriseProvider,            // Enterprise בלבד
   onTokenChanged as onAppCheckTokenChanged,
   getToken as getAppCheckToken,
 } from "firebase/app-check";
@@ -38,10 +38,9 @@ const g = (typeof globalThis !== "undefined" ? globalThis : (typeof window !== "
 const isBrowser = typeof window !== "undefined";
 const isDev = process.env.NODE_ENV !== "production";
 
-/** החזר קונפיג מ־ENV, עם לוגים ידידותיים ב־DEV */
+/** קונפיג מ-ENV + לוגים ב-DEV */
 function resolveFirebaseConfig() {
   const RUNTIME = (typeof window !== "undefined" && window.__ENV__) || {};
-
   const cfg = {
     apiKey:             process.env.REACT_APP_FB_API_KEY             || RUNTIME.FIREBASE_API_KEY             || "",
     authDomain:         process.env.REACT_APP_FB_AUTH_DOMAIN         || RUNTIME.FIREBASE_AUTH_DOMAIN         || "",
@@ -58,18 +57,14 @@ function resolveFirebaseConfig() {
       apiKey: cfg.apiKey ? "<set>" : "<missing>",
       appId:  cfg.appId  ? "<set>" : "<missing>",
     });
-    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא קובץ .env.local תקין.");
-    // allow appspot.com OR firebasestorage.app
+    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא .env.local");
     if (cfg.storageBucket && !/\.(appspot\.com|firebasestorage\.app)$/i.test(cfg.storageBucket)) {
-      console.warn("⚠️ storageBucket לא נראה תקין. צפה ל: <project>.appspot.com או <project>.firebasestorage.app");
+      console.warn("⚠️ storageBucket לא נראה תקין (צפה ל- <project>.appspot.com או firebasestorage.app)");
     }
   }
 
-  const missing = ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"]
-    .filter((k) => !cfg[k]);
-  if (missing.length) {
-    throw new Error(`[Firebase config] חסרים משתנים: ${missing.join(", ")}. בדוק .env.* ואתחל את ה-dev server.`);
-  }
+  const missing = ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"].filter(k => !cfg[k]);
+  if (missing.length) throw new Error(`[Firebase config] חסרים משתנים: ${missing.join(", ")}`);
   return cfg;
 }
 
@@ -80,13 +75,11 @@ const firebaseConfig = resolveFirebaseConfig();
    ========================= */
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// לחשיפה נוחה גם בפרוד לדיבאג קצר (לא מסוכן)
-if (isBrowser) {
-  try { window.firebaseApp = app; } catch {}
-}
+// חשיפה נוחה (גם בפרוד לדיבוג קצר)
+if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =========================
-   Auth – popup resolver + local persistence
+   Auth – popup + local persistence
    ========================= */
 export const auth = (() => {
   try {
@@ -100,36 +93,32 @@ export const auth = (() => {
 })();
 
 /* =========================
-   App Check – reCAPTCHA Enterprise בלבד
+   App Check – Enterprise בלבד
    ========================= */
 export let appCheck = null;
 
-const enableAppCheck =
-  String(process.env.REACT_APP_ENABLE_APPCHECK || "false").toLowerCase() === "true";
-
+// נדרש: REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY מה-Console של GCP (עם הדומיינים karina.co.il/www/localhost)
 const ENTERPRISE_SITE_KEY = process.env.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY || "";
+const ENABLE_APPCHECK = String(process.env.REACT_APP_ENABLE_APPCHECK || "true").toLowerCase() === "true";
 
 async function getAppCheckAttestation(forceRefresh = false) {
   try {
     if (!appCheck) return null;
     const tok = await getAppCheckToken(appCheck, forceRefresh);
     return tok?.token || null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-if (isBrowser && enableAppCheck) {
+if (isBrowser && ENABLE_APPCHECK) {
   try {
     if (!ENTERPRISE_SITE_KEY) {
-      console.error("[AppCheck] Missing REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY (Enterprise)");
+      console.error("[AppCheck] Missing REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY");
     }
-
-    // Debug token (רק אם הוגדר)
+    // Debug token (אם הוגדר)
     const envDebug = process.env.REACT_APP_APPCHECK_DEBUG_TOKEN;
     if (envDebug && !("FIREBASE_APPCHECK_DEBUG_TOKEN" in g)) {
       g.FIREBASE_APPCHECK_DEBUG_TOKEN = envDebug;
-      if (isDev) console.info("[AppCheck] Debug token from env set.");
+      if (isDev) console.info("[AppCheck] Debug token set from env.");
     }
 
     appCheck = initializeAppCheck(app, {
@@ -137,15 +126,16 @@ if (isBrowser && enableAppCheck) {
       isTokenAutoRefreshEnabled: true,
     });
 
-    // דיאגנוסטיקה תמיד (גם בפרוד)
+    // חשיפה לקונסול בכל מצב
+    try { window.appCheck = appCheck; } catch {}
+
     onAppCheckTokenChanged(appCheck, (tok) => {
       console.log("AppCheck:", tok ? "OK" : "MISSING");
     });
-    // בקשת טוקן ראשונית
-    getAppCheckToken(appCheck, true).catch((e) =>
+    // טריגר מיידי לטוקן (יוציא לוג אם יש בעיה בדומיין/מפתח)
+    getAppCheckToken(appCheck, true).catch(e =>
       console.warn("[AppCheck] getToken failed:", e?.message || e)
     );
-
   } catch (e) {
     console.error("[AppCheck] init failed:", e?.message || e);
   }
@@ -156,20 +146,14 @@ if (isBrowser && enableAppCheck) {
    ========================= */
 export let analytics = null;
 if (isBrowser) {
-  try {
-    analyticsSupported()
-      .then((ok) => { if (ok) { try { analytics = getAnalytics(app); } catch {} } })
-      .catch(() => {});
-  } catch {}
+  try { analyticsSupported().then(ok => { if (ok) { try { analytics = getAnalytics(app); } catch {} } }).catch(() => {}); } catch {}
 }
 
 /* =========================
    Firestore (persistent cache + multi-tab)
    ========================= */
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
 
 /* =========================
@@ -183,7 +167,7 @@ const FUNCTIONS_REGION = process.env.REACT_APP_FB_FUNCTIONS_REGION || "europe-we
 export const functions = getFunctions(app, FUNCTIONS_REGION);
 
 /* =========================
-   Online/Offline toggles + DEV helpers
+   Online/Offline + DEV helpers
    ========================= */
 if (isBrowser) {
   window.addEventListener("online",  () => enableNetwork(db));
@@ -196,7 +180,6 @@ if (isBrowser) {
       window.db = db;
       window.functions = functions;
       window.storage = storage;
-      window.appCheck = appCheck;
 
       window.fsGet = async (path) => {
         const snap = await getDoc(doc(db, path));
@@ -260,7 +243,7 @@ export async function impersonateUser(uid) {
   return cred.user;
 }
 
-// לוג מצב זיהוי – נוח ל-QA ב־DEV
+// QA לוג ב-DEV
 if (isBrowser && isDev) {
   onAuthStateChanged(auth, (u) => {
     console.info("[Auth] state:", u ? { uid: u.uid, email: u.email } : "(signed out)");
