@@ -37,16 +37,30 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
-      # אימות שכל משתני Firebase קיימים לפני ה-build (כדי לא "לאפות" undefined)
-      - name: Verify Firebase env are present
+      # אימות שכל משתני Firebase/AppCheck קיימים לפני ה-build
+      - name: Verify Firebase & AppCheck env are present
         run: |
           missing=0
-          for k in REACT_APP_FB_API_KEY REACT_APP_FB_AUTH_DOMAIN REACT_APP_FB_PROJECT_ID REACT_APP_FB_STORAGE_BUCKET REACT_APP_FB_MESSAGING_SENDER_ID REACT_APP_FB_APP_ID; do
+          for k in \
+            REACT_APP_FB_API_KEY \
+            REACT_APP_FB_AUTH_DOMAIN \
+            REACT_APP_FB_PROJECT_ID \
+            REACT_APP_FB_STORAGE_BUCKET \
+            REACT_APP_FB_MESSAGING_SENDER_ID \
+            REACT_APP_FB_APP_ID \
+            REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY
+          do
             if [ -z "${!k}" ]; then
               echo "::error::Missing $k"
               missing=1
             fi
           done
+
+          # Measurement ID אופציונלי – לא עוצר build אם חסר
+          if [ -z "${REACT_APP_FB_MEASUREMENT_ID}" ]; then
+            echo "::warning::REACT_APP_FB_MEASUREMENT_ID is not set (Analytics disabled)."
+          fi
+
           if [ "$missing" -eq 1 ]; then exit 1; fi
         env:
           REACT_APP_FB_API_KEY: ${{ secrets.REACT_APP_FB_API_KEY }}
@@ -55,8 +69,10 @@ jobs:
           REACT_APP_FB_STORAGE_BUCKET: ${{ secrets.REACT_APP_FB_STORAGE_BUCKET }}
           REACT_APP_FB_MESSAGING_SENDER_ID: ${{ secrets.REACT_APP_FB_MESSAGING_SENDER_ID }}
           REACT_APP_FB_APP_ID: ${{ secrets.REACT_APP_FB_APP_ID }}
+          REACT_APP_FB_MEASUREMENT_ID: ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
+          REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY }}
 
-      # Build עם הזרקת ה-ENV של Firebase
+      # Build עם הזרקת ה-ENV (כולל reCAPTCHA Enterprise site key)
       - name: Build
         run: npm run build
         env:
@@ -67,6 +83,7 @@ jobs:
           REACT_APP_FB_MESSAGING_SENDER_ID: ${{ secrets.REACT_APP_FB_MESSAGING_SENDER_ID }}
           REACT_APP_FB_APP_ID: ${{ secrets.REACT_APP_FB_APP_ID }}
           REACT_APP_FB_MEASUREMENT_ID: ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
+          REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY }}
 
       - name: Detect build dir
         id: detect
