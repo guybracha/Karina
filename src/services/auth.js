@@ -3,7 +3,7 @@ import { auth } from "../firebase";
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,   // נשאר בשביל פרודקשן
+  signInWithRedirect,
   getRedirectResult,
   setPersistence,
   browserLocalPersistence,
@@ -16,52 +16,73 @@ import {
 
 export const watchAuth = (cb) => onAuthStateChanged(auth, cb);
 
-// פPersistence נוח בפיתוח
+// שמירת סשן מקומי (אם ייכשל – מתעלמים בשקט)
 setPersistence(auth, browserLocalPersistence).catch(() => {});
+
+// דגל פנימי שיסמן שאנחנו יוצאים ל-redirect (כדי שה-UI ידע לאסוף תוצאה לפני ניווט וכד')
+const REDIRECT_FLAG = "karina:auth:redirecting";
+export const markRedirecting = () => {
+  try { sessionStorage.setItem(REDIRECT_FLAG, "1"); } catch {}
+};
+export const clearRedirecting = () => {
+  try { sessionStorage.removeItem(REDIRECT_FLAG); } catch {}
+};
+export const isRedirecting = () => {
+  try { return sessionStorage.getItem(REDIRECT_FLAG) === "1"; } catch { return false; }
+};
 
 export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
+  // הצעה למשתמש לבחור חשבון בכל פעם
+  provider.setCustomParameters({ prompt: "select_account" });
+
+  // 1) תמיד ננסה POPUP קודם (גם בפרודקשן וגם בפיתוח)
   try {
-    // 👇 בפיתוח – Popup בלבד
-    if (process.env.NODE_ENV !== "production") {
-      return await signInWithPopup(auth, provider);
+    return await signInWithPopup(auth, provider);
+  } catch (e) {
+    const code = e?.code || "";
+
+    // 2) מקרים בהם סביר לעבור ל-REDIRECT (חסימת פופאפים/סביבה לא תומכת)
+    const shouldFallbackToRedirect =
+      code === "auth/popup-blocked" ||
+      code === "auth/operation-not-supported-in-this-environment" ||
+      code === "auth/popup-closed-by-user"; // בחלק מהמכשירים זה נזרק מיד אחרי חסימה
+
+    if (shouldFallbackToRedirect) {
+      // נסמן שאנחנו יוצאים ל-redirect כדי שהמסך יאסוף תוצאה קודם כל
+      markRedirecting();
+      await signInWithRedirect(auth, provider);
+      // לא חוזרים לכאן מיד; אחרי החזרה יש לאסוף עם getRedirectResult
+      return null;
     }
 
-    // 👇 בפרודקשן – ננסה Popup, ואם נחסם ניפול ל-Redirect
-    try {
-      return await signInWithPopup(auth, provider);
-    } catch (e) {
-      if (e?.code === "auth/popup-blocked" ||
-          e?.code === "auth/operation-not-supported-in-this-environment") {
-        await signInWithRedirect(auth, provider);
-        return null; // נחזור לכאן אחרי redirect דרך getRedirectResult בעמוד
-      }
-      throw e;
-    }
-  } catch (e) {
-    // הודעה ברורה יותר בפיתוח
-    if (process.env.NODE_ENV !== "production" &&
-        (e?.code === "auth/popup-blocked" || e?.code === "auth/cancelled-popup-request")) {
-      throw new Error("הדפדפן חסם חלון קופץ. בטל/י חסימה לחלון אחד או אפשר/י פופאפים לאתר מקומי.");
-    }
+    // 3) שגיאות אחרות – נזרוק הלאה לטיפול ה-UI (friendlyError)
     throw e;
   }
 }
 
-// נשארים כרגיל
+// רישום רגיל לאימייל/סיסמה
 export const registerWithEmail = async (email, password) => {
   const { user } = await createUserWithEmailAndPassword(auth, email, password);
   await sendEmailVerification(user);
   return user;
 };
+
 export const loginWithEmail = (email, password) =>
   signInWithEmailAndPassword(auth, email, password);
+
 export const logout = () => signOut(auth);
 
-// אם תרצה/י להשתמש ב-redirect בפרודקשן – קרא/י לזה אחרי טעינה:
+// אוספים תוצאה של redirect (תקרא/י בזה בעמוד לאחר טעינה)
+// חשוב: נקו את דגל ה-redirect אחרי הקריאה
 export async function collectRedirectResultIfAny() {
   try {
     const res = await getRedirectResult(auth);
+    // בכל מקרה ננקה את הדגל (גם אם אין תוצאה)
+    clearRedirecting();
     return res || null;
-  } catch { return null; }
+  } catch {
+    clearRedirecting();
+    return null;
+  }
 }

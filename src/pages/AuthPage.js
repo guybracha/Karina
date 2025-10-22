@@ -4,14 +4,15 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
   registerWithEmail,
-  signInWithGoogle, // popup עם fallback ל-redirect בתוך ה-service
+  signInWithGoogle,                 // Popup עם fallback ל-redirect (ב-service)
+  collectRedirectResultIfAny,       // ⬅️ חדש: איסוף תוצאת redirect
+  isRedirecting,                    // ⬅️ חדש: בודק דגל redirect ב-sessionStorage
 } from "../services/auth";
 import { ensureUserDoc } from "../services/users";
 import { auth } from "../firebase";
 
 import {
   getAdditionalUserInfo,
-  getRedirectResult,
   onAuthStateChanged,
   signOut,
 } from "firebase/auth";
@@ -61,18 +62,6 @@ export default function AuthPage() {
   const location = useLocation();
   const from = location.state?.from?.pathname || "/account";
 
-  // אם כבר מחוברים – ננווט פנימה
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) {
-        // אם כבר מחובר, לא צריך לחכות לפעולה ידנית
-        navigate(from, { replace: true });
-      }
-    });
-    return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   async function afterAuth(user, extra = null) {
     const u = user || auth.currentUser;
     if (!u) return;
@@ -91,16 +80,20 @@ export default function AuthPage() {
     }
   }
 
-  // --- טיפול בתוצאת Redirect (אם popup לא זמין/נחסם) ---
+  // --- טיפול בתוצאת Redirect (אם popup לא זמין/נחסם) — קודם לכל ---
   useEffect(() => {
     let mounted = true;
+
     (async () => {
+      const wasRedirecting = isRedirecting();
+      if (wasRedirecting) setInfo("מסיים התחברות…");
+
       try {
-        const res = await getRedirectResult(auth);
+        const res = await collectRedirectResultIfAny(); // כבר מנקה את הדגל ב-service
         if (!mounted || !res?.user) return;
 
-        const info = getAdditionalUserInfo(res);
-        const isNew = !!info?.isNewUser;
+        const infoRes = getAdditionalUserInfo(res);
+        const isNew = !!infoRes?.isNewUser;
 
         const wantConsent = localStorage.getItem(LS_GOOGLE_CONSENT_KEY) === "1";
         localStorage.removeItem(LS_GOOGLE_CONSENT_KEY);
@@ -122,11 +115,25 @@ export default function AuthPage() {
 
         await afterAuth(res.user, extra);
       } catch (e) {
-        if (e?.code) setError(friendlyError(e));
+        setError(friendlyError(e));
+      } finally {
+        if (wasRedirecting) setInfo(null);
       }
     })();
+
     return () => { mounted = false; };
   }, []); // ריצה פעם אחת
+
+  // --- אם כבר מחוברים – ננווט פנימה (אבל לא בזמן redirect) ---
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u && !isRedirecting()) {
+        navigate(from, { replace: true });
+      }
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- Email/Password ---
   async function handleLogin(e) {
@@ -190,16 +197,15 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      const res = await signInWithGoogle(); // אם זה redirect, res יהיה undefined
+      const res = await signInWithGoogle(); // אם fallback ל-redirect, res יהיה null
       if (!res?.user) {
-        // redirect – ה-useEffect של getRedirectResult יטפל בהמשך
         setInfo("מועברים להשלמת התחברות…");
-        return;
+        return; // ה-useEffect של redirect יאסוף כשנחזור
       }
 
       // popup הצליח כאן ועכשיו
-      const info = getAdditionalUserInfo(res);
-      const isNew = !!info?.isNewUser;
+      const infoRes = getAdditionalUserInfo(res);
+      const isNew = !!infoRes?.isNewUser;
       if (isNew && !marketingOptIn) {
         try { await signOut(auth); } catch {}
         setTab("register");
