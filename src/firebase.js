@@ -97,9 +97,13 @@ export const auth = (() => {
    ========================= */
 export let appCheck = null;
 
-// נדרש: REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY מה-Console של GCP (עם הדומיינים karina.co.il/www/localhost)
-const ENTERPRISE_SITE_KEY = process.env.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY || "";
+// קריאה גם מ-window.__ENV__ אם יש (כמו בשאר הקונפיג)
+const RUNTIME = (typeof window !== "undefined" && window.__ENV__) || {};
+const ENTERPRISE_SITE_KEY =
+  (process.env.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY || RUNTIME.RECAPTCHA_ENTERPRISE_SITE_KEY || "").trim();
+
 const ENABLE_APPCHECK = String(process.env.REACT_APP_ENABLE_APPCHECK || "true").toLowerCase() === "true";
+const ENV_DEBUG_TOKEN = (process.env.REACT_APP_APPCHECK_DEBUG_TOKEN || RUNTIME.APPCHECK_DEBUG_TOKEN || "").trim();
 
 async function getAppCheckAttestation(forceRefresh = false) {
   try {
@@ -111,35 +115,43 @@ async function getAppCheckAttestation(forceRefresh = false) {
 
 if (isBrowser && ENABLE_APPCHECK) {
   try {
-    if (!ENTERPRISE_SITE_KEY) {
-      console.error("[AppCheck] Missing REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY");
-    }
-    // Debug token (אם הוגדר)
-    const envDebug = process.env.REACT_APP_APPCHECK_DEBUG_TOKEN;
-    if (envDebug && !("FIREBASE_APPCHECK_DEBUG_TOKEN" in g)) {
-      g.FIREBASE_APPCHECK_DEBUG_TOKEN = envDebug;
-      if (isDev) console.info("[AppCheck] Debug token set from env.");
+    // אם יש debug-token – נרשום אותו (רק בדפדפן)
+    if (ENV_DEBUG_TOKEN) {
+      g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN;
+      if (isDev) console.info("[AppCheck] Debug token enabled from env.");
     }
 
-    appCheck = initializeAppCheck(app, {
-      provider: new ReCaptchaEnterpriseProvider(ENTERPRISE_SITE_KEY),
-      isTokenAutoRefreshEnabled: true,
-    });
+    const canInitWithKey = !!ENTERPRISE_SITE_KEY;
+    const canInitWithDebug = !!ENV_DEBUG_TOKEN;
 
-    // חשיפה לקונסול בכל מצב
-    try { window.appCheck = appCheck; } catch {}
+    if (!canInitWithKey && !canInitWithDebug) {
+      console.warn("[AppCheck] No SITE KEY and no DEBUG TOKEN. Skipping App Check init.");
+    } else if (!canInitWithKey && canInitWithDebug) {
+      console.warn("[AppCheck] No SITE KEY. Using debug token only (dev).");
+      // לא מאתחלים בלי provider – פשוט מדלגים בפיתוח כדי למנוע שגיאות sitekey
+    } else {
+      // יש site key → מאתחלים כרגיל
+      appCheck = initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(ENTERPRISE_SITE_KEY),
+        isTokenAutoRefreshEnabled: true,
+      });
 
-    onAppCheckTokenChanged(appCheck, (tok) => {
-      console.log("AppCheck:", tok ? "OK" : "MISSING");
-    });
-    // טריגר מיידי לטוקן (יוציא לוג אם יש בעיה בדומיין/מפתח)
-    getAppCheckToken(appCheck, true).catch(e =>
-      console.warn("[AppCheck] getToken failed:", e?.message || e)
-    );
+      try { window.appCheck = appCheck; } catch {}
+
+      onAppCheckTokenChanged(appCheck, (tok) => {
+        console.log("AppCheck:", tok ? "OK" : "MISSING");
+      });
+
+      // טריגר ראשוני, ידפיס בעיות דומיין/מפתח אם יש
+      getAppCheckToken(appCheck, true).catch(e =>
+        console.warn("[AppCheck] getToken failed:", e?.message || e)
+      );
+    }
   } catch (e) {
     console.error("[AppCheck] init failed:", e?.message || e);
   }
 }
+
 
 /* =========================
    Analytics (optional)
