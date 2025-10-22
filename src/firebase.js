@@ -8,6 +8,11 @@ import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
   connectAuthEmulator,
+  // NEW:
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithCustomToken,
+  signOut,
 } from "firebase/auth";
 import {
   initializeFirestore,
@@ -20,7 +25,7 @@ import {
   doc, getDoc, setDoc,
 } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
-import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
+import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider,
@@ -37,11 +42,8 @@ const isBrowser = typeof window !== "undefined";
 const isDev = process.env.NODE_ENV !== "production";
 
 /** החזר קונפיג מ־ENV, עם תיקונים/ברירות מחדל ידידותיות בזמן DEV */
-// החלף את הפונקציה הקיימת בזה (CRA-safe, בלי import.meta)
 function resolveFirebaseConfig() {
   const isDev = process.env.NODE_ENV !== "production";
-
-  // מאפשר גם הזרקה בזמן ריצה דרך public/env.js אם תרצה
   const RUNTIME = (typeof window !== "undefined" && window.__ENV__) || {};
 
   const cfg = {
@@ -59,7 +61,7 @@ function resolveFirebaseConfig() {
       ...cfg,
       apiKey: cfg.apiKey ? "<set>" : "<missing>",
       appId:  cfg.appId  ? "<set>" : "<missing>",
-    }); 
+    });
     if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא קובץ .env.local תקין.");
     if (cfg.storageBucket && !/\.(appspot|firebasestorage)\.app$/i.test(cfg.storageBucket)) {
       console.warn("⚠️ storageBucket לא נראה תקין. צפה ל: <project>.appspot.com או <project>.firebasestorage.app");
@@ -74,7 +76,6 @@ function resolveFirebaseConfig() {
   return cfg;
 }
 
-
 const firebaseConfig = resolveFirebaseConfig();
 
 /* =========================
@@ -83,14 +84,25 @@ const firebaseConfig = resolveFirebaseConfig();
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 /* =========================
-   App Check (optional)
+   App Check (hardened)
    ========================= */
 export let appCheck = null;
-
 const enableAppCheck = String(process.env.REACT_APP_ENABLE_APPCHECK || "false").toLowerCase() === "true";
+
+// פונקציה מאוחדת להבאת טוקן AppCheck (לשליחה ל־Callable אם צריך)
+async function getAppCheckAttestation(forceRefresh = false) {
+  try {
+    if (!appCheck) return null; // אם לא הופעל
+    const tok = await getAppCheckToken(appCheck, forceRefresh);
+    return tok?.token || null;
+  } catch {
+    return null;
+  }
+}
 
 if (isBrowser && enableAppCheck) {
   try {
+    // Debug token ב־DEV (קבע ב־.env: REACT_APP_APPCHECK_DEBUG_TOKEN=xxxxx)
     const envDebug = process.env.REACT_APP_APPCHECK_DEBUG_TOKEN;
     if (envDebug && !(g && ("FIREBASE_APPCHECK_DEBUG_TOKEN" in g))) {
       g.FIREBASE_APPCHECK_DEBUG_TOKEN = envDebug;
@@ -177,6 +189,9 @@ if (isDev) {
 const FUNCTIONS_REGION = process.env.REACT_APP_FB_FUNCTIONS_REGION || "europe-west1";
 export const functions = getFunctions(app, FUNCTIONS_REGION);
 
+// שם פונקציית ההתחזות (אפשר להגדיר ב־ENV)
+const IMPERSONATE_FN_NAME = process.env.REACT_APP_FN_IMPERSONATE || "adminImpersonate";
+
 /* =========================
    Online/Offline toggles + DEV helpers
    ========================= */
@@ -194,6 +209,7 @@ if (isBrowser) {
       window.functions = functions;
       window.storage = storage;
       window.appCheck = appCheck;
+
       window.fsGet = async (path) => {
         const snap = await getDoc(doc(db, path));
         console.log("[fsGet]", path, "exists:", snap.exists(), "data:", snap.data());
@@ -203,19 +219,31 @@ if (isBrowser) {
         await setDoc(doc(db, path), data, { merge });
         console.log("[fsSet] wrote", path, data, "(merge:", merge, ")");
       };
-      window.fsUserGet = async () => {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return console.warn("fsUserGet: no current user");
-        return window.fsGet(`users/${uid}`);
+
+      // ======== DEBUG AUTH HELPERS ========
+      window.signInEmail = async (email, password) => {
+        const res = await signInWithEmailAndPassword(auth, email, password);
+        console.log("[Auth] signInEmail:", res.user?.uid);
+        return res.user;
       };
-      window.fsUserApprove = async (extra = {}) => {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return console.warn("fsUserApprove: no current user");
-        await window.fsSet(`users/${uid}`, { approved: true, ...extra }, true);
-        await auth.currentUser?.getIdToken(true);
-        return window.fsUserGet();
+      window.signOut = async () => {
+        await signOut(auth);
+        console.log("[Auth] signed out");
       };
-      console.info("[Firebase debug] window.auth/db/functions/storage + fs* helpers attached");
+      // התחזות ל־UID אחר דרך פונקציית ענן שמחזירה customToken
+      window.signInAs = async (uid) => {
+        if (!uid) throw new Error("signInAs: missing uid");
+        // רמז ל־AppCheck: בקשת limitedUseAppCheckTokens דורשת SDK חדש; כאן נשלח טוקן ידנית בפרמטר
+        const appCheckToken = await getAppCheckAttestation(false);
+        const call = httpsCallable(functions, IMPERSONATE_FN_NAME);
+        const { data } = await call({ uid, appCheckToken });
+        if (!data?.customToken) throw new Error("Impersonate failed: no customToken from server");
+        const credUser = await signInWithCustomToken(auth, data.customToken);
+        console.log("[Auth] IMPERSONATED as:", credUser.user?.uid);
+        return credUser.user;
+      };
+
+      console.info("[Firebase debug] window.auth/db/functions/storage + fs*/auth helpers attached");
     } catch (e) {
       console.warn("Debug window attach failed (ignored):", e?.message || e);
     }
@@ -251,9 +279,7 @@ export async function ensureAuthTokenFresh() {
 
 // לחשיפה נוחה בקונסול
 if (isBrowser && isDev) {
-  try {
-    window.ensureAuthTokenFresh = ensureAuthTokenFresh;
-  } catch {}
+  try { window.ensureAuthTokenFresh = ensureAuthTokenFresh; } catch {}
 }
 
 // חשיפה של firebase/auth
@@ -262,4 +288,25 @@ if (isBrowser && isDev) {
     window.firebaseAuth = mod;
     console.info("[Firebase debug] window.firebaseAuth attached");
   });
+}
+
+// לוג מצב זיהוי – נוח ל-QA:
+if (isBrowser && isDev) {
+  onAuthStateChanged(auth, (u) => {
+    console.info("[Auth] state:", u ? { uid: u.uid, email: u.email } : "(signed out)");
+  });
+}
+
+/* =========================
+   === PUBLIC HELPERS ===
+   ========================= */
+
+// התחזות כ-UID (לשימוש בקוד אפליקציה—not only DEV)
+export async function impersonateUser(uid) {
+  const appCheckToken = await getAppCheckAttestation(false);
+  const call = httpsCallable(functions, IMPERSONATE_FN_NAME);
+  const { data } = await call({ uid, appCheckToken });
+  if (!data?.customToken) throw new Error("Impersonate failed: no customToken");
+  const cred = await signInWithCustomToken(auth, data.customToken);
+  return cred.user;
 }
