@@ -1,11 +1,10 @@
 // src/pages/ProductDetail.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { LogosQueueProvider } from "../contexts/LogosQueueContext.tsx";
 import LogoUploadModal from "../components/LogoUploadModal";
 import ColorSwatches from "../components/ColorSwatches";
-// ❌ הוסר SizePicker כי אין יותר בחירה בודדת
 // import SizePicker from "../components/SizePicker";
 import { PRODUCTS } from "../lib/products";
 import { getDiscountPct } from "../lib/pricing";
@@ -23,6 +22,9 @@ const LS_ITEM_LOGOS = "karina:itemLogos";
 const LS_PLACEMENT_KEY = (slug, side) => `karina:logoPlacement:${slug}:${side}`;
 function readItemLogosMap() { try { return JSON.parse(localStorage.getItem(LS_ITEM_LOGOS) || "{}") || {}; } catch { return {}; } }
 function writeItemLogosMap(map) { try { localStorage.setItem(LS_ITEM_LOGOS, JSON.stringify(map)); window.dispatchEvent(new Event("karina:itemLogosUpdated")); } catch {} }
+
+// ✅ Prefill כשחוזרים מהעגלה
+const LS_PREFILL = (slug) => `karina:productPrefill:${slug}`;
 
 /* === Logo Placement Modal === */
 function LogoPlacementModal({
@@ -209,6 +211,7 @@ export default function ProductDetail() {
   const [showPlacement, setShowPlacement] = useState(false);
 
   const { slug } = useParams();
+  const location = useLocation();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
   const canUploadLogo = product?.logoAllowed !== false;
 
@@ -216,12 +219,10 @@ export default function ProductDetail() {
   const [user, setUser] = useState(null);
   const [isSeller, setIsSeller] = useState(false);
   const [checkingRole, setCheckingRole] = useState(true);
-  const [ensureDraftErr, setEnsureDraftErr] = useState("");
 
   async function ensureUserAndDraft(u) {
     if (!u) return;
     try {
-      setEnsureDraftErr("");
       await setDoc(doc(db, "users", u.uid), {
         uid: u.uid,
         email: u.email || null,
@@ -235,7 +236,6 @@ export default function ProductDetail() {
       }, { merge: true });
     } catch (e) {
       console.error("[ensureUserAndDraft] failed:", e);
-      setEnsureDraftErr("לא ניתן להכין הזמנת טיוטה להעלאת לוגו. נסו לרענן או להתחבר מחדש.");
     }
   }
 
@@ -264,11 +264,6 @@ export default function ProductDetail() {
 
   // בחירות מוצר
   const [color, setColor] = useState(product?.colors?.[0] || "");
-  // ❌ אין בחירה ידנית — אין size/qty
-  // const [size, setSize]   = useState(product?.sizes?.[0] || "");
-  // const [qty, setQty]     = useState(1);
-
-  // צד
   const [side, setSide] = useState("front");
 
   // לוגו
@@ -302,6 +297,7 @@ export default function ProductDetail() {
     [product, currentKey]
   );
 
+  // ----- עגלה LS -----
   function readCartFromLS() { try { return JSON.parse(localStorage.getItem(LS_CART_KEY) || "[]") ?? []; } catch { return []; } }
   function saveCartToLS(next) { try { localStorage.setItem(LS_CART_KEY, JSON.stringify(next)); window.dispatchEvent(new Event("karina:cartUpdated")); } catch {} }
 
@@ -335,6 +331,20 @@ export default function ProductDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.slug, canUploadLogo]);
 
+  // ---- Prefill: המרה של variants למפת bulkByColor ----
+  function variantsToBulkMap(variants, sizes = []) {
+    const out = {};
+    if (!variants?.byColorSize) return out;
+    for (const [colorKey, sizeObj] of Object.entries(variants.byColorSize)) {
+      out[colorKey] = {};
+      sizes.forEach((s) => { out[colorKey][s] = 0; });
+      for (const [sizeKey, qty] of Object.entries(sizeObj || {})) {
+        out[colorKey][sizeKey] = Math.max(0, Number(qty) || 0);
+      }
+    }
+    return out;
+  }
+
   // Bulk בלבד
   const [bulkByColor, setBulkByColor] = useState({});
   useEffect(() => {
@@ -351,6 +361,42 @@ export default function ProductDetail() {
     });
   }, [color, product?.sizes]);
 
+  // ✅ שחזור בחירות מהעגלה (prefill)
+  useEffect(() => {
+    if (!product?.slug) return;
+
+    // קודם מ-location.state, אחרת מ-LS
+    let prefill = location.state?.prefill || null;
+    if (!prefill) {
+      try { prefill = JSON.parse(localStorage.getItem(LS_PREFILL(product.slug)) || "null"); } catch {}
+    }
+    if (!prefill) return;
+
+    if (prefill.variants) {
+      const bulkMap = variantsToBulkMap(prefill.variants, product?.sizes || []);
+      if (Object.keys(bulkMap).length > 0) {
+        setBulkByColor(bulkMap);
+
+        const selectedColor =
+          prefill.lastSelected?.color && bulkMap[prefill.lastSelected.color]
+            ? prefill.lastSelected.color
+            : (() => {
+                for (const c of Object.keys(bulkMap)) {
+                  const sum = Object.values(bulkMap[c] || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+                  if (sum > 0) return c;
+                }
+                return product?.colors?.[0] || "";
+              })();
+
+        if (selectedColor) setColor(selectedColor);
+      }
+    }
+
+    // מנקה את ה-prefill אחרי שימוש
+    try { localStorage.removeItem(LS_PREFILL(product.slug)); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.slug]);
+
   function onLogoUploaded(_dataUrl, uploaded) {
     if (!canUploadLogo) { alert("לא ניתן להעלות לוגו לפריט זה."); setShowUpload(false); return; }
     const storage = uploaded?.storage || null;
@@ -361,7 +407,8 @@ export default function ProductDetail() {
     });
     setShowUpload(false);
   }
-  function resetSaved() {
+
+  function resetSavedLogosAndPlacement() {
     try {
       localStorage.removeItem(LS_LOGO_STORAGE_KEY(product?.slug, "front"));
       localStorage.removeItem(LS_LOGO_STORAGE_KEY(product?.slug, "back"));
@@ -370,6 +417,7 @@ export default function ProductDetail() {
     } catch {}
     setLogoStorageBySide({ front: null, back: null });
   }
+
   function ensureAuthed(){
     if(!user){
       alert("עליך להתחבר כדי להוסיף פריטים לעגלה");
@@ -385,9 +433,47 @@ export default function ProductDetail() {
     const byColor = next.byColorSize[colorKey] ? { ...next.byColorSize[colorKey] } : {};
     byColor[sizeKey] = (Number(byColor[sizeKey]) || 0) + safeQty;
     next.byColorSize = { ...next.byColorSize, [colorKey]: byColor };
-    next.colorTotals[colorKey] = (Number(next.colorTotals[colorKey]) || 0) + safeQty;
-    next.sizeTotals[sizeKey]   = (Number(next.sizeTotals[sizeKey])   || 0) + safeQty;
+    // totals יתעדכנו מחדש כשנחשב שורה
     return next;
+  }
+
+  // 🔁 עזרי סנכרון לעגלה
+  function sumBreakdownQty(byColorSize) {
+    let sum = 0;
+    for (const colorKey of Object.keys(byColorSize || {})) {
+      for (const sizeKey of Object.keys(byColorSize[colorKey] || {})) {
+        sum += Math.max(0, Number(byColorSize[colorKey][sizeKey]) || 0);
+      }
+    }
+    return sum;
+  }
+
+  function recalcTotals(breakdown) {
+    const by = breakdown?.byColorSize || {};
+    const colorTotals = {};
+    const sizeTotals = {};
+    Object.entries(by).forEach(([c, sizeObj]) => {
+      colorTotals[c] = Object.values(sizeObj || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+      Object.entries(sizeObj || {}).forEach(([sz, q]) => {
+        sizeTotals[sz] = (sizeTotals[sz] || 0) + (Number(q) || 0);
+      });
+    });
+    return { byColorSize: by, colorTotals, sizeTotals };
+  }
+
+  function removeColorFromCartLine(line, colorKey) {
+    if (!line?.variants?.byColorSize) return line;
+    const by = { ...line.variants.byColorSize };
+    delete by[colorKey];
+    const variants = recalcTotals({ byColorSize: by });
+    const newQty = sumBreakdownQty(by);
+    return { ...line, variants, qty: newQty, updatedAt: Date.now() };
+  }
+
+  function removeWholeProductFromCart() {
+    const current = readCartFromLS();
+    const next = current.filter((it) => it.id !== product.slug);
+    saveCartToLS(next);
   }
 
   // חישובי באלק
@@ -400,10 +486,42 @@ export default function ProductDetail() {
     const num = Math.max(0, Number(value) || 0);
     setBulkByColor((prev) => ({ ...prev, [color]: { ...(prev[color] || {}), [sizeKey]: num } }));
   }
+
+  // ❗ איפוס צבע + סנכרון לעגלה
   function clearBulkForColor() {
     if (!product?.sizes) return;
+    // 1) אפס UI
     const cleared = {}; product.sizes.forEach((s) => (cleared[s] = 0));
     setBulkByColor((prev) => ({ ...prev, [color]: cleared }));
+
+    // 2) אפס בעגלה את הצבע הזה
+    const current = readCartFromLS();
+    const idx = current.findIndex((it) => it.id === product.slug);
+    if (idx >= 0) {
+      const updated = removeColorFromCartLine(current[idx], color);
+      let next = [...current];
+      if (updated.qty <= 0) {
+        next = next.filter((it) => it.id !== product.slug);
+      } else {
+        next[idx] = updated;
+      }
+      saveCartToLS(next);
+    }
+  }
+
+  // 🗑️ איפוס מלא למוצר הזה (כולל עגלה + לוגו/Placement)
+  function resetAllForThisProduct() {
+    // אפס UI לכל הצבעים
+    const map = {};
+    (product?.colors || []).forEach((c) => {
+      map[c] = {};
+      (product?.sizes || []).forEach((s) => (map[c][s] = 0));
+    });
+    setBulkByColor(map);
+    // מחיקת השורה מהעגלה
+    removeWholeProductFromCart();
+    // ניקוי לוגואים/placements
+    resetSavedLogosAndPlacement();
   }
 
   // הוספה לעגלה — רק מרוכז
@@ -449,13 +567,15 @@ export default function ProductDetail() {
 
     // עדכון כמות כוללת + בירוק־דאון לכל המידות שהוזנו
     let updated = { ...next[idx] };
-    updated.qty = Number(updated.qty || 0) + totalAdd;
-
     Object.entries(bulkForCurrentColor).forEach(([sizeKey, q]) => {
       const addQty = Math.max(0, Number(q) || 0);
       if (!addQty) return;
       updated.variants = addToBreakdown(updated.variants, color, sizeKey, addQty);
     });
+
+    // חישוב totals ו־qty מחדש כדי למנוע סטייה
+    updated.variants = recalcTotals(updated.variants);
+    updated.qty = sumBreakdownQty(updated.variants.byColorSize);
 
     updated.lastSelected = { color, size: null };
     updated.updatedAt = Date.now();
@@ -615,7 +735,7 @@ export default function ProductDetail() {
                         />
                       )}
                       {(logoStorageBySide[side]) && (
-                        <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSaved}>איפוס לוגואים</button>
+                        <button className="btn btn-sm btn-outline-danger ms-auto" onClick={resetSavedLogosAndPlacement}>איפוס לוגואים</button>
                       )}
                     </>
                   ) : (
@@ -627,11 +747,14 @@ export default function ProductDetail() {
               {/* פרטים ובחירות */}
               <div className="col-12 col-lg-6">
                 <h1 className="h3 mb-1">{product.name}</h1>
+                {location.state?.prefill && (
+                  <div className="small text-success mb-2">הבחירות הקודמות שוחזרו מהעגלה</div>
+                )}
 
                 {/* מחיר בסיס + תמחור מדרגות */}
                 <p className="lead mb-1">{round2(product.price)} ₪ ליחידה</p>
                 <div className="small mb-1">
-                  {effectiveQty > 0 ? (
+                  {bulkTotalForCurrentColor > 0 ? (
                     <div className="text-success">
                       הנחת כמות: <strong>{Math.round(curDiscPct * 100)}%</strong>
                       {" · "}מחיר יחידה לאחר הנחה: <strong>{unitAfter} ₪</strong>
@@ -642,15 +765,6 @@ export default function ProductDetail() {
                       מדרגות הנחה: כל 5 יחידות נוספות ⇒ 5% הנחה (עד 50%).
                     </div>
                   )}
-                  <div className="text-muted">
-                    {effectiveQty > 0 ? (
-                      moreToNext > 0
-                        ? <>עוד <strong>{moreToNext}</strong> יח׳ ל־{nextAt} יח׳, וההנחה תגדל ל־<strong>{nextPct}%</strong>.</>
-                        : <>את/ה כבר במדרגה המקסימלית לכמות הנוכחית.</>
-                    ) : (
-                      <>הכנס/י כמויות כדי לראות את ההנחה.</>
-                    )}
-                  </div>
                 </div>
 
                 <small className="text-muted d-block mb-3">לא כולל משלוח</small>
@@ -660,13 +774,19 @@ export default function ProductDetail() {
                   <ColorSwatches colors={product.colors} value={color} onChange={setColor} />
                 </div>
 
-                {/* 🚩 רק הזמנה מרוכזת לפי מידות */}
+                {/* 🚩 הזמנה מרוכזת לפי מידה */}
                 <div className="card mb-3">
                   <div className="card-body">
                     <div className="d-flex justify-content-between align-items-center mb-2">
                       <h6 className="mb-0">כמויות לפי מידה — צבע: <span className="fw-semibold">{color}</span></h6>
-                      <button className="btn btn-sm btn-outline-secondary" onClick={clearBulkForColor}>איפוס כמויות לצבע זה</button>
+                      <div className="d-flex gap-2">
+                        <button className="btn btn-sm btn-outline-secondary" onClick={clearBulkForColor}>איפוס כמויות לצבע זה</button>
+                        <button className="btn btn-sm btn-outline-danger" onClick={resetAllForThisProduct} title="יאפס גם את שורת המוצר בעגלה וינקה לוגואים/הצבות">
+                          איפוס מוצר זה (כולל בעגלה)
+                        </button>
+                      </div>
                     </div>
+
                     <div className="table-responsive">
                       <table className="table table-sm align-middle">
                         <thead><tr>{(product.sizes || []).map((s) => (<th key={s} className="text-center">{s}</th>))}</tr></thead>
@@ -716,7 +836,7 @@ export default function ProductDetail() {
                         <button
                           className="btn btn-primary"
                           onClick={addBulkToCart}
-                          disabled={bulkTotalForCurrentColor === 0 || addButtonsDisabled}
+                          disabled={bulkTotalForCurrentColor === 0 || !user}
                           title={
                             checkingRole ? "בודק הרשאות…" :
                             !user ? "עליך להתחבר" :
@@ -757,8 +877,6 @@ export default function ProductDetail() {
                     {logoStorageBySide[side] && <span className="small text-success">לוגו נשמר לצד הזה</span>}
                   </div>
                 ) : null}
-
-                {ensureDraftErr && <div className="alert alert-warning mt-3 py-2 small">{ensureDraftErr}</div>}
 
                 <hr className="my-4" />
                 <div>

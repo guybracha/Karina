@@ -19,10 +19,13 @@ import { getDiscountPct } from "../lib/pricing";
 /* =========================================================================
    LS keys & helpers
 ============================================================================ */
-const LS_CART_KEY = "karina:cart";
-const LS_SHIP_KEY = "karina:shipping";
-const LS_ADDR_KEY = "karina:shippingAddress";
+const LS_CART_KEY   = "karina:cart";
+const LS_SHIP_KEY   = "karina:shipping";
+const LS_ADDR_KEY   = "karina:shippingAddress";
 const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
+
+// ✅ Prefill למעבר ל־ProductDetail
+const LS_PREFILL = (slug) => `karina:productPrefill:${slug}`;
 
 // מפה של לוגו פר־מוצר: { [slug]: { front: Meta|null, back: Meta|null } }
 const LS_ITEM_LOGOS = "karina:itemLogos";
@@ -361,11 +364,16 @@ export default function Cart() {
   }, [items, itemLogosMap, storage]);
 
   /* ---------- UI helpers ---------- */
-  function updateQty(id, newQty) {
-    const qty = Math.max(1, Number(newQty) || 1);
-    const updated = items.map((it) => (it.id === id ? { ...it, qty } : it));
-    setItems(updated);
-    saveCartToLS(updated);
+  // כמות כבר “מקובעת” לפי ProductDetail – אין שינוי מהעגלה
+  function updateQtyBlocked() {
+    // בכוונה ריק – משאיר תאימות אם מישהו ינסה לקרוא
+  }
+
+  // ✅ שומר Prefill ומנווט לדף המוצר
+  function goToProductWithPrefill(it) {
+    const prefill = { variants: it.variants || null, lastSelected: it.lastSelected || null };
+    try { localStorage.setItem(LS_PREFILL(it.slug), JSON.stringify(prefill)); } catch {}
+    navigate(`/product/${it.slug}`, { state: { from: "cart", prefill } });
   }
 
   // אישור לפני הסרה + ניקוי מפת לוגואים
@@ -593,7 +601,7 @@ export default function Cart() {
                               <div className="cart-logo-empty" title="אין לוגו קדמי">🖼️</div>
                             )}
                             <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>לוגו קדמי</small>
-                            <button type="button" className="btn btn-sm btn-outline-secondary mt-1" onClick={() => navigate(`/product/${it.slug}`)}>החלף</button>
+                            <button type="button" className="btn btn-sm btn-outline-secondary mt-1" onClick={() => goToProductWithPrefill(it)}>החלף</button>
                           </div>
 
                           {/* אחורי */}
@@ -609,7 +617,7 @@ export default function Cart() {
                               <div className="cart-logo-empty" title="אין לוגו אחורי">🖼️</div>
                             )}
                             <small className="text-muted d-block mt-1" style={{ lineHeight: 1 }}>לוגו אחורי</small>
-                            <button type="button" className="btn btn-sm btn-outline-secondary mt-1" onClick={() => navigate(`/product/${it.slug}`)}>החלף</button>
+                            <button type="button" className="btn btn-sm btn-outline-secondary mt-1" onClick={() => goToProductWithPrefill(it)}>החלף</button>
                           </div>
                         </div>
                       </td>
@@ -638,20 +646,20 @@ export default function Cart() {
                             <span className="badge text-bg-light">סה״כ: {fmt(row.lineTotal)} ₪</span>
                           </div>
                           <div className="mt-2">
-                          <label className="form-label me-2 mb-0">כמות</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={it.qty}
-                            readOnly
-                            onKeyDown={(e) => e.preventDefault()}
-                            onWheel={(e) => e.currentTarget.blur()}
-                            className="form-control form-control-sm"
-                            style={{ width: 120, pointerEvents: "none", cursor: "not-allowed" }}
-                            title="הכמות נקבעת לפי חלוקת המידות/בחירת המוצר"
-                            aria-readonly="true"
-                          />
-                        </div>
+                            <label className="form-label me-2 mb-0">כמות</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={it.qty}
+                              readOnly
+                              onKeyDown={(e) => e.preventDefault()}
+                              onWheel={(e) => e.currentTarget.blur()}
+                              className="form-control form-control-sm"
+                              style={{ width: 120, pointerEvents: "none", cursor: "not-allowed" }}
+                              title="הכמות נקבעת לפי פירוט המידות שבחרת בדף המוצר"
+                              aria-readonly="true"
+                            />
+                          </div>
 
                           {row.dPct > 0 && (
                             <div className="mt-1 text-success small">הנחת כמות: {Math.round(row.dPct * 100)}% (חסכת {fmt(row.saved)} ₪)</div>
@@ -673,8 +681,8 @@ export default function Cart() {
                             <button
                               type="button"
                               className="btn btn-sm btn-outline-secondary mt-2"
-                              onClick={() => navigate(`/product/${it.slug}`)}
-                              title="עריכת פירוט המידות בדף המוצר"
+                              onClick={() => goToProductWithPrefill(it)}
+                              title="עריכת פירוט המידות בדף המוצר (ישוחזרו הבחירות הקודמות)"
                             >
                               ערוך מידות
                             </button>
@@ -682,21 +690,27 @@ export default function Cart() {
                         ) : (
                           <div className="text-muted small">
                             אין פירוט לפי מידה.{" "}
-                            <button type="button" className="btn btn-link p-0 align-baseline" onClick={() => navigate(`/product/${it.slug}`)}>
+                            <button type="button" className="btn btn-link p-0 align-baseline" onClick={() => goToProductWithPrefill(it)}>
                               הוסף בדף המוצר
                             </button>
                           </div>
                         )}
                       </td>
 
-                      {/* כמות כוללת */}
+                      {/* כמות כוללת – דסקטופ (מקובע) */}
                       <td className="d-none d-md-table-cell align-top">
                         <input
                           type="number"
                           min={1}
                           value={it.qty}
-                          onChange={(e) => updateQty(it.id, e.target.value)}
+                          readOnly
+                          onKeyDown={(e) => e.preventDefault()}
+                          onWheel={(e) => e.currentTarget.blur()}
+                          onChange={updateQtyBlocked}
                           className="form-control form-control-sm w-auto"
+                          style={{ pointerEvents: "none", cursor: "not-allowed" }}
+                          title="הכמות נקבעת לפי פירוט המידות שבחרת בדף המוצר"
+                          aria-readonly="true"
                         />
                         {row.dPct > 0 && (
                           <div className="small text-success mt-1">הנחה: {Math.round(row.dPct * 100)}%</div>

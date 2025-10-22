@@ -3,21 +3,20 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserProfile, updateUserProfile } from "../services/users";
-import { getMyOrders /*, listenMyOrders */ } from "../services/orders";
+import { getMyOrders } from "../services/orders";
 import { logout } from "../services/auth";
-import CreateDemoOrderButton from "../components/CreateDemoOrderButton";
 
-// פונקציות ענן (מייל בדיקה)
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { app } from "../firebase";
 
-// עדכון פרופיל/אימייל + אימות מחדש ב-Auth
 import {
   updateProfile,
   updateEmail,
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from "firebase/auth";
+
+import { serverTimestamp } from "firebase/firestore";
 
 function shekels(amountCentsOrFloat) {
   let n = Number(amountCentsOrFloat || 0);
@@ -65,7 +64,7 @@ export default function Account() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhoneNumber, setEditPhoneNumber] = useState("");
   const [editCompany, setEditCompany] = useState("");
-  const [reauthPassword, setReauthPassword] = useState(""); // לאימות שינוי אימייל אם נדרש
+  const [reauthPassword, setReauthPassword] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
@@ -204,7 +203,7 @@ export default function Account() {
         email: emailTrim,
         phoneNumber: phoneTrim,
         company: (editCompany || "").trim(),
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp(), // זמן שרת
       });
 
       setProfile((prev) => ({
@@ -215,10 +214,7 @@ export default function Account() {
         company: (editCompany || "").trim(),
       }));
 
-      // רענון אובייקט המשתמש בזיכרון (למקרה שהאימייל/שם שונו)
-      if (user && user.reload) {
-        await user.reload();
-      }
+      if (user?.reload) await user.reload();
 
       setSaveMsg("השינויים נשמרו בהצלחה.");
       setTimeout(() => setShowEdit(false), 600);
@@ -231,7 +227,7 @@ export default function Account() {
     }
   }
 
-  // שליחת מייל בדיקה דרך פונקציית הענן
+  // שליחת מייל בדיקה דרך פונקציית הענן (לא מוצג ככפתור כרגע, אפשר להוסיף בעתיד)
   async function handleSendTestEmail() {
     setMailErr(null);
     setMailMsg(null);
@@ -279,115 +275,6 @@ export default function Account() {
         </div>
       </div>
 
-      {/* מודאל עריכה */}
-      {showEdit && (
-        <div
-          className="modal fade show"
-          style={{ display: "block", background: "rgba(0,0,0,.5)" }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="editProfileTitle"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !saving) setShowEdit(false);
-          }}
-        >
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <form onSubmit={handleSaveProfile}>
-                <div className="modal-header">
-                  <h5 className="modal-title" id="editProfileTitle">עריכת פרטים</h5>
-                  <button type="button" className="btn-close" onClick={() => !saving && setShowEdit(false)} aria-label="Close" />
-                </div>
-                <div className="modal-body">
-                  {saveErr && <div className="alert alert-danger py-2">{saveErr}</div>}
-                  {saveMsg && <div className="alert alert-success py-2">{saveMsg}</div>}
-
-                  <div className="mb-3">
-                    <label className="form-label fw-semibold">שם מלא</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      placeholder="לדוגמה: יעל כהן"
-                      required
-                      disabled={saving}
-                    />
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label fw-semibold">אימייל</label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
-                      placeholder="name@example.com"
-                      required
-                      disabled={saving}
-                    />
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label fw-semibold">מספר טלפון</label>
-                    <input
-                      type="tel"
-                      className="form-control"
-                      value={editPhoneNumber}
-                      onChange={(e) => setEditPhoneNumber(e.target.value)}
-                      placeholder="לדוגמה: 050-1234567"
-                      disabled={saving}
-                    />
-                  </div>
-
-                  <div className="mb-0">
-                    <label className="form-label fw-semibold">שם חברה</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={editCompany}
-                      onChange={(e) => setEditCompany(e.target.value)}
-                      placeholder="לדוגמה: קארינה בע״מ"
-                      disabled={saving}
-                    />
-                  </div>
-
-                  <div className="form-text mt-3">
-                    שינוי אימייל עלול לדרוש אימות מחדש. אם תתבקש/י — הזן/י סיסמה כאן ושמור/י שוב.
-                  </div>
-                  <div className="mb-0">
-                    <label className="form-label fw-semibold">סיסמה (לאימות שינוי אימייל אם נדרש)</label>
-                    <input
-                      type="password"
-                      className="form-control"
-                      value={reauthPassword}
-                      onChange={(e) => setReauthPassword(e.target.value)}
-                      placeholder="הקלד/י סיסמה לחשבון"
-                      disabled={saving}
-                      autoComplete="current-password"
-                    />
-                  </div>
-                </div>
-
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary"
-                    onClick={() => !saving && setShowEdit(false)}
-                    disabled={saving}
-                  >
-                    ביטול
-                  </button>
-                  <button type="submit" className="btn btn-primary" disabled={saving}>
-                    {saving ? "שומר/ת..." : "שמירת שינויים"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* הזמנות אחרונות */}
       <h5 className="mb-3">הזמנות אחרונות</h5>
       {loadingOrders ? (
@@ -427,7 +314,6 @@ export default function Account() {
             </table>
           </div>
 
-          {/* טען עוד */}
           {nextCursor ? (
             <div className="d-flex">
               <button className="btn btn-outline-secondary ms-auto" onClick={loadMore} disabled={loadingMore}>

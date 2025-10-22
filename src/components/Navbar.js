@@ -13,16 +13,22 @@ const LS_PREVIEW_KEY = (slug, side) => `karina:preview:${slug}:${side}`;
 
 // ===== LocalStorage helpers (עם נירמול) =====
 function isValidItem(x) {
-  return x && typeof x === "object" &&
-    "id" in x && "name" in x &&
-    "qty" in x && !Number.isNaN(Number(x.qty)) &&
-    "price" in x && !Number.isNaN(Number(x.price));
+  return (
+    x &&
+    typeof x === "object" &&
+    "id" in x &&
+    "name" in x &&
+    "qty" in x &&
+    !Number.isNaN(Number(x.qty)) &&
+    "price" in x &&
+    !Number.isNaN(Number(x.price))
+  );
 }
 function normalizeCartArray(arr) {
   if (!Array.isArray(arr)) return [];
   return arr
     .filter(isValidItem)
-    .map(it => ({
+    .map((it) => ({
       ...it,
       qty: Math.max(1, Number(it.qty) || 1),
       price: Number(it.price) || 0,
@@ -56,6 +62,22 @@ function priceRow(it) {
   const lineTotal = round2(unitAfter * qty);
   const saved = round2(baseUnit * qty - lineTotal);
   return { baseUnit, qty, dPct, unitAfter, lineTotal, saved };
+}
+
+// ===== עזר להצגת תקציר מידות =====
+function summarizeSizes(it, maxParts = 4) {
+  const total = Number(it?.qty || 0);
+  const st = it?.variants?.sizeTotals || null;
+  if (!st) return `סה״כ ${total} יח׳`;
+  const parts = Object.entries(st)
+    .filter(([, q]) => Number(q) > 0)
+    .map(([s, q]) => `${s}:${q}`)
+    .slice(0, maxParts);
+  const more =
+    Object.entries(st).filter(([, q]) => Number(q) > 0).length - parts.length;
+  return `סה״כ ${total} יח׳${parts.length ? " · " + parts.join(" · ") : ""}${
+    more > 0 ? ` · ועוד ${more}` : ""
+  }`;
 }
 
 export default function Navbar() {
@@ -99,7 +121,7 @@ export default function Navbar() {
     // טעינה ראשונית יציבה
     setCart(readCartFromLS());
 
-    // האזנה לשינויים מחלון אחר
+    // האזנה לשינויים מחלון אחר / טאבים אחרים
     function onStorage(e) {
       if (e.key === LS_CART_KEY) setCart(readCartFromLS());
     }
@@ -175,7 +197,9 @@ export default function Navbar() {
         setActive(-1);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [debounced]);
 
   // סגירה בלחיצה מחוץ להצעות/עגלה
@@ -255,14 +279,13 @@ export default function Navbar() {
           aria-label="דף הבית"
           onClick={closeNav}
         >
-          {/* מוגדל בצורה רספונסיבית: היה 28px, כעת clamp ל-56–96px */}
           <img
             src={logo}
             alt="Karina"
             style={{
               height: "clamp(56px, 8vw, 96px)",
               width: "auto",
-              display: "block"
+              display: "block",
             }}
           />
         </NavLink>
@@ -454,7 +477,7 @@ export default function Navbar() {
                             <div className="flex-grow-1">
                               <div className="small fw-semibold text-truncate">{it.name}</div>
                               <div className="small text-muted text-truncate">
-                                {it.color} • {it.size}
+                                {summarizeSizes(it)}
                               </div>
                             </div>
                             <div className="d-flex align-items-center gap-2 text-nowrap">

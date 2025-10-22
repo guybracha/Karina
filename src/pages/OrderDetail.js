@@ -20,6 +20,64 @@ function toDateString(tsOrIso) {
   }
 }
 
+/** ===== עזר: חילוץ קישורי לוגו מ־item בצורות שונות ===== */
+function extractLogoLinksFromItem(it = {}) {
+  const links = [];
+
+  // 1) מערך פשוט של כתובות
+  if (Array.isArray(it.logoUrls)) {
+    it.logoUrls.filter(Boolean).forEach((url, i) => {
+      links.push({ label: `לוגו ${i + 1}`, url });
+    });
+  }
+
+  // 2) שדות מפורקים
+  const candidates = [
+    ["logoFrontUrl", "קדמי"],
+    ["logoBackUrl", "אחורי"],
+    ["logoSleeveUrl", "שרוול"],
+    ["logoHoodUrl", "כובע"],
+    ["logoUrl", "לוגו"], // יחיד
+  ];
+  candidates.forEach(([key, label]) => {
+    if (typeof it[key] === "string" && it[key]) {
+      links.push({ label: `לוגו ${label}`, url: it[key] });
+    }
+  });
+
+  // 3) אובייקט logos = { front: {url}, back: {url}, ... } או {front:"url"}
+  if (it.logos && typeof it.logos === "object") {
+    Object.entries(it.logos).forEach(([sideKey, val]) => {
+      const url = typeof val === "string" ? val : val?.url || val?.downloadUrl;
+      if (url) links.push({ label: `לוגו ${sideKey}`, url });
+    });
+  }
+
+  // 4) אובייקט logo = { front: {url}, back: {url}, sleeve:"...", url:"..." }
+  if (it.logo && typeof it.logo === "object") {
+    const v = it.logo;
+    if (typeof v.url === "string") links.push({ label: "לוגו", url: v.url });
+    ["front", "back", "sleeve", "hood", "left", "right"].forEach((k) => {
+      const side = v[k];
+      const url = typeof side === "string" ? side : side?.url || side?.downloadUrl;
+      if (url) links.push({ label: `לוגו ${k}`, url });
+    });
+  }
+
+  // 5) שמות חלופיים נפוצים
+  if (typeof it.logo_download_url === "string") {
+    links.push({ label: "לוגו", url: it.logo_download_url });
+  }
+
+  // הסרת כפילויות לפי URL
+  const seen = new Set();
+  return links.filter(({ url }) => {
+    if (!url || seen.has(url)) return false;
+    seen.add(url);
+    return true;
+  });
+}
+
 export default function OrderDetail() {
   const { orderId } = useParams();
 
@@ -72,7 +130,7 @@ export default function OrderDetail() {
 
       // אצלך השדה הוא uid (לא userId) – נעביר אותו.
       const res = await fn({
-        pathType: "top",      // כי אתה קורא מ- orders/{orderId}
+        pathType: "top", // כי אתה קורא מ- orders/{orderId}
         orderId,
         uid: order.uid || null,
       });
@@ -80,7 +138,7 @@ export default function OrderDetail() {
       if (!res?.data?.ok) {
         throw new Error(res?.data?.error || "failed");
       }
-      // אין צורך לפתוח את הקובץ כאן — onSnapshot יעדכן את summaryUrl מיד כשנכתב במסמך.
+      // onSnapshot יעדכן את summaryUrl כשנכתב במסמך.
     } catch (e) {
       console.error(e);
       setGenErr(e.message || "יצירת ה-PDF נכשלה");
@@ -135,8 +193,7 @@ export default function OrderDetail() {
 
   const createdAt = toDateString(order.createdAt);
   const status = order.status || "—";
-  const amountCents =
-    typeof order.amountCents === "number" ? order.amountCents : 0;
+  const amountCents = typeof order.amountCents === "number" ? order.amountCents : 0;
   const shippingPriceCents =
     typeof order.shippingPriceCents === "number" ? order.shippingPriceCents : 0;
   const currency = order.currency || "ILS";
@@ -169,8 +226,9 @@ export default function OrderDetail() {
               ) : (
                 <ul className="list-group list-group-flush">
                   {items.map((it, idx) => {
-                    const lineCents =
-                      Number(it?.priceCents || 0) * Number(it?.qty || 0);
+                    const lineCents = Number(it?.priceCents || 0) * Number(it?.qty || 0);
+                    const logoLinks = extractLogoLinksFromItem(it);
+
                     return (
                       <li
                         key={idx}
@@ -185,7 +243,27 @@ export default function OrderDetail() {
                             {it?.color ? ` · צבע: ${it.color}` : ""}
                             {it?.size ? ` · מידה: ${it.size}` : ""}
                           </div>
+
+                          {/* ===== קישורי לוגואים לפריט ===== */}
+                          {logoLinks.length > 0 && (
+                            <div className="small mt-1">
+                              <strong>לוגואים:</strong>{" "}
+                              {logoLinks.map((lk, i) => (
+                                <a
+                                  key={lk.url + i}
+                                  href={lk.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="link-primary me-2"
+                                  title={lk.url}
+                                >
+                                  {lk.label}
+                                </a>
+                              ))}
+                            </div>
+                          )}
                         </div>
+
                         <div className="text-nowrap">{shekels(lineCents)}</div>
                       </li>
                     );
@@ -233,9 +311,7 @@ export default function OrderDetail() {
                   {shippingAddress.line2 && <div>{shippingAddress.line2}</div>}
                   {(shippingAddress.city || shippingAddress.zip) && (
                     <div>
-                      {[shippingAddress.city, shippingAddress.zip]
-                        .filter(Boolean)
-                        .join(" ")}
+                      {[shippingAddress.city, shippingAddress.zip].filter(Boolean).join(" ")}
                     </div>
                   )}
                   {shippingAddress.note && (
@@ -253,9 +329,7 @@ export default function OrderDetail() {
                     <div>
                       <strong>מס׳ מעקב:</strong> {shipping.trackingNumber}
                     </div>
-                    {shipping.carrier && (
-                      <div>חברת שילוח: {shipping.carrier}</div>
-                    )}
+                    {shipping.carrier && <div>חברת שילוח: {shipping.carrier}</div>}
                     {shipping.url && (
                       <div>
                         <a href={shipping.url} target="_blank" rel="noreferrer">
@@ -277,11 +351,7 @@ export default function OrderDetail() {
                 onClick={handleGeneratePdf}
                 disabled={generating}
               >
-                {generating
-                  ? "יוצר PDF…"
-                  : order.summaryUrl
-                  ? "רענון PDF"
-                  : "צור PDF"}
+                {generating ? "יוצר PDF…" : order.summaryUrl ? "רענון PDF" : "צור PDF"}
               </button>
 
               {order.summaryUrl && (
