@@ -28,49 +28,66 @@ const AuthCtx = createContext({
 
 export const useAuth = () => useContext(AuthCtx);
 
+/* ===== Helpers ===== */
+
+/** סנן רק מפתחות שמותרים לכללים (update: displayName/email/phoneNumber/company/photoURL/updatedAt; create מוסיף createdAt) */
+function pickAllowedUserFields(base = {}) {
+  const out = {};
+  if (base.displayName != null) out.displayName = String(base.displayName);
+  if (base.email != null)       out.email = String(base.email);
+  if (base.phoneNumber != null) out.phoneNumber = String(base.phoneNumber);
+  if (base.company != null)     out.company = String(base.company);
+  if (base.photoURL != null)    out.photoURL = String(base.photoURL);
+  return out;
+}
+
 /**
  * יצירה/מיזוג מסמך משתמש אם לא קיים — בתאימות לכללי Firestore
  * חשוב: לא כותבים role / providerIds / uid מהקליינט.
  * CREATE: חובה createdAt + updatedAt (serverTimestamp)
  * UPDATE: חובה updatedAt אם שולחים עדכון
  */
-// בתוך src/contexts/AuthContext.js
-
 async function ensureUserDoc(uid, base) {
   const ref = doc(db, "users", uid);
   const snap = await getDoc(ref);
 
-  // רק מפתחות מותרים לפי ה-rules
-  const allowedBase = {
+  // בנה בסיס בטוח בלבד (כל מה שלא מאושר — לא יישלח)
+  const allowedBase = pickAllowedUserFields({
     displayName: base?.displayName || (base?.email ? base.email.split("@")[0] : "User"),
-    email: base?.email || null,
-    photoURL: base?.photoURL || null,
-  };
+    email: base?.email ?? null,
+    photoURL: base?.photoURL ?? null,
+    phoneNumber: base?.phoneNumber ?? null, // מה-Auth אם קיים
+    company: base?.company ?? null,         // בדרך כלל null בהתחלה
+  });
 
   if (!snap.exists()) {
+    // CREATE: לפי הכללים חייבים גם createdAt וגם updatedAt == request.time (serverTimestamp)
     await setDoc(
       ref,
       {
         ...allowedBase,
-        createdAt: serverTimestamp(),   // חובה לפי rules
-        updatedAt: serverTimestamp(),   // חובה לפי rules
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       },
-      { merge: true }
+      { merge: false } // יצירה נקייה; אפשר גם merge:true—אבל עדיף לשמור על צורת מסמך צפויה
     );
   } else {
-    const data = snap.data() || {};
+    // UPDATE: רק אם יש מה לעדכן + חובה updatedAt
+    const current = snap.data() || {};
     const patch = {};
-    if (!data.displayName && allowedBase.displayName) patch.displayName = allowedBase.displayName;
-    if (!data.email && allowedBase.email)           patch.email = allowedBase.email;
-    if (!data.photoURL && allowedBase.photoURL)     patch.photoURL = allowedBase.photoURL;
+
+    for (const k of ["displayName", "email", "photoURL", "phoneNumber", "company"]) {
+      if (allowedBase[k] != null && !Object.is(allowedBase[k], current[k])) {
+        patch[k] = allowedBase[k];
+      }
+    }
 
     if (Object.keys(patch).length) {
-      patch.updatedAt = serverTimestamp();          // חובה בעדכון
+      patch.updatedAt = serverTimestamp();
       await setDoc(ref, patch, { merge: true });
     }
   }
 }
-
 
 /**
  * ספק קונטקסט
@@ -116,7 +133,7 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        // לא מכריחים רענון טוקן (true) כדי לא לעכב רינדור
+        // לא מכריחים רענון טוקן כדי לא לעכב רינדור
         const tokenRes = await getIdTokenResult(u);
         if (mountedRef.current) setClaims(tokenRes?.claims || null);
       } catch (e) {
@@ -138,9 +155,11 @@ export function AuthProvider({ children }) {
           displayName: u.displayName,
           email: u.email,
           photoURL: u.photoURL,
+          phoneNumber: u.phoneNumber ?? null,
+          // company: אפשר להוסיף בהמשך בטופס; כאן נשאיר null
         });
       } catch (e) {
-        // לא חוסם את ה-UI — למשל במצבי App Check throttled
+        // לא חוסם את ה-UI — למשל במצבי App Check throttled / PERMISSION_DENIED
         console.warn("[Auth] ensureUserDoc failed (ignored):", e?.message || e);
       }
 

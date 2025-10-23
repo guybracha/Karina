@@ -18,6 +18,7 @@ import {
 } from "firebase/auth";
 
 const LS_GOOGLE_CONSENT_KEY = "karina:auth:googleConsent";
+const LS_RETURN_TO = "karina:auth:returnTo";
 
 /* ============ Helpers ============ */
 function friendlyError(e) {
@@ -57,16 +58,28 @@ export default function AuthPage() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || "/account";
+
+  // יעד ברירת מחדל (אם אין החזרה שמורה ב-sessionStorage)
+  const defaultFrom = location.state?.from?.pathname || "/account";
 
   async function afterAuth(user, extra = null) {
     const u = user || auth.currentUser;
     if (!u) return;
 
-    // ניווט מיידי – לא מחכים ל-Firestore
-    navigate(from, { replace: true });
+    // יעד מועדף: החזרה שמורה מה-redirect, אחרת היעד מה-state, אחרת /account
+    let target = defaultFrom;
+    try {
+      const saved = sessionStorage.getItem(LS_RETURN_TO);
+      if (saved) {
+        target = saved;
+        sessionStorage.removeItem(LS_RETURN_TO);
+      }
+    } catch {}
 
-    // יצירת/מיזוג מסמך המשתמש ברקע (עם תקרת זמן קצרה)
+    // ניווט מיידי – לא מחכים ל-Firestore
+    navigate(target, { replace: true });
+
+    // יצירת/מיזוג מסמך המשתמש (רקע, עם תקרת זמן קצרה)
     try {
       await Promise.race([
         ensureUserDoc(u, extra || undefined),
@@ -85,7 +98,7 @@ export default function AuthPage() {
       if (wasRedirecting) setInfo("מסיים התחברות…");
 
       try {
-        const res = await collectRedirectResultIfAny(); // מנקה דגל redirect ב-service
+        const res = await collectRedirectResultIfAny(); // גם מנקה דגל redirect ב-service
         if (!mounted || !res?.user) return;
 
         const infoRes = getAdditionalUserInfo(res);
@@ -121,12 +134,24 @@ export default function AuthPage() {
     })();
 
     return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- אם כבר מחוברים – ננווט פנימה (לא בזמן redirect) ---
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u && !isRedirecting()) navigate(from, { replace: true });
+      if (u && !isRedirecting()) {
+        // אם אין יעד שמור מה-redirect, נשתמש ב-defaultFrom
+        let target = defaultFrom;
+        try {
+          const saved = sessionStorage.getItem(LS_RETURN_TO);
+          if (saved) {
+            target = saved;
+            sessionStorage.removeItem(LS_RETURN_TO);
+          }
+        } catch {}
+        navigate(target, { replace: true });
+      }
     });
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,8 +213,14 @@ export default function AuthPage() {
       return;
     }
 
-    try { localStorage.setItem(LS_GOOGLE_CONSENT_KEY, (marketingOptIn ? "1" : "0")); }
-    catch {}
+    // נשמור את בחירת ההסכמה לדיוור לטיפול אחרי redirect
+    try { localStorage.setItem(LS_GOOGLE_CONSENT_KEY, (marketingOptIn ? "1" : "0")); } catch {}
+
+    // נשמור יעד חזרה בטוח (למקרה של redirect)
+    try {
+      const target = defaultFrom || "/account";
+      sessionStorage.setItem(LS_RETURN_TO, target);
+    } catch {}
 
     setLoading(true);
     try {

@@ -25,8 +25,8 @@ import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import {
   initializeAppCheck,
-  ReCaptchaEnterpriseProvider,   // Enterprise (מומלץ בפרוד)
-  ReCaptchaV3Provider,          // v3 fallback
+  ReCaptchaEnterpriseProvider,
+  ReCaptchaV3Provider,
   onTokenChanged as onAppCheckTokenChanged,
   getToken as getAppCheckToken,
 } from "firebase/app-check";
@@ -49,13 +49,13 @@ function fromEnv(key, runtimeKey) {
    ========================= */
 function resolveFirebaseConfig() {
   const cfg = {
-    apiKey:            fromEnv("REACT_APP_FB_API_KEY",            "FIREBASE_API_KEY"),
-    authDomain:        fromEnv("REACT_APP_FB_AUTH_DOMAIN",        "FIREBASE_AUTH_DOMAIN"),
-    projectId:         fromEnv("REACT_APP_FB_PROJECT_ID",         "FIREBASE_PROJECT_ID"),
-    storageBucket:     fromEnv("REACT_APP_FB_STORAGE_BUCKET",     "FIREBASE_STORAGE_BUCKET"),
-    messagingSenderId: fromEnv("REACT_APP_FB_MESSAGING_SENDER_ID","FIREBASE_MESSAGING_SENDER_ID"),
-    appId:             fromEnv("REACT_APP_FB_APP_ID",             "FIREBASE_APP_ID"),
-    measurementId:     fromEnv("REACT_APP_FB_MEASUREMENT_ID",     "FIREBASE_MEASUREMENT_ID") || undefined,
+    apiKey:            fromEnv("REACT_APP_FB_API_KEY",             "FIREBASE_API_KEY"),
+    authDomain:        fromEnv("REACT_APP_FB_AUTH_DOMAIN",         "FIREBASE_AUTH_DOMAIN"),
+    projectId:         fromEnv("REACT_APP_FB_PROJECT_ID",          "FIREBASE_PROJECT_ID"),
+    storageBucket:     fromEnv("REACT_APP_FB_STORAGE_BUCKET",      "FIREBASE_STORAGE_BUCKET"),
+    messagingSenderId: fromEnv("REACT_APP_FB_MESSAGING_SENDER_ID", "FIREBASE_MESSAGING_SENDER_ID"),
+    appId:             fromEnv("REACT_APP_FB_APP_ID",              "FIREBASE_APP_ID"),
+    measurementId:     fromEnv("REACT_APP_FB_MEASUREMENT_ID",      "FIREBASE_MEASUREMENT_ID") || undefined,
   };
 
   if (isDev) {
@@ -63,9 +63,9 @@ function resolveFirebaseConfig() {
       ...cfg,
       apiKey: cfg.apiKey ? "<set>" : "<missing>",
       appId:  cfg.appId  ? "<set>" : "<missing>",
-      measurementId: cfg.measurementId ? "<set>" : "<missing>"
+      measurementId: cfg.measurementId ? "<set>" : "<missing>",
     });
-    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא .env.local / הגדרות CI.");
+    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא .env.* / הגדרות CI.");
     if (cfg.storageBucket && !/\.(appspot\.com|firebasestorage\.app)$/i.test(cfg.storageBucket)) {
       console.warn("⚠️ storageBucket לא נראה תקין (צפה ל־ <project>.appspot.com או firebasestorage.app)");
     }
@@ -87,37 +87,27 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =========================
-   Auth
-   ========================= */
-export const auth = (() => {
-  try {
-    return initializeAuth(app, {
-      persistence: browserLocalPersistence,
-      popupRedirectResolver: browserPopupRedirectResolver,
-    });
-  } catch {
-    return getAuth(app);
-  }
-})();
-
-/* =========================
-   App Check
+   App Check  (חובה לפני Auth)
    ========================= */
 export let appCheck = null;
 
 // שליטה מאוחדת: הפעלת App Check + בחירת פרוביידר דרך ENV
-const ENABLE_APPCHECK = (fromEnv("REACT_APP_ENABLE_APPCHECK", "ENABLE_APPCHECK") || "true").toLowerCase() === "true";
-const ENTERPRISE_SITE_KEY = fromEnv("REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
-const V3_SITE_KEY         = fromEnv("REACT_APP_RECAPTCHA_V3_SITE_KEY",         "RECAPTCHA_V3_SITE_KEY");
-const ENV_DEBUG_TOKEN     = fromEnv("REACT_APP_APPCHECK_DEBUG_TOKEN",          "APPCHECK_DEBUG_TOKEN");
+const ENABLE_APPCHECK =
+  (fromEnv("REACT_APP_ENABLE_APPCHECK", "ENABLE_APPCHECK") || "true").toLowerCase() === "true";
 
-// בלוקאל בלבד: תן ל-SDK לייצר debug token חדש אם לא סיפקת אחד (ימודפס לקונסול בפעם הראשונה)
-if (isBrowser && (location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-  if (!ENV_DEBUG_TOKEN) {
-    // true => ה-SDK ינפיק טוקן חדש וידפיס "App Check debug token: <...>"
-    g.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-  } else {
-    g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN;
+// תמיכה בשמות חלופיים ל-site key:
+const ENTERPRISE_SITE_KEY =
+  fromEnv("REACT_APP_APPCHECK_E_SITE_KEY", "APPCHECK_E_SITE_KEY") ||
+  fromEnv("REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
+
+const V3_SITE_KEY = fromEnv("REACT_APP_RECAPTCHA_V3_SITE_KEY", "RECAPTCHA_V3_SITE_KEY");
+const ENV_DEBUG_TOKEN = fromEnv("REACT_APP_APPCHECK_DEBUG_TOKEN", "APPCHECK_DEBUG_TOKEN");
+
+// בלוקאל בלבד: תן ל-SDK לייצר debug token חדש אם לא סיפקת אחד
+if (isBrowser) {
+  const host = g?.location?.hostname || "";
+  if (host === "localhost" || host === "127.0.0.1") {
+    g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN || true;
   }
 }
 
@@ -132,7 +122,7 @@ async function getAppCheckAttestation(forceRefresh = false) {
 if (isBrowser && ENABLE_APPCHECK) {
   try {
     let provider = null;
-    // בחירה חד-משמעית: Enterprise קודם; אם אין — ניפול ל-v3
+    // Enterprise קודם; אם אין — fallback ל-v3
     if (ENTERPRISE_SITE_KEY) {
       provider = new ReCaptchaEnterpriseProvider(ENTERPRISE_SITE_KEY);
       if (isDev) console.log("[AppCheck] Provider: Enterprise");
@@ -149,7 +139,6 @@ if (isBrowser && ENABLE_APPCHECK) {
         isTokenAutoRefreshEnabled: true,
       });
 
-      // חשיפה לכלי דיבאג/בדיקה בלי import דינמי
       try {
         window.appCheck = appCheck;
         window.getAppCheckToken = () => getAppCheckToken(appCheck, true);
@@ -163,7 +152,7 @@ if (isBrowser && ENABLE_APPCHECK) {
         if (isDev) console.log("[AppCheck] token state:", tok ? "OK" : "MISSING");
       });
 
-      // טריגר ראשוני (לא חובה, עוזר ללכוד שגיאות מוקדם)
+      // טריגר ראשוני לאימות תקין
       getAppCheckToken(appCheck, true).catch(e =>
         console.warn("[AppCheck] getToken failed:", e?.message || e)
       );
@@ -172,6 +161,20 @@ if (isBrowser && ENABLE_APPCHECK) {
     console.error("[AppCheck] init failed:", e?.message || e);
   }
 }
+
+/* =========================
+   Auth (אחרי App Check)
+   ========================= */
+export const auth = (() => {
+  try {
+    return initializeAuth(app, {
+      persistence: browserLocalPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  } catch {
+    return getAuth(app);
+  }
+})();
 
 /* =========================
    Analytics (optional)

@@ -18,15 +18,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # ===== ENV גלובליים ל-job =====
     env:
-      # Build flags
+      # ===== Build flags =====
       NPM_CONFIG_LEGACY_PEER_DEPS: true
       PUBLIC_URL: https://karina.co.il/
       CI: false
       DISABLE_ESLINT_PLUGIN: true
 
-      # Firebase (נמשכים מ-Secrets)
+      # ===== Firebase (מ-Secrets) =====
       REACT_APP_FB_API_KEY:             ${{ secrets.REACT_APP_FB_API_KEY }}
       REACT_APP_FB_AUTH_DOMAIN:         ${{ secrets.REACT_APP_FB_AUTH_DOMAIN }}
       REACT_APP_FB_PROJECT_ID:          ${{ secrets.REACT_APP_FB_PROJECT_ID }}
@@ -35,13 +34,13 @@ jobs:
       REACT_APP_FB_APP_ID:              ${{ secrets.REACT_APP_FB_APP_ID }}
       REACT_APP_FB_MEASUREMENT_ID:      ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
 
-      # App Check
+      # ===== App Check =====
       REACT_APP_ENABLE_APPCHECK: "true"
+      # אתה יכול להשתמש באחד מהשניים (או בשניהם לאותו value ב-Secrets):
+      REACT_APP_APPCHECK_E_SITE_KEY:          ${{ secrets.REACT_APP_APPCHECK_E_SITE_KEY }}
       REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY }}
-      # אופציונלי: אם תרצה fallback ל-v3 (לא חובה)
-      REACT_APP_RECAPTCHA_V3_SITE_KEY:  ${{ secrets.REACT_APP_RECAPTCHA_V3_SITE_KEY }}
 
-      # אזור Functions (אם אתה משתמש)
+      # ===== Functions (אם רלוונטי) =====
       REACT_APP_FB_FUNCTIONS_REGION: europe-west1
 
     steps:
@@ -57,26 +56,42 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
-      # אימות שכל ENV חשובים קיימים לפני build
-      - name: Verify Firebase & AppCheck env are present
+      # נירמול שם משתנה ה-App Check (תמיכה בשני השמות)
+      - name: Normalize App Check env var
+        run: |
+          # אם REACT_APP_APPCHECK_E_SITE_KEY ריק אבל יש REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY,
+          # נמפה אותו כדי שהקוד ימצא את המשתנה האחיד.
+          if [ -z "${REACT_APP_APPCHECK_E_SITE_KEY}" ] && [ -n "${REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY}" ]; then
+            echo "REACT_APP_APPCHECK_E_SITE_KEY=${REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY}" >> $GITHUB_ENV
+            echo "Mapped REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY -> REACT_APP_APPCHECK_E_SITE_KEY"
+          fi
+
+      # ואלידציה של ENV לפני ה-build
+      - name: Verify Firebase & App Check env are present
         run: |
           missing=0
           required=( \
             REACT_APP_FB_API_KEY REACT_APP_FB_AUTH_DOMAIN REACT_APP_FB_PROJECT_ID \
             REACT_APP_FB_STORAGE_BUCKET REACT_APP_FB_MESSAGING_SENDER_ID REACT_APP_FB_APP_ID \
-            REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY \
           )
           for k in "${required[@]}"; do
             if [ -z "${!k}" ]; then
               echo "::error::Missing $k"
               missing=1
+            else
+              echo "✅ $k"
             fi
           done
 
-          # אופציונליים
-          [ -z "${REACT_APP_FB_MEASUREMENT_ID}" ] && echo "::warning::REACT_APP_FB_MEASUREMENT_ID not set (Analytics off)."
-          [ -z "${REACT_APP_RECAPTCHA_V3_SITE_KEY}" ] && echo "::notice::No v3 fallback site key (OK)."
+          # אחד משני משתני ה-site key של App Check חייב להיות קיים אחרי הנירמול
+          if [ -z "${REACT_APP_APPCHECK_E_SITE_KEY}" ]; then
+            echo "::error::Missing App Check site key (REACT_APP_APPCHECK_E_SITE_KEY or REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY)"
+            missing=1
+          else
+            echo "✅ App Check site key OK"
+          fi
 
+          [ -z "${REACT_APP_FB_MEASUREMENT_ID}" ] && echo "::warning::REACT_APP_FB_MEASUREMENT_ID not set (Analytics off)."
           if [ "$missing" -eq 1 ]; then exit 1; fi
           echo "ENV OK"
 
@@ -86,9 +101,14 @@ jobs:
       - name: Detect build dir
         id: detect
         run: |
-          if [ -d dist ]; then echo "dir=dist" >> "$GITHUB_OUTPUT";
-          elif [ -d build ]; then echo "dir=build" >> "$GITHUB_OUTPUT";
-          else echo "No dist/build dir"; exit 1; fi
+          if [ -d dist ]; then
+            echo "dir=dist" >> "$GITHUB_OUTPUT"
+          elif [ -d build ]; then
+            echo "dir=build" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::No dist/build directory produced by build"
+            exit 1
+          fi
 
       - name: Add CNAME for custom domain
         run: echo "karina.co.il" > "${{ steps.detect.outputs.dir }}/CNAME"
@@ -96,7 +116,9 @@ jobs:
       - name: Add 404.html for SPA
         run: |
           d=${{ steps.detect.outputs.dir }}
-          [ -f "$d/index.html" ] && cp -f "$d/index.html" "$d/404.html"
+          if [ -f "$d/index.html" ]; then
+            cp -f "$d/index.html" "$d/404.html"
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

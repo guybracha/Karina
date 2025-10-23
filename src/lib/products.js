@@ -14,18 +14,27 @@ import managerBack from "../img/safety/managerBack.png";
 import softShellCoat from "../img/work/coat1.png";
 import softShellCoatBack from "../img/work/coat1Back.png";
 import kenguruBack from "../img/work/kenguruBack.png";
-import hoodiePocket from "../img/work/hoodie1.png";
+import zipper from "../img/work/zipperHoodie.png";
 import drifitShort from "../img/work/drifitShort.png";
 import drifitShortBack from "../img/work/drifitShortBack.png";
 import drifitLong from "../img/work/drifitLong.png";
 import drifitLongBack from "../img/work/drifitLongBack.png";
+import hermonit from "../img/work/hermonit.png";
+import fleese from "../img/work/plizOneSide.png";
+import fleeseDouble from "../img/work/plizDoubleSide.png";
+import labCoat from "../img/work/mictaron.png";
+import halfApron from "../img/work/halfSinar.png";
+import fullApron from "../img/work/fullSicar.png";
+import chef from "../img/work/chef.png";
+import drifitStripes from "../img/safety/drifitStripes.png";
+import bottle from "../img/work/bottle.png";
 
 export const PRODUCTS = [
   {
     slug: "hoodie-zipper",
     name: "קפוצ׳ון רוכסן",
     price: 85,
-    img: hoodiePocket,
+    img: zipper,
     colors: ["לבן", "נייבי", "אפור", "שחור"],
     sizes: ["S", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",
@@ -171,6 +180,131 @@ export const PRODUCTS = [
     category: "workwear",
     season: "קיץ, חורף",
     type: "shirt",
+    logoAllowed: true,
+  },
+    // === NEW from price sheet ===
+  {
+    slug: "storm-suit",
+    name: "חרמונית",
+    price: null,
+    img: hermonit,
+    colors: ["נייבי"],
+    sizes: ["S", "L", "XL", "2XL", "3XL"],
+    category: "workwear",
+    season: "חורף",
+    type: "overall",
+    logoAllowed: true,
+  },
+  {
+    slug: "fleece",
+    name: "פליז",
+    price: null,
+    img: fleese,
+    colors: ["שחור", "נייבי"],
+    sizes: ["S", "L", "XL", "2XL", "3XL"],
+    category: "workwear",
+    season: "חורף",
+    type: "fleece",
+    logoAllowed: true,
+  },
+  {
+    slug: "fleece-reversible",
+    name: "פליז דו צדדי",
+    price: null,
+    img: fleeseDouble,
+    colors: [
+      "שחור/כחול",
+      "שחור/כתום",
+      "שחור/אדום",
+      "שחור/רויאל",
+      "שחור/בורדו",
+      "שחור/ירוק"
+    ],
+    sizes: ["S", "L", "XL", "2XL", "3XL"],
+    category: "workwear",
+    season: "חורף",
+    type: "fleece",
+    logoAllowed: true,
+  },
+  {
+    slug: "lab-coat",
+    name: "מקטרונים",
+    price: null,
+    img: labCoat,
+    colors: ["לבן"],
+    sizes: ["S", "L", "XL", "2XL", "3XL"],
+    category: "workwear",
+    season: "קיץ",
+    type: "coat",
+    logoAllowed: true,
+  },
+  {
+    slug: "half-apron",
+    name: "סינר חצי",
+    price: null,
+    img: halfApron,
+    colors: ["שחור", "אדום", "לבן"],
+    sizes: ["ONE SIZE"],
+    category: "workwear",
+    season: "קיץ",
+    type: "apron",
+    logoAllowed: true,
+  },
+  {
+    slug: "full-apron",
+    name: "סינר שלם",
+    price: null,
+    img: fullApron,
+    colors: ["שחור", "אדום", "לבן"],
+    sizes: ["ONE SIZE"],
+    category: "workwear",
+    season: "קיץ",
+    type: "apron",
+    logoAllowed: true,
+  },
+  {
+    slug: "chef-jacket",
+    name: "ג'קט שף",
+    price: null,
+    img: chef,
+    colors: ["שחור", "לבן"],
+    sizes: ["ONE SIZE"],
+    category: "workwear",
+    season: "קיץ",
+    type: "chef-jacket",
+    logoAllowed: true,
+  },
+  {
+    slug: "drifit-stripes",
+    name: "דרייפיט פסים זוהרים",
+    price: null,
+    img: drifitStripes,
+    colors: [
+      "אדום",
+      "אפור",
+      "ירוק",
+      "לבן",
+      "כתום",
+      "שחור",
+      "כחול רויאל",
+      "כחול כהה"
+    ],
+    sizes: ["S", "L", "XL", "2XL", "3XL"],
+    category: "safety",
+    season: "אין",
+    type: "shirt",
+    logoAllowed: true,
+  },
+  {
+    slug: "thermal-bottle",
+    name: "בקבוקים תרמיים",
+    price: null,
+    img: bottle,
+    colors: ["לבן", "כסף", "שחור"],
+    sizes: ["ONE SIZE"],
+    category: "safety",
+    season: "אין",
+    type: "bottle",
     logoAllowed: true,
   },
 ];
