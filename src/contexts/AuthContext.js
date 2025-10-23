@@ -29,34 +29,48 @@ const AuthCtx = createContext({
 export const useAuth = () => useContext(AuthCtx);
 
 /**
- * יצירה/מיזוג מסמך משתמש אם לא קיים
+ * יצירה/מיזוג מסמך משתמש אם לא קיים — בתאימות לכללי Firestore
+ * חשוב: לא כותבים role / providerIds / uid מהקליינט.
+ * CREATE: חובה createdAt + updatedAt (serverTimestamp)
+ * UPDATE: חובה updatedAt אם שולחים עדכון
  */
+// בתוך src/contexts/AuthContext.js
+
 async function ensureUserDoc(uid, base) {
   const ref = doc(db, "users", uid);
   const snap = await getDoc(ref);
+
+  // רק מפתחות מותרים לפי ה-rules
+  const allowedBase = {
+    displayName: base?.displayName || (base?.email ? base.email.split("@")[0] : "User"),
+    email: base?.email || null,
+    photoURL: base?.photoURL || null,
+  };
+
   if (!snap.exists()) {
     await setDoc(
       ref,
       {
-        displayName: base?.displayName || (base?.email ? base.email.split("@")[0] : "User"),
-        email: base?.email || null,
-        photoURL: base?.photoURL || null,
-        role: "user",
-        createdAt: serverTimestamp(),
+        ...allowedBase,
+        createdAt: serverTimestamp(),   // חובה לפי rules
+        updatedAt: serverTimestamp(),   // חובה לפי rules
       },
       { merge: true }
     );
   } else {
     const data = snap.data() || {};
     const patch = {};
-    if (!data.displayName && base?.displayName) patch.displayName = base.displayName;
-    if (!data.email && base?.email) patch.email = base.email;
-    if (!data.photoURL && base?.photoURL) patch.photoURL = base.photoURL;
+    if (!data.displayName && allowedBase.displayName) patch.displayName = allowedBase.displayName;
+    if (!data.email && allowedBase.email)           patch.email = allowedBase.email;
+    if (!data.photoURL && allowedBase.photoURL)     patch.photoURL = allowedBase.photoURL;
+
     if (Object.keys(patch).length) {
+      patch.updatedAt = serverTimestamp();          // חובה בעדכון
       await setDoc(ref, patch, { merge: true });
     }
   }
 }
+
 
 /**
  * ספק קונטקסט
@@ -118,7 +132,7 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      // ודא שקיים users/{uid}
+      // ודא שקיים users/{uid} בהתאם לכללים
       try {
         await ensureUserDoc(u.uid, {
           displayName: u.displayName,
@@ -126,6 +140,7 @@ export function AuthProvider({ children }) {
           photoURL: u.photoURL,
         });
       } catch (e) {
+        // לא חוסם את ה-UI — למשל במצבי App Check throttled
         console.warn("[Auth] ensureUserDoc failed (ignored):", e?.message || e);
       }
 
