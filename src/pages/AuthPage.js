@@ -1,6 +1,6 @@
 // src/pages/AuthPage.js
 import React, { useEffect, useState } from "react";
-import { useRecaptcha } from "../hooks/useRecaptcha";
+import { useRecaptcha } from "../hooks/useRecaptcha.ts";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
