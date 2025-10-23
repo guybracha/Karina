@@ -17,12 +17,32 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # ===== ENV גלובליים ל-job =====
     env:
-      # מניעת כשלים בהתקנות/אזהרות
+      # Build flags
       NPM_CONFIG_LEGACY_PEER_DEPS: true
       PUBLIC_URL: https://karina.co.il/
       CI: false
       DISABLE_ESLINT_PLUGIN: true
+
+      # Firebase (נמשכים מ-Secrets)
+      REACT_APP_FB_API_KEY:             ${{ secrets.REACT_APP_FB_API_KEY }}
+      REACT_APP_FB_AUTH_DOMAIN:         ${{ secrets.REACT_APP_FB_AUTH_DOMAIN }}
+      REACT_APP_FB_PROJECT_ID:          ${{ secrets.REACT_APP_FB_PROJECT_ID }}
+      REACT_APP_FB_STORAGE_BUCKET:      ${{ secrets.REACT_APP_FB_STORAGE_BUCKET }}
+      REACT_APP_FB_MESSAGING_SENDER_ID: ${{ secrets.REACT_APP_FB_MESSAGING_SENDER_ID }}
+      REACT_APP_FB_APP_ID:              ${{ secrets.REACT_APP_FB_APP_ID }}
+      REACT_APP_FB_MEASUREMENT_ID:      ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
+
+      # App Check
+      REACT_APP_ENABLE_APPCHECK: "true"
+      REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY }}
+      # אופציונלי: אם תרצה fallback ל-v3 (לא חובה)
+      REACT_APP_RECAPTCHA_V3_SITE_KEY:  ${{ secrets.REACT_APP_RECAPTCHA_V3_SITE_KEY }}
+
+      # אזור Functions (אם אתה משתמש)
+      REACT_APP_FB_FUNCTIONS_REGION: europe-west1
 
     steps:
       - name: Checkout
@@ -37,53 +57,31 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
-      # אימות שכל משתני Firebase/AppCheck קיימים לפני ה-build
+      # אימות שכל ENV חשובים קיימים לפני build
       - name: Verify Firebase & AppCheck env are present
         run: |
           missing=0
-          for k in \
-            REACT_APP_FB_API_KEY \
-            REACT_APP_FB_AUTH_DOMAIN \
-            REACT_APP_FB_PROJECT_ID \
-            REACT_APP_FB_STORAGE_BUCKET \
-            REACT_APP_FB_MESSAGING_SENDER_ID \
-            REACT_APP_FB_APP_ID \
-            REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY
-          do
+          required=( \
+            REACT_APP_FB_API_KEY REACT_APP_FB_AUTH_DOMAIN REACT_APP_FB_PROJECT_ID \
+            REACT_APP_FB_STORAGE_BUCKET REACT_APP_FB_MESSAGING_SENDER_ID REACT_APP_FB_APP_ID \
+            REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY \
+          )
+          for k in "${required[@]}"; do
             if [ -z "${!k}" ]; then
               echo "::error::Missing $k"
               missing=1
             fi
           done
 
-          # Measurement ID אופציונלי – לא עוצר build אם חסר
-          if [ -z "${REACT_APP_FB_MEASUREMENT_ID}" ]; then
-            echo "::warning::REACT_APP_FB_MEASUREMENT_ID is not set (Analytics disabled)."
-          fi
+          # אופציונליים
+          [ -z "${REACT_APP_FB_MEASUREMENT_ID}" ] && echo "::warning::REACT_APP_FB_MEASUREMENT_ID not set (Analytics off)."
+          [ -z "${REACT_APP_RECAPTCHA_V3_SITE_KEY}" ] && echo "::notice::No v3 fallback site key (OK)."
 
           if [ "$missing" -eq 1 ]; then exit 1; fi
-        env:
-          REACT_APP_FB_API_KEY: ${{ secrets.REACT_APP_FB_API_KEY }}
-          REACT_APP_FB_AUTH_DOMAIN: ${{ secrets.REACT_APP_FB_AUTH_DOMAIN }}
-          REACT_APP_FB_PROJECT_ID: ${{ secrets.REACT_APP_FB_PROJECT_ID }}
-          REACT_APP_FB_STORAGE_BUCKET: ${{ secrets.REACT_APP_FB_STORAGE_BUCKET }}
-          REACT_APP_FB_MESSAGING_SENDER_ID: ${{ secrets.REACT_APP_FB_MESSAGING_SENDER_ID }}
-          REACT_APP_FB_APP_ID: ${{ secrets.REACT_APP_FB_APP_ID }}
-          REACT_APP_FB_MEASUREMENT_ID: ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
-          REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY }}
+          echo "ENV OK"
 
-      # Build עם הזרקת ה-ENV (כולל reCAPTCHA Enterprise site key)
       - name: Build
         run: npm run build
-        env:
-          REACT_APP_FB_API_KEY: ${{ secrets.REACT_APP_FB_API_KEY }}
-          REACT_APP_FB_AUTH_DOMAIN: ${{ secrets.REACT_APP_FB_AUTH_DOMAIN }}
-          REACT_APP_FB_PROJECT_ID: ${{ secrets.REACT_APP_FB_PROJECT_ID }}
-          REACT_APP_FB_STORAGE_BUCKET: ${{ secrets.REACT_APP_FB_STORAGE_BUCKET }}
-          REACT_APP_FB_MESSAGING_SENDER_ID: ${{ secrets.REACT_APP_FB_MESSAGING_SENDER_ID }}
-          REACT_APP_FB_APP_ID: ${{ secrets.REACT_APP_FB_APP_ID }}
-          REACT_APP_FB_MEASUREMENT_ID: ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
-          REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY }}
 
       - name: Detect build dir
         id: detect
