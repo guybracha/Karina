@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["DOM", "ES2020"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "allowJs": true,        // תן לטס לבדוק קבצי JS
+    "checkJs": false,       // בלי אזהרות טיפוס על JS אם זה מציק
+    "noEmit": true,         // הכי חשוב – אל תוציא קבצים
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "strict": false
+  },
+  "include": ["src"]
+}
