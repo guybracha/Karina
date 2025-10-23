@@ -35,7 +35,16 @@
         gtag('config', 'G-MVPVMP76F6');
       </script>
       <!-- טוען את ספריית reCAPTCHA Enterprise בלי site key בפרמטר -->
-      <script src="https://www.google.com/recaptcha/enterprise.js" async defer></script>
+      <script src="https://www.google.com/recaptcha/enterprise.js?render=6Le4t9crAAAAAGkwZ6OwapBndFGx7tJIATKrLIQ2" async defer></script>
+      <script>
+        window.grecaptcha = window.grecaptcha || {};
+        grecaptcha.enterprise.ready(() => {
+          grecaptcha.enterprise
+            .execute('6Le4t9crAAAAAGkwZ6OwapBndFGx7tJIATKrLIQ2', { action: 'login' })
+            .then(t => console.log('TOKEN:', t))
+            .catch(err => console.error('execute error:', err));
+        });
+      </script>
   </head>
   <body>
     <noscript>יש לאפשר JavaScript כדי להפעיל את האפליקציה.</noscript>
