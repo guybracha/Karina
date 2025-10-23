@@ -9,13 +9,11 @@ import {
   deleteField,
 } from "firebase/firestore";
 
-/**
- * ===== כללי שדות מותריים =====
- * מותר ב"דוקומנט" users/{uid} רק:
- * displayName, email, phoneNumber, company, photoURL,
- * marketingConsent, marketingConsentAt, marketingConsentMethod,
- * createdAt, updatedAt
- */
+/* ===== שדות מותרים במסמך users/{uid} =====
+   displayName, email, phoneNumber, company, photoURL,
+   marketingConsent, marketingConsentAt, marketingConsentMethod,
+   createdAt, updatedAt
+*/
 const ALLOWED_KEYS = new Set([
   "displayName",
   "email",
@@ -29,17 +27,17 @@ const ALLOWED_KEYS = new Set([
   "updatedAt",
 ]);
 
-/** ניקוי מחרוזות */
+/* ---------- Utilities ---------- */
 const clean = (v) => (typeof v === "string" ? v.trim() : v);
+const normalizePhone = (s = "") => String(s || "").replace(/\D+/g, ""); // שומר רק ספרות
 
-/** אימותים בסיסיים */
 const isValidEmail = (v) =>
   typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-const isValidPhone = (v) =>
-  typeof v === "string" && /^[0-9+\-()\s]{7,20}$/.test(v);
+// 7–15 ספרות (אחסון נקי אחרי normalizePhone)
+const isValidPhoneDigits = (v) =>
+  typeof v === "string" && /^\d{7,15}$/.test(v);
 
-/** מסיר מפתחות שלא מורשים לפי הכללים */
 function pickAllowed(obj = {}) {
   const out = {};
   for (const k of Object.keys(obj || {})) {
@@ -48,54 +46,50 @@ function pickAllowed(obj = {}) {
   return out;
 }
 
-/**
- * יצירה/עדכון מסמך משתמש בסיסי בכניסה ראשונה או סינכרון נתונים בסיסיים.
- * נשמרת התאמה לכללים: רק המפתחות המותרים ייכתבו.
- * הערות:
- * - createdAt נשלח רק ביצירה.
- * - updatedAt נשלח תמיד.
- * - שדות marketing מטופלים בזהירות (כולל serverTimestamp היכן שצריך).
- */
+/* ---------- Create/Sync basic user doc ---------- */
 export async function ensureUserDoc(user, extra = null) {
-  if (!user || !user.uid) return;
+  if (!user?.uid) return null;
 
   const ref = doc(db, "users", user.uid);
   const snap = await getDoc(ref);
 
-  // שדות בסיסיים (מנוקים ומוגדרים בצורה בטוחה)
   const displayName =
     clean(user.displayName) ||
     (user.email ? String(user.email).split("@")[0] : "") ||
     "User";
 
-  const email = user.email && isValidEmail(user.email) ? user.email.toLowerCase() : null;
-  const phone = user.phoneNumber && isValidPhone(user.phoneNumber) ? user.phoneNumber : null;
+  const email =
+    user.email && isValidEmail(user.email)
+      ? user.email.toLowerCase()
+      : null;
+
+  // נרמול טלפון לספרות בלבד + בדיקה
+  const phoneDigits = normalizePhone(user.phoneNumber || "");
+  const phoneNumber = phoneDigits && isValidPhoneDigits(phoneDigits) ? phoneDigits : null;
 
   const base = {
     displayName,
     email,
-    phoneNumber: phone,
+    phoneNumber,
     company: null,
     photoURL: clean(user.photoURL) || null,
     updatedAt: serverTimestamp(),
+    // מחיקת השדה הישן אם קיים
+    phone: deleteField(),
   };
 
-  // שדות Marketing מה"extra" (רק אם הועברו, ושומרים על כללים)
+  // שדות Marketing אופציונליים
   let marketing = {};
   if (extra && typeof extra === "object") {
     const e = pickAllowed(extra);
-
     if (typeof e.marketingConsent === "boolean") {
       if (e.marketingConsent) {
         marketing.marketingConsent = true;
-        marketing.marketingConsentAt = serverTimestamp(); // timestamp מהשרת
+        marketing.marketingConsentAt = serverTimestamp();
         if (typeof e.marketingConsentMethod === "string" && e.marketingConsentMethod.trim()) {
           marketing.marketingConsentMethod = clean(e.marketingConsentMethod);
-        } else {
-          // אם אין method – נשאיר לא קיים (מותר לפי הכללים)
         }
       } else {
-        // ביטול הסכמה – False + ניקוי שדות קשורים
         marketing.marketingConsent = false;
         marketing.marketingConsentAt = deleteField();
         marketing.marketingConsentMethod = deleteField();
@@ -106,120 +100,101 @@ export async function ensureUserDoc(user, extra = null) {
   if (!snap.exists()) {
     await setDoc(
       ref,
-      {
-        ...base,
-        ...marketing,
-        createdAt: serverTimestamp(), // רק בפעם הראשונה
-      },
+      { ...base, ...marketing, createdAt: serverTimestamp() },
       { merge: true }
     );
   } else {
-    // בעדכון – לא שולחים createdAt
     await setDoc(ref, { ...base, ...marketing }, { merge: true });
   }
+
+  // החזרה מהשרת כדי לעקוף קאש
+  const fresh = await getDoc(ref, { source: "server" });
+  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
 }
 
-/**
- * שליפת פרופיל משתמש (cache first, ואז מהשרת).
- */
+/* ---------- Read profile (cache-first) ---------- */
 export async function getUserProfile(uid) {
   if (!uid) return null;
   const ref = doc(db, "users", uid);
 
-  // Cache-first
   try {
     const snapCache = await getDocFromCache(ref);
-    if (snapCache.exists()) {
-      return { id: snapCache.id, ...snapCache.data() };
-    }
-  } catch {
-    // אין בקאש או כשל – ננסה מהשרת
-  }
+    if (snapCache.exists()) return { id: snapCache.id, ...snapCache.data() };
+  } catch { /* ignore cache miss */ }
 
   const snap = await getDoc(ref);
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-/**
- * עדכון פרופיל ב-Firestore (merge).
- * נפתח רק את השדות המותרים בכללים:
- * displayName, email, phoneNumber, company, photoURL,
- * (אופציונלי) marketingConsent (+method,+At כ־serverTimestamp), marketingConsentMethod.
- * שדות ריקים הופכים ל-deleteField() כדי לנקותם במסמך.
- */
+/* ---------- Update profile (merge) ---------- */
 export async function updateUserProfile(uid, data = {}) {
   if (!uid) throw new Error("missing uid");
   const ref = doc(db, "users", uid);
 
-  const payload = {};
   const safe = pickAllowed(data);
+  const payload = {
+    // מחיקה יזומה של השדה הישן
+    phone: deleteField(),
+  };
 
-  // ===== שדות בסיס =====
+  // displayName
   if ("displayName" in safe) {
     const v = clean(safe.displayName);
     payload.displayName = v || deleteField();
   }
 
+  // email
   if ("email" in safe) {
     const v = clean(String(safe.email || "")).toLowerCase();
-    if (v && !isValidEmail(v)) {
-      throw new Error("אימייל לא תקין.");
-    }
+    if (v && !isValidEmail(v)) throw new Error("אימייל לא תקין.");
     payload.email = v || deleteField();
   }
 
+  // phoneNumber – שמירת ספרות בלבד
   if ("phoneNumber" in safe) {
-    const v = clean(safe.phoneNumber);
-    if (v && !isValidPhone(v)) {
-      throw new Error("מספר טלפון לא תקין.");
-    }
-    payload.phoneNumber = v || deleteField();
+    const digits = normalizePhone(safe.phoneNumber);
+    if (digits && !isValidPhoneDigits(digits)) throw new Error("מספר טלפון לא תקין.");
+    payload.phoneNumber = digits || deleteField();
   }
 
+  // company
   if ("company" in safe) {
     const v = clean(safe.company);
     payload.company = v || deleteField();
   }
 
+  // photoURL
   if ("photoURL" in safe) {
     const v = clean(safe.photoURL);
     payload.photoURL = v || deleteField();
   }
 
-  // ===== שדות Marketing (אופציונלי) =====
+  // Marketing
   if (typeof safe.marketingConsent === "boolean") {
     payload.marketingConsent = safe.marketingConsent;
-
     if (safe.marketingConsent) {
-      // אם הפך ל-true – timestamp מהשרת + method אם ניתנה
       payload.marketingConsentAt = serverTimestamp();
       if (typeof safe.marketingConsentMethod === "string" && safe.marketingConsentMethod.trim()) {
         payload.marketingConsentMethod = clean(safe.marketingConsentMethod);
-      } else {
-        // אם לא נשלחה מתודה, נשאיר לא קיים – מותר לפי כללים
       }
     } else {
-      // אם מכבים הסכמה – false + ניקוי שדות נלווים
       payload.marketingConsentAt = deleteField();
       payload.marketingConsentMethod = deleteField();
     }
-  } else if (
-    // אם נשלחה מתודה בלי לשנות את דגל ההסכמה – נעדכן אותה כמידע נוסף
-    typeof safe.marketingConsentMethod === "string" &&
-    safe.marketingConsentMethod.trim()
-  ) {
+  } else if (typeof safe.marketingConsentMethod === "string" && safe.marketingConsentMethod.trim()) {
     payload.marketingConsentMethod = clean(safe.marketingConsentMethod);
   }
 
   payload.updatedAt = serverTimestamp();
 
   await setDoc(ref, payload, { merge: true });
+
+  // החזרה מהשרת כדי לראות את הערכים המעודכנים (ולעקוף קאש/IndexedDB)
+  const fresh = await getDoc(ref, { source: "server" });
+  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
 }
 
-/**
- * הפיכת הסכמה לשיווק ל-true (כולל timestamp ומתודה).
- * שימושי במיוחד אחרי Google first sign-in.
- */
+/* ---------- Marketing helpers ---------- */
 export async function setMarketingConsentTrue(uid, method = "manual_update") {
   if (!uid) throw new Error("missing uid");
   const ref = doc(db, "users", uid);
@@ -230,14 +205,14 @@ export async function setMarketingConsentTrue(uid, method = "manual_update") {
       marketingConsentAt: serverTimestamp(),
       marketingConsentMethod: clean(method) || "manual_update",
       updatedAt: serverTimestamp(),
+      phone: deleteField(), // מחיקת שדה ישן על הדרך
     },
     { merge: true }
   );
+  const fresh = await getDoc(ref, { source: "server" });
+  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
 }
 
-/**
- * ביטול הסכמה לשיווק (false) וניקוי השדות הנלווים.
- */
 export async function setMarketingConsentFalse(uid) {
   if (!uid) throw new Error("missing uid");
   const ref = doc(db, "users", uid);
@@ -248,7 +223,10 @@ export async function setMarketingConsentFalse(uid) {
       marketingConsentAt: deleteField(),
       marketingConsentMethod: deleteField(),
       updatedAt: serverTimestamp(),
+      phone: deleteField(),
     },
     { merge: true }
   );
+  const fresh = await getDoc(ref, { source: "server" });
+  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
 }

@@ -21,17 +21,17 @@ function isIOS() {
 }
 function isInAppBrowser() {
   const ua = navigator.userAgent || "";
-  // Most common in-app browsers; הרחב לפי צורך
+  // דפדפנים נפוצים בתוך אפליקציות
   return /\bFBAV|FBAN|Instagram|Line\/|WeChat|Twitter|Pinterest|Snapchat|TikTok/i.test(ua);
 }
 
-/* ========== Public API ========== */
+/* ========== Persistence & public API ========== */
 export const watchAuth = (cb) => onAuthStateChanged(auth, cb);
 
-// שמירת סשן מקומי (אם ייכשל – מתעלמים בשקט)
+// שומר מצב התחברות מקומית; אם נכשל (למשל חוסמי צד־ג’) — מתעלמים
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 
-/* דגל פנימי ל־redirect: כדי שה-UI ידע לאסוף תוצאה קודם כל */
+/* דגל redirect ב-sessionStorage כדי שה-UI ידע לאסוף תוצאה */
 const REDIRECT_FLAG = "karina:auth:redirecting";
 export const markRedirecting = () => {
   try { sessionStorage.setItem(REDIRECT_FLAG, "1"); } catch {}
@@ -45,57 +45,54 @@ export const isRedirecting = () => {
 
 /**
  * Google Sign-in:
- * - ב־iOS או בדפדפן בתוך אפליקציה → נכפה Redirect (פופאפים נחסמים/לא יציבים).
- * - אחרת ננסה Popup עם fallback ל-Redirect במידת הצורך.
+ * - iOS / דפדפן בתוך אפליקציה → Redirect (פופאפים לעיתים חסומים).
+ * - אחרת: Popup עם fallback ל-Redirect על שגיאות טיפוסיות.
  */
 export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
 
-  // iOS / In-App → Redirect מראש (יציב יותר)
   if (isIOS() || isInAppBrowser()) {
     markRedirecting();
     await signInWithRedirect(auth, provider);
-    // לא חוזרים לכאן מיידית; אחרי החזרה נאסוף עם collectRedirectResultIfAny()
-    return null;
+    return null; // נאסוף אחר כך ב-collectRedirectResultIfAny
   }
 
-  // סביבות רגילות: ננסה Popup עם fallback ל-Redirect
   try {
     return await signInWithPopup(auth, provider);
   } catch (e) {
     const code = e?.code || "";
-    const shouldFallbackToRedirect =
+    const fallback =
       code === "auth/popup-blocked" ||
       code === "auth/operation-not-supported-in-this-environment" ||
       code === "auth/popup-closed-by-user";
 
-    if (shouldFallbackToRedirect) {
+    if (fallback) {
       markRedirecting();
       await signInWithRedirect(auth, provider);
       return null;
     }
-    throw e; // שגיאות אחרות – יטופלו ב-UI (friendlyError)
+    throw e;
   }
 }
 
-// רישום רגיל לאימייל/סיסמה
+/* רישום באימייל/סיסמה — מחזיר UserCredential */
 export const registerWithEmail = async (email, password) => {
-  const { user } = await createUserWithEmailAndPassword(auth, email, password);
-  await sendEmailVerification(user);
-  return user;
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  try { await sendEmailVerification(cred.user); } catch { /* לא חוסם את הזרימה */ }
+  return cred;
 };
 
-// כניסה באימייל/סיסמה
+/* כניסה באימייל/סיסמה — מחזיר UserCredential */
 export const loginWithEmail = (email, password) =>
   signInWithEmailAndPassword(auth, email, password);
 
-// יציאה
+/* יציאה */
 export const logout = () => signOut(auth);
 
 /**
- * איסוף תוצאת Redirect (לקרוא בעמוד הטעינה/ה־AuthPage useEffect)
- * מנקה תמיד את דגל ה-redirect.
+ * איסוף תוצאת Redirect; תמיד מנקה את דגל ה-redirect.
+ * מחזיר UserCredential או null.
  */
 export async function collectRedirectResultIfAny() {
   try {

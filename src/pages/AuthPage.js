@@ -4,9 +4,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
   registerWithEmail,
-  signInWithGoogle,                 // Popup עם fallback ל-redirect (ב-service)
-  collectRedirectResultIfAny,       // ⬅️ חדש: איסוף תוצאת redirect
-  isRedirecting,                    // ⬅️ חדש: בודק דגל redirect ב-sessionStorage
+  signInWithGoogle,           // Popup עם fallback ל-redirect (ב-service)
+  collectRedirectResultIfAny, // איסוף תוצאת redirect
+  isRedirecting,              // דגל redirect ב-sessionStorage
 } from "../services/auth";
 import { ensureUserDoc } from "../services/users";
 import { auth } from "../firebase";
@@ -17,17 +17,16 @@ import {
   signOut,
 } from "firebase/auth";
 
-// נשמור בבאפר קטן את מצב ההסכמה לדיוור בעת התחלת Google (כדי לחזור לאחר redirect)
 const LS_GOOGLE_CONSENT_KEY = "karina:auth:googleConsent";
 
 /* ============ Helpers ============ */
 function friendlyError(e) {
   const code = e?.code || "";
-  const msg = e?.message || "";
+  const msg  = e?.message || "";
 
   // App Check / רשת
   if (code.includes("appCheck") || /app\-check/i.test(msg) || /fetch-status-error/i.test(msg)) {
-    return "נראה שיש בעיית App Check / רשת. רעננו את העמוד וודאו שהדפדפן לא חוסם.";
+    return "נראה שיש בעיית App Check / רשת. רעננו את העמוד או נסו אינקוגניטו.";
   }
   // Popup
   if (code === "auth/popup-blocked") return "הדפדפן חסם את חלון ההתחברות. בטלו חסימה או השתמשו בכניסה בעזרת Redirect.";
@@ -38,14 +37,12 @@ function friendlyError(e) {
   if (code === "auth/user-not-found") return "לא נמצא משתמש עם האימייל הזה.";
   if (code === "auth/wrong-password") return "הסיסמה שגויה.";
   if (code === "auth/too-many-requests") return "יותר מדי ניסיונות. נסו שוב מאוחר יותר.";
-  // Misc
   if (code === "auth/internal-error") {
-    return "שגיאה פנימית באימות. נסו לרענן, לנקות אחסון אתר (Application→Clear storage) ולבדוק שהדומיין/Redirect מאושרים.";
+    return "שגיאה פנימית באימות. נסו לרענן ולבדוק שהדומיין/Redirect מאושרים.";
   }
   return msg || "שגיאה לא צפויה. נסו שוב.";
 }
 
-// מסייע לאחזר user גם אם services מחזיר UserCredential
 const pickUser = (res) => (res?.user ? res.user : res);
 
 /* ============ Component ============ */
@@ -73,42 +70,44 @@ export default function AuthPage() {
     try {
       await Promise.race([
         ensureUserDoc(u, extra || undefined),
-        new Promise((resolve) => setTimeout(resolve, 800)), // לא לעכב את ה־UI
+        new Promise((resolve) => setTimeout(resolve, 800)),
       ]);
     } catch (e) {
       console.warn("[Auth] ensureUserDoc failed (background):", e?.code || e?.message || e);
     }
   }
 
-  // --- טיפול בתוצאת Redirect (אם popup לא זמין/נחסם) — קודם לכל ---
+  // --- טיפול בתוצאת Redirect (אם popup נחסם) ---
   useEffect(() => {
     let mounted = true;
-
     (async () => {
       const wasRedirecting = isRedirecting();
       if (wasRedirecting) setInfo("מסיים התחברות…");
 
       try {
-        const res = await collectRedirectResultIfAny(); // כבר מנקה את הדגל ב-service
+        const res = await collectRedirectResultIfAny(); // מנקה דגל redirect ב-service
         if (!mounted || !res?.user) return;
 
         const infoRes = getAdditionalUserInfo(res);
         const isNew = !!infoRes?.isNewUser;
 
-        const wantConsent = localStorage.getItem(LS_GOOGLE_CONSENT_KEY) === "1";
-        localStorage.removeItem(LS_GOOGLE_CONSENT_KEY);
+        let wantConsent = false;
+        try { wantConsent = localStorage.getItem(LS_GOOGLE_CONSENT_KEY) === "1"; }
+        catch {}
+
+        try { localStorage.removeItem(LS_GOOGLE_CONSENT_KEY); } catch {}
 
         if (isNew && !wantConsent) {
           try { await signOut(auth); } catch {}
           setTab("register");
-          setError("נראה שזו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים (ניתן להסרה בכל עת). סמנו את הצ׳קבוקס והמשיכו.");
+          setError("זו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים. סמנו את הצ׳קבוקס והמשיכו.");
           return;
         }
 
+        // אל תשלחו marketingConsentAt כאן — השרת ישים serverTimestamp()
         const extra = (isNew && wantConsent)
           ? {
               marketingConsent: true,
-              marketingConsentAt: new Date().toISOString(),
               marketingConsentMethod: "google_first_signin_checkbox",
             }
           : null;
@@ -122,14 +121,12 @@ export default function AuthPage() {
     })();
 
     return () => { mounted = false; };
-  }, []); // ריצה פעם אחת
+  }, []);
 
-  // --- אם כבר מחוברים – ננווט פנימה (אבל לא בזמן redirect) ---
+  // --- אם כבר מחוברים – ננווט פנימה (לא בזמן redirect) ---
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u && !isRedirecting()) {
-        navigate(from, { replace: true });
-      }
+      if (u && !isRedirecting()) navigate(from, { replace: true });
     });
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,7 +156,7 @@ export default function AuthPage() {
     setInfo(null);
 
     if (!marketingOptIn) {
-      setError("יש לאשר קבלת דיוורים וחומר פרסומי כדי להירשם.");
+      setError("יש לאשר קבלת דיוורים כדי להירשם.");
       return;
     }
 
@@ -171,7 +168,6 @@ export default function AuthPage() {
 
       await afterAuth(user, {
         marketingConsent: true,
-        marketingConsentAt: new Date().toISOString(),
         marketingConsentMethod: "email_checkbox_register",
       });
     } catch (err) {
@@ -188,35 +184,33 @@ export default function AuthPage() {
 
     const mustConsent = (tab === "register");
     if (mustConsent && !marketingOptIn) {
-      setError("יש לאשר קבלת דיוורים וחומר פרסומי כדי להירשם.");
+      setError("יש לאשר קבלת דיוורים כדי להירשם.");
       return;
     }
 
-    // נשמור את ההסכמה כדי לקרוא אותה אחרי redirect
-    localStorage.setItem(LS_GOOGLE_CONSENT_KEY, (marketingOptIn ? "1" : "0"));
+    try { localStorage.setItem(LS_GOOGLE_CONSENT_KEY, (marketingOptIn ? "1" : "0")); }
+    catch {}
 
     setLoading(true);
     try {
-      const res = await signInWithGoogle(); // אם fallback ל-redirect, res יהיה null
+      const res = await signInWithGoogle(); // אם fallback ל-redirect, res=null
       if (!res?.user) {
         setInfo("מועברים להשלמת התחברות…");
         return; // ה-useEffect של redirect יאסוף כשנחזור
       }
 
-      // popup הצליח כאן ועכשיו
       const infoRes = getAdditionalUserInfo(res);
       const isNew = !!infoRes?.isNewUser;
       if (isNew && !marketingOptIn) {
         try { await signOut(auth); } catch {}
         setTab("register");
-        setError("נראה שזו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים (ניתן להסרה בכל עת). סמנו את הצ׳קבוקס והמשיכו.");
+        setError("זו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים.");
         return;
       }
 
       const extra = (isNew && marketingOptIn)
         ? {
             marketingConsent: true,
-            marketingConsentAt: new Date().toISOString(),
             marketingConsentMethod: "google_first_signin_checkbox",
           }
         : null;
@@ -252,16 +246,8 @@ export default function AuthPage() {
         </button>
       </div>
 
-      {error && (
-        <div className="alert alert-danger" role="alert">
-          {error}
-        </div>
-      )}
-      {info && (
-        <div className="alert alert-info" role="alert">
-          {info}
-        </div>
-      )}
+      {error && <div className="alert alert-danger">{error}</div>}
+      {info && <div className="alert alert-info">{info}</div>}
 
       <form
         onSubmit={tab === "login" ? handleLogin : handleRegister}

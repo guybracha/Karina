@@ -7,7 +7,7 @@ import { getMyOrders } from "../services/orders";
 import { logout } from "../services/auth";
 
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { app } from "../firebase";
+import { app, db } from "../firebase";
 
 import {
   updateProfile,
@@ -15,6 +15,8 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from "firebase/auth";
+
+import { doc, onSnapshot } from "firebase/firestore";
 
 function shekels(amountCentsOrFloat) {
   let n = Number(amountCentsOrFloat || 0);
@@ -40,16 +42,21 @@ function statusBadgeClass(status) {
   return `badge ${map[status] || "bg-secondary"}`;
 }
 
+// מציג טלפון בפורמט נעים; הנתון במסמך נשמר כספרות בלבד
+const prettyPhone = (s = "") => {
+  const d = String(s || "").replace(/\D+/g, "");
+  if (!d) return "";
+  // 05X-XXXXXXX / כללית: 3-שאר
+  return d.replace(/^(\d{3})(\d+)$/, "$1-$2");
+};
+
 // זיהוי שגיאות App Check / הרשאות להודעה ידידותית
 function friendlyFirestoreError(err) {
   const code = err?.code || "";
   const msg  = err?.message || "";
-
-  // App Check throttled / 403
   if (/app\-check/i.test(code) || /appCheck/i.test(msg) || /throttled/i.test(msg)) {
-    return "נחסמה הגישה עקב App Check (אבטחה). נסה/י לרענן דף, להתחבר מחדש, או לעבוד בחלון אינקוגניטו. אם הבעיה נמשכת — יש לכבות זמנית אכיפת App Check ב־Console או להפעיל debug token.";
+    return "נחסמה הגישה עקב App Check (אבטחה). נסו לרענן דף, להתחבר מחדש, או לעבוד בחלון אינקוגניטו. אם הבעיה נמשכת — כבו זמנית Enforcement ב־App Check או הפעילו DEBUG token.";
   }
-  // Firestore permissions
   if (code === "permission-denied" || /Missing or insufficient permissions/i.test(msg)) {
     return "אין הרשאה לשמור כרגע (יתכן עקב App Check או כללי אבטחה).";
   }
@@ -89,7 +96,7 @@ export default function Account() {
   const [mailMsg, setMailMsg] = useState(null);
   const [mailErr, setMailErr] = useState(null);
 
-  // פרטי משתמש
+  // טעינה ראשונית (fallback) + מילוי טופס
   useEffect(() => {
     let mounted = true;
     async function run() {
@@ -111,6 +118,25 @@ export default function Account() {
     run();
     return () => { mounted = false; };
   }, [user]);
+
+  // 🔴 מאזין בזמן אמת למסמך המשתמש — עוקף קאש ומתעדכן מיידית
+  useEffect(() => {
+    if (!user?.uid) return;
+    const ref = doc(db, "users", user.uid);
+    const unsub = onSnapshot(ref, (snap) => {
+      const d = snap.data() || {};
+      setProfile(d);
+      // אל תדרוס הקלדה חיה במודאל; עדכן רק אם המודאל סגור
+      if (!showEdit) {
+        setEditName(d.displayName || user.displayName || user.email?.split("@")[0] || "");
+        setEditEmail(d.email || user.email || "");
+        setEditPhoneNumber(d.phoneNumber || "");
+        setEditCompany(d.company || "");
+      }
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, showEdit]);
 
   // טעינת ההזמנות הראשונות
   useEffect(() => {
@@ -183,6 +209,7 @@ export default function Account() {
       setSaveErr("אימייל לא תקין.");
       return;
     }
+    // הטופס מאפשר מקפים/רווחים; השירות מנרמל לספרות בלבד
     const phoneTrim = (editPhoneNumber || "").trim();
     if (phoneTrim && !/^[0-9+\-()\s]{7,20}$/.test(phoneTrim)) {
       setSaveErr("מספר טלפון לא תקין.");
@@ -216,22 +243,15 @@ export default function Account() {
         }
       }
 
-      // 3) עדכון פרופיל ב־Firestore (ה־updatedAt נשלח מתוך services/users)
-      await updateUserProfile(user.uid, {
+      // 3) עדכון פרופיל ב־Firestore; הפונקציה מחזירה צילום מהשרת
+      const fresh = await updateUserProfile(user.uid, {
         displayName: nameTrim,
         email: emailTrim,
-        phoneNumber: phoneTrim,
+        phoneNumber: phoneTrim, // יינרמל לספרות בצד השירות
         company: (editCompany || "").trim(),
       });
 
-      setProfile((prev) => ({
-        ...prev,
-        displayName: nameTrim,
-        email: emailTrim,
-        phoneNumber: phoneTrim,
-        company: (editCompany || "").trim(),
-      }));
-
+      if (fresh) setProfile(fresh);
       if (user?.reload) await user.reload();
 
       setSaveMsg("השינויים נשמרו בהצלחה.");
@@ -282,7 +302,7 @@ export default function Account() {
             <p className="mb-1 text-muted">{email}</p>
             <div className="small text-muted d-flex flex-wrap gap-3">
               <span>משתמש מאז: {toDateString(profile?.createdAt) || "—"}</span>
-              {profile?.phoneNumber && <span>טלפון: {profile.phoneNumber}</span>}
+              {profile?.phoneNumber && <span>טלפון: {prettyPhone(profile.phoneNumber)}</span>}
               {profile?.company && <span>חברה: {profile.company}</span>}
             </div>
           </div>
@@ -290,6 +310,11 @@ export default function Account() {
             <button className="btn btn-outline-primary" onClick={() => setShowEdit(true)} disabled={loadingProfile}>
               עריכת פרטים
             </button>
+            <button className="btn btn-outline-secondary" onClick={handleSendTestEmail} disabled={mailBusy}>
+              {mailBusy ? "שולח…" : "שלח מייל בדיקה"}
+            </button>
+            {mailMsg && <div className="text-success small">{mailMsg}</div>}
+            {mailErr && <div className="text-danger small">{mailErr}</div>}
           </div>
         </div>
       </div>
@@ -366,7 +391,7 @@ export default function Account() {
           <div
             className="modal-dialog modal-dialog-centered"
             role="document"
-            onClick={(e) => e.stopPropagation()} // למנוע סגירה בלחיצה בתוך התיבה
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-content">
               <form onSubmit={handleSaveProfile}>
