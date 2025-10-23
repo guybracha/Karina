@@ -16,8 +16,6 @@ import {
   EmailAuthProvider,
 } from "firebase/auth";
 
-import { serverTimestamp } from "firebase/firestore";
-
 function shekels(amountCentsOrFloat) {
   let n = Number(amountCentsOrFloat || 0);
   if (n > 0 && n % 1 === 0 && n > 1000) n = n / 100;
@@ -40,6 +38,22 @@ function statusBadgeClass(status) {
     "בוטלה": "bg-danger",
   };
   return `badge ${map[status] || "bg-secondary"}`;
+}
+
+// זיהוי שגיאות App Check / הרשאות להודעה ידידותית
+function friendlyFirestoreError(err) {
+  const code = err?.code || "";
+  const msg  = err?.message || "";
+
+  // App Check throttled / 403
+  if (/app\-check/i.test(code) || /appCheck/i.test(msg) || /throttled/i.test(msg)) {
+    return "נחסמה הגישה עקב App Check (אבטחה). נסה/י לרענן דף, להתחבר מחדש, או לעבוד בחלון אינקוגניטו. אם הבעיה נמשכת — יש לכבות זמנית אכיפת App Check ב־Console או להפעיל debug token.";
+  }
+  // Firestore permissions
+  if (code === "permission-denied" || /Missing or insufficient permissions/i.test(msg)) {
+    return "אין הרשאה לשמור כרגע (יתכן עקב App Check או כללי אבטחה).";
+  }
+  return null;
 }
 
 export default function Account() {
@@ -154,6 +168,11 @@ export default function Account() {
     setSaveErr(null);
     setSaveMsg(null);
 
+    if (!user?.uid) {
+      setSaveErr("אין משתמש מחובר.");
+      return;
+    }
+
     const nameTrim = (editName || "").trim();
     if (!nameTrim) {
       setSaveErr("יש למלא שם.");
@@ -178,7 +197,7 @@ export default function Account() {
         await updateProfile(user, { displayName: nameTrim });
       }
 
-      // 2) עדכון אימייל ב־Auth אם השתנה
+      // 2) עדכון אימייל ב־Auth אם השתנה (עם Reauth אם צריך)
       if (emailTrim && user.email !== emailTrim) {
         try {
           await updateEmail(user, emailTrim);
@@ -197,13 +216,12 @@ export default function Account() {
         }
       }
 
-      // 3) עדכון פרופיל ב־Firestore (טלפון/חברה + סנכרון שם/אימייל)
+      // 3) עדכון פרופיל ב־Firestore (ה־updatedAt נשלח מתוך services/users)
       await updateUserProfile(user.uid, {
         displayName: nameTrim,
         email: emailTrim,
         phoneNumber: phoneTrim,
         company: (editCompany || "").trim(),
-        updatedAt: serverTimestamp(), // זמן שרת
       });
 
       setProfile((prev) => ({
@@ -220,14 +238,15 @@ export default function Account() {
       setTimeout(() => setShowEdit(false), 600);
     } catch (err) {
       console.error(err);
-      setSaveErr(err?.message || "שמירה נכשלה. נסו שוב.");
+      const friendly = friendlyFirestoreError(err);
+      setSaveErr(friendly || err?.message || "שמירה נכשלה. נסו שוב.");
     } finally {
       setSaving(false);
       window.setTimeout(() => { setSaveMsg(null); setSaveErr(null); }, 4000);
     }
   }
 
-  // שליחת מייל בדיקה דרך פונקציית הענן (לא מוצג ככפתור כרגע, אפשר להוסיף בעתיד)
+  // שליחת מייל בדיקה
   async function handleSendTestEmail() {
     setMailErr(null);
     setMailMsg(null);
@@ -426,7 +445,7 @@ export default function Account() {
                   >
                     ביטול
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={saving}>
+                  <button type="submit" className="btn btn-primary" disabled={saving || !user}>
                     {saving ? "שומר…" : "שמור"}
                   </button>
                 </div>
