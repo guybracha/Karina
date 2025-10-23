@@ -35,7 +35,7 @@ function isInAppBrowser() {
 /* ========== Persistence & public API ========== */
 export const watchAuth = (cb) => onAuthStateChanged(auth, cb);
 
-// שמירת סשן מקומי; אם נכשל (חוסם פופאפים/ITP וכד’) — מתעלמים בשקט
+// שמירת סשן מקומי; אם נכשל — מתעלמים בשקט
 try {
   setPersistence(auth, browserLocalPersistence).catch(() => {});
 } catch { /* SSR */ }
@@ -64,7 +64,6 @@ export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
 
-  // בסביבות לא-דפדפן אין טעם לנסות popup — ניפול ישירות ל-redirect
   if (!isBrowser || isIOS() || isInAppBrowser()) {
     markRedirecting();
     await signInWithRedirect(auth, provider);
@@ -93,7 +92,6 @@ export async function signInWithGoogle() {
 /* רישום באימייל/סיסמה — מחזיר UserCredential */
 export const registerWithEmail = async (email, password) => {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
-  // שליחת אימות לא חוסמת את הזרימה
   try { await sendEmailVerification(cred.user); } catch {}
   return cred;
 };
@@ -110,7 +108,6 @@ export const logout = () => signOut(auth);
  * מחזיר UserCredential או null.
  */
 export async function collectRedirectResultIfAny() {
-  // בקשה “עיוורת” ל-getRedirectResult בטוחה; נחזיר null אם אין תוצאה
   try {
     const res = await getRedirectResult(auth);
     clearRedirecting();

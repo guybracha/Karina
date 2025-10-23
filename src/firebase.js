@@ -1,4 +1,3 @@
-// src/firebase.js
 /* global globalThis */
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported as analyticsSupported } from "firebase/analytics";
@@ -106,10 +105,21 @@ export const auth = (() => {
    ========================= */
 export let appCheck = null;
 
+// שליטה מאוחדת: הפעלת App Check + בחירת פרוביידר דרך ENV
 const ENABLE_APPCHECK = (fromEnv("REACT_APP_ENABLE_APPCHECK", "ENABLE_APPCHECK") || "true").toLowerCase() === "true";
 const ENTERPRISE_SITE_KEY = fromEnv("REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
 const V3_SITE_KEY         = fromEnv("REACT_APP_RECAPTCHA_V3_SITE_KEY",         "RECAPTCHA_V3_SITE_KEY");
 const ENV_DEBUG_TOKEN     = fromEnv("REACT_APP_APPCHECK_DEBUG_TOKEN",          "APPCHECK_DEBUG_TOKEN");
+
+// בלוקאל בלבד: תן ל-SDK לייצר debug token חדש אם לא סיפקת אחד (ימודפס לקונסול בפעם הראשונה)
+if (isBrowser && (location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  if (!ENV_DEBUG_TOKEN) {
+    // true => ה-SDK ינפיק טוקן חדש וידפיס "App Check debug token: <...>"
+    g.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  } else {
+    g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN;
+  }
+}
 
 async function getAppCheckAttestation(forceRefresh = false) {
   try {
@@ -121,40 +131,39 @@ async function getAppCheckAttestation(forceRefresh = false) {
 
 if (isBrowser && ENABLE_APPCHECK) {
   try {
-    // Debug token בלוקאל/דיבוג
-    if (ENV_DEBUG_TOKEN) {
-      g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN;
-      if (isDev) console.info("[AppCheck] Debug token enabled from env.");
-    }
-
-    // בוחרים provider רק אם באמת יש site key
     let provider = null;
+    // בחירה חד-משמעית: Enterprise קודם; אם אין — ניפול ל-v3
     if (ENTERPRISE_SITE_KEY) {
       provider = new ReCaptchaEnterpriseProvider(ENTERPRISE_SITE_KEY);
+      if (isDev) console.log("[AppCheck] Provider: Enterprise");
     } else if (V3_SITE_KEY) {
       provider = new ReCaptchaV3Provider(V3_SITE_KEY);
+      if (isDev) console.log("[AppCheck] Provider: v3");
     }
 
     if (!provider) {
-      // אין site key בכלל – לא נאתחל App Check (אבל לא נזרוק שגיאה)
-      if (ENV_DEBUG_TOKEN) {
-        console.warn("[AppCheck] Debug token קיים אבל אין SITE KEY; App Check לא יאותחל. מומלץ להגדיר RECAPTCHA_V3_SITE_KEY גם בלוקאל.");
-      } else {
-        console.warn("[AppCheck] No SITE KEY and no DEBUG TOKEN. Skipping App Check init.");
-      }
+      console.warn("[AppCheck] No SITE KEY (Enterprise/v3). Skipping App Check init.");
     } else {
       appCheck = initializeAppCheck(app, {
         provider,
         isTokenAutoRefreshEnabled: true,
       });
 
-      try { window.appCheck = appCheck; } catch {}
+      // חשיפה לכלי דיבאג/בדיקה בלי import דינמי
+      try {
+        window.appCheck = appCheck;
+        window.getAppCheckToken = () => getAppCheckToken(appCheck, true);
+        window.printAppCheckState = async () => {
+          const t = await window.getAppCheckToken().catch(() => null);
+          console.log("[AppCheck] token:", t?.token ? (t.token.slice(0, 12) + "…") : "(missing)");
+        };
+      } catch {}
 
       onAppCheckTokenChanged(appCheck, (tok) => {
-        if (isDev) console.log("[AppCheck] token:", tok ? "OK" : "MISSING");
+        if (isDev) console.log("[AppCheck] token state:", tok ? "OK" : "MISSING");
       });
 
-      // טריגר ראשוני – רק אם יש provider
+      // טריגר ראשוני (לא חובה, עוזר ללכוד שגיאות מוקדם)
       getAppCheckToken(appCheck, true).catch(e =>
         console.warn("[AppCheck] getToken failed:", e?.message || e)
       );
