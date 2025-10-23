@@ -1,5 +1,6 @@
 // src/pages/AuthPage.js
 import React, { useEffect, useState } from "react";
+import { useRecaptcha } from "../hooks/useRecaptcha";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
@@ -55,6 +56,9 @@ export default function AuthPage() {
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // reCAPTCHA
+  const { ready: recaptchaReady, error: recaptchaError, verify } = useRecaptcha();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -164,6 +168,13 @@ export default function AuthPage() {
     setInfo(null);
     setLoading(true);
     try {
+      // reCAPTCHA לפני התחברות
+      if (!recaptchaReady) throw new Error("reCAPTCHA not ready");
+      const verdict = await verify("login");
+      if (!verdict.valid || !verdict.passed) {
+        throw new Error("אימות בוטים נכשל. נסו שוב.");
+      }
+
       const res = await loginWithEmail(email.trim(), password);
       const user = pickUser(res);
       if (!user) throw new Error("Login returned no user.");
@@ -187,6 +198,13 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
+      // reCAPTCHA לפני רישום
+      if (!recaptchaReady) throw new Error("reCAPTCHA not ready");
+      const verdict = await verify("register");
+      if (!verdict.valid || !verdict.passed) {
+        throw new Error("אימות בוטים נכשל. נסו שוב.");
+      }
+
       const res = await registerWithEmail(email.trim(), password);
       const user = pickUser(res);
       if (!user) throw new Error("Register returned no user.");
@@ -224,6 +242,13 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
+      // reCAPTCHA לפני Google
+      if (!recaptchaReady) throw new Error("reCAPTCHA not ready");
+      const verdict = await verify("google_signin");
+      if (!verdict.valid || !verdict.passed) {
+        throw new Error("אימות בוטים נכשל. נסו שוב.");
+      }
+
       const res = await signInWithGoogle(); // אם fallback ל-redirect, res=null
       if (!res?.user) {
         setInfo("מועברים להשלמת התחברות…");
@@ -279,6 +304,7 @@ export default function AuthPage() {
 
       {error && <div className="alert alert-danger">{error}</div>}
       {info && <div className="alert alert-info">{info}</div>}
+      {recaptchaError && <div className="alert alert-warning">שגיאה בטעינת אימות הבוטים: {recaptchaError}</div>}
 
       <form
         onSubmit={tab === "login" ? handleLogin : handleRegister}
@@ -334,7 +360,7 @@ export default function AuthPage() {
           )}
         </div>
 
-        <button className="btn btn-primary w-100" disabled={loading}>
+        <button className="btn btn-primary w-100" disabled={loading || !recaptchaReady}>
           {loading ? "Please wait…" : tab === "login" ? "Login" : "Create account"}
         </button>
 
@@ -342,7 +368,7 @@ export default function AuthPage() {
           type="button"
           className="btn btn-outline-secondary w-100 mt-2"
           onClick={handleGoogle}
-          disabled={loading}
+          disabled={loading || !recaptchaReady}
         >
           Continue with Google
         </button>
