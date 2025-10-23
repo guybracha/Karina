@@ -1,21 +1,25 @@
 // src/AppAlt.jsx
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Helmet, HelmetProvider } from "react-helmet-async";
+
+// Auth wiring
+import { watchAuth, collectRedirectResultIfAny } from "./services/auth";
+import { ensureUserDoc } from "./services/users";
 
 // Providers
 import { AuthProvider } from "./contexts/AuthContext";
 import { OrdersProvider } from "./contexts/OrdersContext";
-import { LogosQueueProvider } from "./contexts/LogosQueueContext.tsx"; // ⬅️ חדש
+import { LogosQueueProvider } from "./contexts/LogosQueueContext.tsx";
 
-// קומפוננטות משותפות
+// Shared UI
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import "./style/Site.css";
 
-// דפים
+// Pages
 import HomePage from "./pages/HomePage";
 import Catalog from "./pages/Catalog";
 import ProductDetail from "./pages/ProductDetail";
@@ -28,13 +32,13 @@ import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
 import OrderDetail from "./pages/OrderDetail";
 import Orders from "./pages/Orders";
-import AuthPage from "./pages/AuthPage";   // ✅ דף כניסה חדש
+import AuthPage from "./pages/AuthPage";
 import Legal from "./pages/Legal";
 
 import "./a11y/a11y.css";
 import A11yToolkit from "./a11y/A11yToolkit";
 import ReadAloud from "./a11y/ReadAloud";
-import A11yFab from "./a11y/A11yFab"; // ⬅️ FAB נגישות
+import A11yFab from "./a11y/A11yFab";
 
 /** ====================== קבועים ====================== */
 const GA_ID = "G-SHQSKGKY2C";
@@ -43,8 +47,8 @@ const IS_PROD = process.env.NODE_ENV === "production";
 /** מגלגל לראש בכל ניווט */
 function ScrollToTop() {
   const { pathname, search, hash } = useLocation();
-  React.useEffect(() => {
-    if (hash) return; // תן לעוגן לעבוד
+  useEffect(() => {
+    if (hash) return;
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [pathname, search, hash]);
   return null;
@@ -53,7 +57,7 @@ function ScrollToTop() {
 /** שולח page_view ל-GA4 בכל שינוי נתיב (SPA) */
 function GAListener() {
   const { pathname, search } = useLocation();
-  React.useEffect(() => {
+  useEffect(() => {
     if (!window.gtag) return;
     window.gtag("config", GA_ID, { page_path: pathname + (search || "") });
   }, [pathname, search]);
@@ -68,21 +72,18 @@ function RootSEO() {
     "https://karina.co.il";
   const url = base + pathname + (search || "");
 
-  const ogImage = `${base}/img/logo.png`; // עדיף מוחלט ל-social
+  const ogImage = `${base}/img/logo.png`;
   const title = "קארינה חולצות מודפסות";
   const description =
     "תצוגת פיתוח לדפים החדשים של קארינה: קטלוג, מוצר, עגלה, תשלום ועוד.";
 
   return (
     <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
-      {/* --- Title & Description כלליים (דפים ספציפיים יכולים להחליף) --- */}
       <title>{title}</title>
       <meta name="description" content={description} />
 
-      {/* --- Canonical דינמי ומוחלט --- */}
       <link rel="canonical" href={url} />
 
-      {/* --- Open Graph --- */}
       <meta property="og:type" content="website" />
       <meta property="og:locale" content="he_IL" />
       <meta property="og:title" content={title} />
@@ -92,21 +93,17 @@ function RootSEO() {
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
 
-      {/* --- Twitter --- */}
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={ogImage} />
 
-      {/* --- A11y/UX --- */}
       <meta name="theme-color" content="#ffffff" />
       <link rel="icon" href="/favicon.ico" />
 
-      {/* --- Preconnects לפונטים (שיפור CWV) --- */}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
 
-      {/* --- GA4 base scripts --- */}
       <script async src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}></script>
       <script>
         {`
@@ -117,33 +114,53 @@ function RootSEO() {
         `}
       </script>
 
-      {/* --- חסימת אינדוקס ב-staging/preview --- */}
       {!IS_PROD && <meta name="robots" content="noindex,nofollow" />}
     </Helmet>
   );
 }
 
 export default function AppAlt() {
+  // ---- חיווט יצירת/סנכרון users/{uid} ----
+  const bootstrapped = useRef(false);
+
+  useEffect(() => {
+    if (bootstrapped.current) return;
+    bootstrapped.current = true;
+
+    // 1) איסוף תוצאת Redirect (iOS / in-app browsers)
+    (async () => {
+      try {
+        const rr = await collectRedirectResultIfAny();
+        if (rr?.user) await ensureUserDoc(rr.user);
+      } catch (e) {
+        console.error("[redirect->ensureUserDoc]", e?.code, e?.message);
+      }
+    })();
+
+    // 2) מאזין גלובלי ל-auth (כולל ריענון דף)
+    const unsub = watchAuth(async (user) => {
+      if (!user) return;
+      try {
+        await ensureUserDoc(user);
+      } catch (e) {
+        console.error("[onAuthStateChanged->ensureUserDoc]", e?.code, e?.message);
+      }
+    });
+
+    return () => unsub?.();
+  }, []);
+
+  // דמויות לתשובות מהירות בצ'אט (לבקשתך)
   async function handleChatSend(text) {
     const t = (text || "").toLowerCase();
-
     if (t.includes("מחיר") || t.includes("הצעת")) {
-      return {
-        role: "assistant",
-        text: "בשמחה! השאירו פרטים וקובץ לוגו כאן: /contact ונחזיר הצעת מחיר מדויקת."
-      };
+      return { role: "assistant", text: "בשמחה! השאירו פרטים וקובץ לוגו כאן: /contact ונחזיר הצעת מחיר מדויקת." };
     }
     if (t.includes("מידה") || t.includes("מידות")) {
-      return {
-        role: "assistant",
-        text: "טבלת מידות נמצאת בכל דף מוצר. מומלץ למדוד חולצה קיימת ולהשוות לטבלה."
-      };
+      return { role: "assistant", text: "טבלת מידות נמצאת בכל דף מוצר. מומלץ למדוד חולצה קיימת ולהשוות לטבלה." };
     }
     if (t.includes("הדמיה") || t.includes("לוגו")) {
-      return {
-        role: "assistant",
-        text: "אפשר להעלות לוגו בדף המוצר ולקבל הדמיה מיידית. קבצים מומלצים: PDF/SVG/AI או PNG שקוף 300dpi."
-      };
+      return { role: "assistant", text: "אפשר להעלות לוגו בדף המוצר ולקבל הדמיה מיידית. קבצים מומלצים: PDF/SVG/AI או PNG שקוף 300dpi." };
     }
     return { role: "assistant", text: "קיבלתי: " + text };
   }
@@ -152,17 +169,14 @@ export default function AppAlt() {
     <HelmetProvider>
       <AuthProvider>
         <OrdersProvider>
-          {/* ⬇️ עטיפה גלובלית לכל העץ כדי ש־useLogosQueue יעבוד בכל הדפים */}
           <LogosQueueProvider>
             <BrowserRouter>
-              {/* ✅ SEO/OG/GA שורשי ודינמי */}
               <RootSEO />
 
               <Navbar />
 
               <main className="min-vh-100">
                 <ScrollToTop />
-                {/* ✅ דיווח page_view בכל ניווט */}
                 <GAListener />
 
                 <Routes>
@@ -174,9 +188,9 @@ export default function AppAlt() {
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/faq" element={<FAQ />} />
                   <Route path="/about" element={<About />} />
-                  <Route path="/auth" element={<AuthPage />} /> {/* ✅ דף כניסה */}
+                  <Route path="/auth" element={<AuthPage />} />
 
-                  {/* מוגן למשתמש מחובר */}
+                  {/* מוגן */}
                   <Route
                     path="/checkout"
                     element={
@@ -210,7 +224,7 @@ export default function AppAlt() {
                     }
                   />
 
-                  {/* 404 */}
+                  {/* 404 + legal */}
                   <Route path="*" element={<NotFound />} />
                   <Route path="/legal" element={<Legal />} />
                 </Routes>
