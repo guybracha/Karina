@@ -1,5 +1,5 @@
 // src/pages/Account.jsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserProfile, updateUserProfile } from "../services/users";
@@ -18,6 +18,7 @@ import {
 
 import { doc, onSnapshot } from "firebase/firestore";
 
+/* ===== Helpers ===== */
 function shekels(amountCentsOrFloat) {
   let n = Number(amountCentsOrFloat || 0);
   if (n > 0 && n % 1 === 0 && n > 1000) n = n / 100;
@@ -46,7 +47,6 @@ function statusBadgeClass(status) {
 const prettyPhone = (s = "") => {
   const d = String(s || "").replace(/\D+/g, "");
   if (!d) return "";
-  // 05X-XXXXXXX / כללית: 3-שאר
   return d.replace(/^(\d{3})(\d+)$/, "$1-$2");
 };
 
@@ -58,7 +58,7 @@ function friendlyFirestoreError(err) {
     return "נחסמה הגישה עקב App Check (אבטחה). נסו לרענן דף, להתחבר מחדש, או לעבוד בחלון אינקוגניטו. אם הבעיה נמשכת — כבו זמנית Enforcement ב־App Check או הפעילו DEBUG token.";
   }
   if (code === "permission-denied" || /Missing or insufficient permissions/i.test(msg)) {
-    return "אין הרשאה לשמור כרגע (יתכן עקב App Check או כללי אבטחה).";
+    return "אין הרשאה לשמור או לקרוא כעת (יתכן עקב App Check או כללי אבטחה).";
   }
   return null;
 }
@@ -68,6 +68,7 @@ export default function Account() {
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState(null);
+  const [profileErr, setProfileErr] = useState(null);
 
   // הזמנות + עימוד
   const [orders, setOrders] = useState([]);
@@ -96,12 +97,28 @@ export default function Account() {
   const [mailMsg, setMailMsg] = useState(null);
   const [mailErr, setMailErr] = useState(null);
 
+  // ניהול timeouts כדי לנקות ב-unmount
+  const timeoutsRef = useRef([]);
+
+  const pushTimeout = (fn, ms) => {
+    const t = window.setTimeout(fn, ms);
+    timeoutsRef.current.push(t);
+    return t;
+  };
+  useEffect(() => {
+    return () => {
+      timeoutsRef.current.forEach((t) => clearTimeout(t));
+      timeoutsRef.current = [];
+    };
+  }, []);
+
   // טעינה ראשונית (fallback) + מילוי טופס
   useEffect(() => {
     let mounted = true;
     async function run() {
       if (!user) return;
       setLoadingProfile(true);
+      setProfileErr(null);
       try {
         const p = await getUserProfile(user.uid);
         if (mounted) {
@@ -111,6 +128,11 @@ export default function Account() {
           setEditPhoneNumber(p?.phoneNumber || "");
           setEditCompany(p?.company || "");
         }
+      } catch (err) {
+        if (mounted) {
+          const friendly = friendlyFirestoreError(err);
+          setProfileErr(friendly || err?.message || "שגיאה בטעינת הפרופיל.");
+        }
       } finally {
         if (mounted) setLoadingProfile(false);
       }
@@ -119,21 +141,29 @@ export default function Account() {
     return () => { mounted = false; };
   }, [user]);
 
-  // 🔴 מאזין בזמן אמת למסמך המשתמש — עוקף קאש ומתעדכן מיידית
+  // מאזין בזמן אמת למסמך המשתמש — כולל טיפול בשגיאת הרשאות/AppCheck
   useEffect(() => {
     if (!user?.uid) return;
     const ref = doc(db, "users", user.uid);
-    const unsub = onSnapshot(ref, (snap) => {
-      const d = snap.data() || {};
-      setProfile(d);
-      // אל תדרוס הקלדה חיה במודאל; עדכן רק אם המודאל סגור
-      if (!showEdit) {
-        setEditName(d.displayName || user.displayName || user.email?.split("@")[0] || "");
-        setEditEmail(d.email || user.email || "");
-        setEditPhoneNumber(d.phoneNumber || "");
-        setEditCompany(d.company || "");
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        setProfileErr(null);
+        const d = snap.data() || {};
+        setProfile(d);
+        // אל תדרוס הקלדה חיה במודאל; עדכון שדות רק כשהמודאל סגור
+        if (!showEdit) {
+          setEditName(d.displayName || user.displayName || user.email?.split("@")[0] || "");
+          setEditEmail(d.email || user.email || "");
+          setEditPhoneNumber(d.phoneNumber || "");
+          setEditCompany(d.company || "");
+        }
+      },
+      (err) => {
+        const friendly = friendlyFirestoreError(err);
+        setProfileErr(friendly || err?.message || "שגיאה בקריאת הפרופיל בזמן אמת.");
       }
-    });
+    );
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, showEdit]);
@@ -147,8 +177,8 @@ export default function Account() {
       try {
         const { data, nextCursor } = await getMyOrders(user.uid, PAGE_SIZE, null);
         if (!cancelled) {
-          setOrders(data);
-          setNextCursor(nextCursor);
+          setOrders(data || []);
+          setNextCursor(nextCursor || null);
         }
       } finally {
         if (!cancelled) setLoadingOrders(false);
@@ -163,8 +193,8 @@ export default function Account() {
     setLoadingMore(true);
     try {
       const res = await getMyOrders(user.uid, PAGE_SIZE, nextCursor);
-      setOrders((prev) => [...prev, ...res.data]);
-      setNextCursor(res.nextCursor);
+      setOrders((prev) => [...prev, ...(res?.data || [])]);
+      setNextCursor(res?.nextCursor || null);
     } finally {
       setLoadingMore(false);
     }
@@ -243,7 +273,7 @@ export default function Account() {
         }
       }
 
-      // 3) עדכון פרופיל ב־Firestore; הפונקציה מחזירה צילום מהשרת
+      // 3) עדכון פרופיל ב־Firestore; השירות מנרמל טלפון ושומר רק מפתחות מותרים
       const fresh = await updateUserProfile(user.uid, {
         displayName: nameTrim,
         email: emailTrim,
@@ -255,18 +285,18 @@ export default function Account() {
       if (user?.reload) await user.reload();
 
       setSaveMsg("השינויים נשמרו בהצלחה.");
-      setTimeout(() => setShowEdit(false), 600);
+      pushTimeout(() => setShowEdit(false), 600);
     } catch (err) {
       console.error(err);
       const friendly = friendlyFirestoreError(err);
       setSaveErr(friendly || err?.message || "שמירה נכשלה. נסו שוב.");
     } finally {
       setSaving(false);
-      window.setTimeout(() => { setSaveMsg(null); setSaveErr(null); }, 4000);
+      pushTimeout(() => { setSaveMsg(null); setSaveErr(null); }, 4000);
     }
   }
 
-  // שליחת מייל בדיקה
+  // שליחת מייל בדיקה (Cloud Functions)
   async function handleSendTestEmail() {
     setMailErr(null);
     setMailMsg(null);
@@ -286,13 +316,21 @@ export default function Account() {
       setMailErr(e?.message || "שליחת המייל נכשלה");
     } finally {
       setMailBusy(false);
-      window.setTimeout(() => { setMailMsg(null); setMailErr(null); }, 6000);
+      pushTimeout(() => { setMailMsg(null); setMailErr(null); }, 6000);
     }
   }
 
   return (
     <div className="container py-5">
       <h1 className="mb-4">החשבון שלי</h1>
+
+      {/* באפר כלל-מערכתי לשגיאות פרופיל/הרשאות */}
+      {profileErr && (
+        <div className="alert alert-warning d-flex align-items-start gap-2">
+          <div className="fw-semibold">שימו 💡</div>
+          <div>{profileErr}</div>
+        </div>
+      )}
 
       {/* פרטי משתמש */}
       <div className="card mb-4 shadow-sm">
@@ -471,7 +509,7 @@ export default function Account() {
                     ביטול
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={saving || !user}>
-                    {saving ? "שומר…" : "שמור"}
+                    {saving ? "শומר…" : "שמור"}
                   </button>
                 </div>
               </form>

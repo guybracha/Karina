@@ -14,13 +14,20 @@ import {
   signOut,
 } from "firebase/auth";
 
-/* ========== Helpers: UA detection for iOS & in-app browsers ========== */
+/* ========== Guards ========== */
+const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
+
+/* ========== Helpers: UA detection for iOS & in-app browsers (SSR-safe) ========== */
+function getUA() {
+  if (!isBrowser) return "";
+  try { return navigator.userAgent || ""; } catch { return ""; }
+}
 function isIOS() {
-  const ua = navigator.userAgent || "";
+  const ua = getUA();
   return /iP(hone|ad|od)/i.test(ua);
 }
 function isInAppBrowser() {
-  const ua = navigator.userAgent || "";
+  const ua = getUA();
   // דפדפנים נפוצים בתוך אפליקציות
   return /\bFBAV|FBAN|Instagram|Line\/|WeChat|Twitter|Pinterest|Snapchat|TikTok/i.test(ua);
 }
@@ -28,18 +35,23 @@ function isInAppBrowser() {
 /* ========== Persistence & public API ========== */
 export const watchAuth = (cb) => onAuthStateChanged(auth, cb);
 
-// שומר מצב התחברות מקומית; אם נכשל (למשל חוסמי צד־ג’) — מתעלמים
-setPersistence(auth, browserLocalPersistence).catch(() => {});
+// שמירת סשן מקומי; אם נכשל (חוסם פופאפים/ITP וכד’) — מתעלמים בשקט
+try {
+  setPersistence(auth, browserLocalPersistence).catch(() => {});
+} catch { /* SSR */ }
 
 /* דגל redirect ב-sessionStorage כדי שה-UI ידע לאסוף תוצאה */
 const REDIRECT_FLAG = "karina:auth:redirecting";
 export const markRedirecting = () => {
+  if (!isBrowser) return;
   try { sessionStorage.setItem(REDIRECT_FLAG, "1"); } catch {}
 };
 export const clearRedirecting = () => {
+  if (!isBrowser) return;
   try { sessionStorage.removeItem(REDIRECT_FLAG); } catch {}
 };
 export const isRedirecting = () => {
+  if (!isBrowser) return false;
   try { return sessionStorage.getItem(REDIRECT_FLAG) === "1"; } catch { return false; }
 };
 
@@ -52,22 +64,24 @@ export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
 
-  if (isIOS() || isInAppBrowser()) {
+  // בסביבות לא-דפדפן אין טעם לנסות popup — ניפול ישירות ל-redirect
+  if (!isBrowser || isIOS() || isInAppBrowser()) {
     markRedirecting();
     await signInWithRedirect(auth, provider);
-    return null; // נאסוף אחר כך ב-collectRedirectResultIfAny
+    return null; // תיאסף התוצאה מאוחר יותר
   }
 
   try {
     return await signInWithPopup(auth, provider);
   } catch (e) {
     const code = e?.code || "";
-    const fallback =
+    const shouldFallback =
       code === "auth/popup-blocked" ||
       code === "auth/operation-not-supported-in-this-environment" ||
-      code === "auth/popup-closed-by-user";
+      code === "auth/popup-closed-by-user" ||
+      code === "auth/cancelled-popup-request";
 
-    if (fallback) {
+    if (shouldFallback) {
       markRedirecting();
       await signInWithRedirect(auth, provider);
       return null;
@@ -79,7 +93,8 @@ export async function signInWithGoogle() {
 /* רישום באימייל/סיסמה — מחזיר UserCredential */
 export const registerWithEmail = async (email, password) => {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
-  try { await sendEmailVerification(cred.user); } catch { /* לא חוסם את הזרימה */ }
+  // שליחת אימות לא חוסמת את הזרימה
+  try { await sendEmailVerification(cred.user); } catch {}
   return cred;
 };
 
@@ -95,6 +110,7 @@ export const logout = () => signOut(auth);
  * מחזיר UserCredential או null.
  */
 export async function collectRedirectResultIfAny() {
+  // בקשה “עיוורת” ל-getRedirectResult בטוחה; נחזיר null אם אין תוצאה
   try {
     const res = await getRedirectResult(auth);
     clearRedirecting();

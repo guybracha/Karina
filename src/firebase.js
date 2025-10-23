@@ -26,30 +26,37 @@ import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/functions";
 import {
   initializeAppCheck,
-  ReCaptchaEnterpriseProvider,          // Enterprise
-  ReCaptchaV3Provider,                  // v3 fallback
+  ReCaptchaEnterpriseProvider,   // Enterprise (מומלץ בפרוד)
+  ReCaptchaV3Provider,          // v3 fallback
   onTokenChanged as onAppCheckTokenChanged,
   getToken as getAppCheckToken,
 } from "firebase/app-check";
 
 /* =========================
-   Config & Environment
+   Environment & Guards
    ========================= */
 const g = (typeof globalThis !== "undefined" ? globalThis : (typeof window !== "undefined" ? window : {}));
 const isBrowser = typeof window !== "undefined";
 const isDev = process.env.NODE_ENV !== "production";
 
-/** קונפיג מ-ENV + לוגים ב-DEV */
+/** מאחד ENV בקומפילציה (process.env.REACT_APP_*) + ריצה (window.__ENV__) */
+function fromEnv(key, runtimeKey) {
+  const runtime = (isBrowser && window.__ENV__) || {};
+  return (process.env[key] || runtime[runtimeKey] || "").toString().trim();
+}
+
+/* =========================
+   Firebase Config
+   ========================= */
 function resolveFirebaseConfig() {
-  const RUNTIME = (typeof window !== "undefined" && window.__ENV__) || {};
   const cfg = {
-    apiKey:             process.env.REACT_APP_FB_API_KEY             || RUNTIME.FIREBASE_API_KEY             || "",
-    authDomain:         process.env.REACT_APP_FB_AUTH_DOMAIN         || RUNTIME.FIREBASE_AUTH_DOMAIN         || "",
-    projectId:          process.env.REACT_APP_FB_PROJECT_ID          || RUNTIME.FIREBASE_PROJECT_ID          || "",
-    storageBucket:      process.env.REACT_APP_FB_STORAGE_BUCKET      || RUNTIME.FIREBASE_STORAGE_BUCKET      || "",
-    messagingSenderId:  process.env.REACT_APP_FB_MESSAGING_SENDER_ID || RUNTIME.FIREBASE_MESSAGING_SENDER_ID || "",
-    appId:              process.env.REACT_APP_FB_APP_ID              || RUNTIME.FIREBASE_APP_ID              || "",
-    measurementId:      process.env.REACT_APP_FB_MEASUREMENT_ID      || RUNTIME.FIREBASE_MEASUREMENT_ID      || undefined,
+    apiKey:            fromEnv("REACT_APP_FB_API_KEY",            "FIREBASE_API_KEY"),
+    authDomain:        fromEnv("REACT_APP_FB_AUTH_DOMAIN",        "FIREBASE_AUTH_DOMAIN"),
+    projectId:         fromEnv("REACT_APP_FB_PROJECT_ID",         "FIREBASE_PROJECT_ID"),
+    storageBucket:     fromEnv("REACT_APP_FB_STORAGE_BUCKET",     "FIREBASE_STORAGE_BUCKET"),
+    messagingSenderId: fromEnv("REACT_APP_FB_MESSAGING_SENDER_ID","FIREBASE_MESSAGING_SENDER_ID"),
+    appId:             fromEnv("REACT_APP_FB_APP_ID",             "FIREBASE_APP_ID"),
+    measurementId:     fromEnv("REACT_APP_FB_MEASUREMENT_ID",     "FIREBASE_MEASUREMENT_ID") || undefined,
   };
 
   if (isDev) {
@@ -57,15 +64,18 @@ function resolveFirebaseConfig() {
       ...cfg,
       apiKey: cfg.apiKey ? "<set>" : "<missing>",
       appId:  cfg.appId  ? "<set>" : "<missing>",
+      measurementId: cfg.measurementId ? "<set>" : "<missing>"
     });
-    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא .env.local");
+    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא .env.local / הגדרות CI.");
     if (cfg.storageBucket && !/\.(appspot\.com|firebasestorage\.app)$/i.test(cfg.storageBucket)) {
-      console.warn("⚠️ storageBucket לא נראה תקין (צפה ל- <project>.appspot.com או firebasestorage.app)");
+      console.warn("⚠️ storageBucket לא נראה תקין (צפה ל־ <project>.appspot.com או firebasestorage.app)");
     }
   }
 
-  const missing = ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"].filter(k => !cfg[k]);
+  const must = ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"];
+  const missing = must.filter(k => !cfg[k]);
   if (missing.length) throw new Error(`[Firebase config] חסרים משתנים: ${missing.join(", ")}`);
+
   return cfg;
 }
 
@@ -75,12 +85,10 @@ const firebaseConfig = resolveFirebaseConfig();
    App (singleton)
    ========================= */
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-
-// חשיפה נוחה (גם בפרוד לדיבוג קצר)
 if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =========================
-   Auth – popup + local persistence
+   Auth
    ========================= */
 export const auth = (() => {
   try {
@@ -94,19 +102,14 @@ export const auth = (() => {
 })();
 
 /* =========================
-   App Check – Enterprise + v3 fallback
+   App Check
    ========================= */
 export let appCheck = null;
 
-// קריאה גם מ-window.__ENV__ אם יש (כמו בשאר הקונפיג)
-const RUNTIME = (typeof window !== "undefined" && window.__ENV__) || {};
-const ENTERPRISE_SITE_KEY =
-  (process.env.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY || RUNTIME.RECAPTCHA_ENTERPRISE_SITE_KEY || "").trim();
-const V3_SITE_KEY =
-  (process.env.REACT_APP_RECAPTCHA_V3_SITE_KEY || RUNTIME.RECAPTCHA_V3_SITE_KEY || "").trim();
-
-const ENABLE_APPCHECK = String(process.env.REACT_APP_ENABLE_APPCHECK || "true").toLowerCase() === "true";
-const ENV_DEBUG_TOKEN = (process.env.REACT_APP_APPCHECK_DEBUG_TOKEN || RUNTIME.APPCHECK_DEBUG_TOKEN || "").trim();
+const ENABLE_APPCHECK = (fromEnv("REACT_APP_ENABLE_APPCHECK", "ENABLE_APPCHECK") || "true").toLowerCase() === "true";
+const ENTERPRISE_SITE_KEY = fromEnv("REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
+const V3_SITE_KEY         = fromEnv("REACT_APP_RECAPTCHA_V3_SITE_KEY",         "RECAPTCHA_V3_SITE_KEY");
+const ENV_DEBUG_TOKEN     = fromEnv("REACT_APP_APPCHECK_DEBUG_TOKEN",          "APPCHECK_DEBUG_TOKEN");
 
 async function getAppCheckAttestation(forceRefresh = false) {
   try {
@@ -118,13 +121,13 @@ async function getAppCheckAttestation(forceRefresh = false) {
 
 if (isBrowser && ENABLE_APPCHECK) {
   try {
-    // Debug token בלוקאל
+    // Debug token בלוקאל/דיבוג
     if (ENV_DEBUG_TOKEN) {
       g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN;
       if (isDev) console.info("[AppCheck] Debug token enabled from env.");
     }
 
-    // נבחר פרוביידר: Enterprise קודם, אם אין – v3
+    // בוחרים provider רק אם באמת יש site key
     let provider = null;
     if (ENTERPRISE_SITE_KEY) {
       provider = new ReCaptchaEnterpriseProvider(ENTERPRISE_SITE_KEY);
@@ -132,11 +135,13 @@ if (isBrowser && ENABLE_APPCHECK) {
       provider = new ReCaptchaV3Provider(V3_SITE_KEY);
     }
 
-    if (!provider && !ENV_DEBUG_TOKEN) {
-      console.warn("[AppCheck] No provider site key and no debug token → skipping App Check init.");
-    } else if (!provider && ENV_DEBUG_TOKEN) {
-      // עדיין מומלץ לספק מפתח v3 בלוקאל כדי לאתחל את App Check
-      console.warn("[AppCheck] Debug token present but no site key. Add RECAPTCHA_V3/ENTERPRISE site key for init.");
+    if (!provider) {
+      // אין site key בכלל – לא נאתחל App Check (אבל לא נזרוק שגיאה)
+      if (ENV_DEBUG_TOKEN) {
+        console.warn("[AppCheck] Debug token קיים אבל אין SITE KEY; App Check לא יאותחל. מומלץ להגדיר RECAPTCHA_V3_SITE_KEY גם בלוקאל.");
+      } else {
+        console.warn("[AppCheck] No SITE KEY and no DEBUG TOKEN. Skipping App Check init.");
+      }
     } else {
       appCheck = initializeAppCheck(app, {
         provider,
@@ -146,10 +151,10 @@ if (isBrowser && ENABLE_APPCHECK) {
       try { window.appCheck = appCheck; } catch {}
 
       onAppCheckTokenChanged(appCheck, (tok) => {
-        console.log("AppCheck:", tok ? "OK" : "MISSING");
+        if (isDev) console.log("[AppCheck] token:", tok ? "OK" : "MISSING");
       });
 
-      // טריגר ראשוני (יעזור לאתר בעיות דומיין/מפתח)
+      // טריגר ראשוני – רק אם יש provider
       getAppCheckToken(appCheck, true).catch(e =>
         console.warn("[AppCheck] getToken failed:", e?.message || e)
       );
@@ -172,7 +177,7 @@ if (isBrowser) {
 }
 
 /* =========================
-   Firestore (persistent cache + multi-tab)
+   Firestore (cache + multi-tab)
    ========================= */
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
@@ -185,7 +190,7 @@ const bucket = (firebaseConfig.storageBucket || "").trim();
 export const storage = bucket ? getStorage(app, `gs://${bucket}`) : getStorage(app);
 if (isDev) console.info("[Storage] using bucket:", bucket ? `gs://${bucket}` : "(default)");
 
-const FUNCTIONS_REGION = process.env.REACT_APP_FB_FUNCTIONS_REGION || "europe-west1";
+const FUNCTIONS_REGION = fromEnv("REACT_APP_FB_FUNCTIONS_REGION", "FB_FUNCTIONS_REGION") || "europe-west1";
 export const functions = getFunctions(app, FUNCTIONS_REGION);
 
 /* =========================
@@ -228,7 +233,7 @@ if (isBrowser) {
 /* =========================
    Emulators (optional)
    ========================= */
-const wantEmulators = String(process.env.REACT_APP_USE_EMULATORS || "false").toLowerCase() === "true";
+const wantEmulators = (fromEnv("REACT_APP_USE_EMULATORS", "USE_EMULATORS") || "false").toLowerCase() === "true";
 const isLocalHost = isBrowser && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname);
 
 if (wantEmulators && isLocalHost) {
@@ -252,12 +257,13 @@ export async function ensureAuthTokenFresh() {
   return await user.getIdToken(true);
 }
 
-// התחזות כ-UID (דוגמה)
-const IMPERSONATE_FN_NAME = process.env.REACT_APP_FN_IMPERSONATE || "adminImpersonate";
+// App Check token (אם מאותחל)
 async function getAppCheckTokenSafe() { return await getAppCheckAttestation(false); }
 
+// התחזות כ-UID (Cloud Function adminImpersonate)
+const IMPERSONATE_FN_NAME = fromEnv("REACT_APP_FN_IMPERSONATE", "FN_IMPERSONATE") || "adminImpersonate";
 export async function impersonateUser(uid) {
-  const appCheckToken = await getAppCheckTokenSafe();
+  const appCheckToken = await getAppCheckTokenSafe(); // יכול להיות null; הפונקציה בענן צריכה לדעת לקבל null
   const call = httpsCallable(functions, IMPERSONATE_FN_NAME);
   const { data } = await call({ uid, appCheckToken });
   if (!data?.customToken) throw new Error("Impersonate failed: no customToken");
@@ -265,7 +271,7 @@ export async function impersonateUser(uid) {
   return cred.user;
 }
 
-// QA לוג ב-DEV
+// QA לוג ב־DEV
 if (isBrowser && isDev) {
   onAuthStateChanged(auth, (u) => {
     console.info("[Auth] state:", u ? { uid: u.uid, email: u.email } : "(signed out)");

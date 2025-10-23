@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocFromCache,
+  getDocFromServer,     // ⬅️ חשוב: נשתמש במקום getDoc(..., {source:'server'})
   setDoc,
   serverTimestamp,
   deleteField,
@@ -46,6 +47,12 @@ function pickAllowed(obj = {}) {
   return out;
 }
 
+async function readFresh(ref) {
+  // קורא ישירות מהשרת כדי לעקוף קאש/IndexedDB
+  const fresh = await getDocFromServer(ref);
+  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
+}
+
 /* ---------- Create/Sync basic user doc ---------- */
 export async function ensureUserDoc(user, extra = null) {
   if (!user?.uid) return null;
@@ -60,7 +67,7 @@ export async function ensureUserDoc(user, extra = null) {
 
   const email =
     user.email && isValidEmail(user.email)
-      ? user.email.toLowerCase()
+      ? String(user.email).toLowerCase()
       : null;
 
   // נרמול טלפון לספרות בלבד + בדיקה
@@ -107,9 +114,7 @@ export async function ensureUserDoc(user, extra = null) {
     await setDoc(ref, { ...base, ...marketing }, { merge: true });
   }
 
-  // החזרה מהשרת כדי לעקוף קאש
-  const fresh = await getDoc(ref, { source: "server" });
-  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
+  return await readFresh(ref);
 }
 
 /* ---------- Read profile (cache-first) ---------- */
@@ -120,7 +125,9 @@ export async function getUserProfile(uid) {
   try {
     const snapCache = await getDocFromCache(ref);
     if (snapCache.exists()) return { id: snapCache.id, ...snapCache.data() };
-  } catch { /* ignore cache miss */ }
+  } catch {
+    // ignore cache miss
+  }
 
   const snap = await getDoc(ref);
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
@@ -181,17 +188,24 @@ export async function updateUserProfile(uid, data = {}) {
       payload.marketingConsentAt = deleteField();
       payload.marketingConsentMethod = deleteField();
     }
-  } else if (typeof safe.marketingConsentMethod === "string" && safe.marketingConsentMethod.trim()) {
+  } else if (
+    typeof safe.marketingConsentMethod === "string" &&
+    safe.marketingConsentMethod.trim()
+  ) {
+    // עדכון שיטת האיסוף ללא שינוי ה-boolean (אם ביקשת מפורשות)
     payload.marketingConsentMethod = clean(safe.marketingConsentMethod);
   }
 
   payload.updatedAt = serverTimestamp();
 
-  await setDoc(ref, payload, { merge: true });
+  // אל תבצע כתיבה מיותרת אם אין מה לשנות
+  const keysToWrite = Object.keys(payload).filter((k) => payload[k] !== undefined);
+  if (keysToWrite.length === 0) {
+    return await readFresh(ref);
+  }
 
-  // החזרה מהשרת כדי לראות את הערכים המעודכנים (ולעקוף קאש/IndexedDB)
-  const fresh = await getDoc(ref, { source: "server" });
-  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
+  await setDoc(ref, payload, { merge: true });
+  return await readFresh(ref);
 }
 
 /* ---------- Marketing helpers ---------- */
@@ -209,8 +223,7 @@ export async function setMarketingConsentTrue(uid, method = "manual_update") {
     },
     { merge: true }
   );
-  const fresh = await getDoc(ref, { source: "server" });
-  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
+  return await readFresh(ref);
 }
 
 export async function setMarketingConsentFalse(uid) {
@@ -227,6 +240,5 @@ export async function setMarketingConsentFalse(uid) {
     },
     { merge: true }
   );
-  const fresh = await getDoc(ref, { source: "server" });
-  return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
+  return await readFresh(ref);
 }
