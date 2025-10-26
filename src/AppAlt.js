@@ -131,7 +131,16 @@ export default function AppAlt() {
     (async () => {
       try {
         const rr = await collectRedirectResultIfAny();
-        if (rr?.user) await ensureUserDoc(rr.user);
+        const user = rr?.user;
+        if (!user) return;
+
+        // דילוג על אנונימי/ללא UID
+        if (user.isAnonymous || !user.uid) {
+          console.debug("[redirect] skip ensureUserDoc (anonymous/no uid)");
+          return;
+        }
+
+        await ensureUserDoc(user);
       } catch (e) {
         console.error("[redirect->ensureUserDoc]", e?.code, e?.message);
       }
@@ -140,6 +149,19 @@ export default function AppAlt() {
     // 2) מאזין גלובלי ל-auth (כולל ריענון דף)
     const unsub = watchAuth(async (user) => {
       if (!user) return;
+
+      // אם המשתמש אנונימי – דלג
+      if (user.isAnonymous) {
+        console.debug("[Auth] anonymous session -> skip ensureUserDoc");
+        return;
+      }
+
+      // ודא שיש UID תקין
+      if (!user.uid) {
+        console.warn("[Auth] user without UID -> skip ensureUserDoc");
+        return;
+      }
+
       try {
         await ensureUserDoc(user);
       } catch (e) {
