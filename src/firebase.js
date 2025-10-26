@@ -7,7 +7,6 @@ import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
   connectAuthEmulator,
-  onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithCustomToken,
   signOut,
@@ -90,23 +89,21 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =======================================================================
-   App Check (reCAPTCHA Enterprise) — ניתן לכיבוי/הפעלה דרך ENV
+   App Check (reCAPTCHA Enterprise)
+   ברירת מחדל: כבוי, כדי לעצור 403/throttled. הפעלה רק אם APPCHECK_ENABLE=true.
    ======================================================================= */
 const RECAPTCHA_ENTERPRISE_SITE_KEY =
   fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
 
+// ⚠️ שינוי חשוב: כברירת-מחדל FALSE, אפילו אם יש מפתח. הפעלה ידנית בלבד.
 const APPCHECK_ENABLE = (() => {
-  // "true" / "false" / "" (ברירת מחדל: true אם יש מפתח)
-  const raw = fromEnv("APPCHECK_ENABLE");
-  if (!raw) return !!RECAPTCHA_ENTERPRISE_SITE_KEY; // יש מפתח? נפעיל
+  const raw = fromEnv("APPCHECK_ENABLE"); // 'true' / '1' כדי להפעיל
   return /^1|true|yes$/i.test(raw);
 })();
 
-const APPCHECK_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN"); // אופציונלי: ערך "true" או טוקן ידני
+const APPCHECK_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN"); // אופציונלי
 
 if (isBrowser && APPCHECK_DEBUG_TOKEN) {
-  // מאפשר לעקוף Throttle בסביבת פיתוח / מכשיר בעייתי
-  // שים "true" לקבלת טוקן אקראי בקונסול כרום, או הדבק טוקן ספציפי
   // eslint-disable-next-line no-undef
   self.FIREBASE_APPCHECK_DEBUG_TOKEN = APPCHECK_DEBUG_TOKEN === "true" ? true : APPCHECK_DEBUG_TOKEN;
 }
@@ -114,11 +111,11 @@ if (isBrowser && APPCHECK_DEBUG_TOKEN) {
 export const appCheck = (function initAppCheck() {
   if (!isBrowser) return null;
   if (!APPCHECK_ENABLE) {
-    console.warn("[AppCheck] Disabled by APPCHECK_ENABLE or missing site key.");
+    console.warn("[AppCheck] Disabled (APPCHECK_ENABLE not true).");
     return null;
   }
   if (!RECAPTCHA_ENTERPRISE_SITE_KEY) {
-    console.warn("[AppCheck] Missing reCAPTCHA Enterprise site key – App Check not initialized.");
+    console.warn("[AppCheck] Missing reCAPTCHA Enterprise site key – not initializing.");
     return null;
   }
   try {
@@ -126,14 +123,12 @@ export const appCheck = (function initAppCheck() {
       provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_ENTERPRISE_SITE_KEY),
       isTokenAutoRefreshEnabled: true,
     });
-
     if (isDev) {
       onAppCheckTokenChanged(inst, (token) => {
         console.info("[AppCheck] token state:", token ? "OK" : "MISSING");
       });
-      getAppCheckToken(inst, false).catch(() => {}); // שאיבה ראשונית (אופציונלי)
+      getAppCheckToken(inst, false).catch(() => {});
     }
-
     return inst;
   } catch (e) {
     console.warn("[AppCheck] init failed:", e?.message || e);
@@ -244,14 +239,12 @@ if (wantEmulators && isLocalHost) {
    Helpers
    ========================= */
 
-// מחזיר ID token עדכני של המשתמש המחובר
 export async function ensureAuthTokenFresh(force = true) {
   const user = auth.currentUser;
   if (!user) throw new Error("No authenticated user");
   return await user.getIdToken(!!force);
 }
 
-// קבלת App Check token (ייתכן null אם לא מאותחל/Monitoring בלבד)
 export async function getAppCheckTokenSafe(force = false) {
   try {
     if (!appCheck) return null;
@@ -262,10 +255,9 @@ export async function getAppCheckTokenSafe(force = false) {
   }
 }
 
-// התחזות כ-UID (Cloud Function adminImpersonate)
 const IMPERSONATE_FN_NAME = fromEnv("FN_IMPERSONATE") || "adminImpersonate";
 export async function impersonateUser(uid) {
-  const appCheckToken = await getAppCheckTokenSafe(); // יכול להיות null (מותר)
+  const appCheckToken = await getAppCheckTokenSafe(); // יכול להיות null
   const call = httpsCallable(functions, IMPERSONATE_FN_NAME);
   const { data } = await call({ uid, appCheckToken });
   if (!data?.customToken) throw new Error("Impersonate failed: no customToken");
@@ -273,18 +265,7 @@ export async function impersonateUser(uid) {
   return cred.user;
 }
 
-// QA לוג ב־DEV
 // expose helpers to window (dev / debug)
-if (isBrowser && isDev) {
-  try {
-    window.getAppCheckTokenSafe = getAppCheckTokenSafe;
-    window.ensureAuthTokenFresh = ensureAuthTokenFresh;
-  } catch (e) {
-    console.warn("[Firebase] expose helpers failed:", e);
-  }
-}
-
-// === Dev helpers on window (לבדיקה ידנית בקונסול) ===
 if (typeof window !== "undefined") {
   try {
     window.getAppCheckTokenSafe = getAppCheckTokenSafe;
@@ -294,7 +275,7 @@ if (typeof window !== "undefined") {
     window.firebaseDb = db;
     window.firebaseFunctions = functions;
     window.firebaseStorage = storage;
-    window.appCheckInstance = appCheck; // יכול להיות null אם כבוי
+    window.appCheckInstance = appCheck; // null כשכבוי
     console.info("[Firebase] debug helpers attached to window");
   } catch (e) {
     console.warn("[Firebase] expose helpers failed:", e);
@@ -302,4 +283,3 @@ if (typeof window !== "undefined") {
 }
 
 export default app;
-
