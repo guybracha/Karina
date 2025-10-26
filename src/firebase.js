@@ -284,6 +284,22 @@ if (isBrowser && isDev) {
   }
 }
 
+// === Dev helpers on window (לבדיקה ידנית בקונסול) ===
+if (typeof window !== "undefined") {
+  try {
+    window.getAppCheckTokenSafe = getAppCheckTokenSafe;
+    window.ensureAuthTokenFresh = ensureAuthTokenFresh;
+    window.firebaseApp = app;
+    window.firebaseAuth = auth;
+    window.firebaseDb = db;
+    window.firebaseFunctions = functions;
+    window.firebaseStorage = storage;
+    window.appCheckInstance = appCheck; // יכול להיות null אם כבוי
+    console.info("[Firebase] debug helpers attached to window");
+  } catch (e) {
+    console.warn("[Firebase] expose helpers failed:", e);
+  }
+}
 
 export default app;
 
