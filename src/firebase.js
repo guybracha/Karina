@@ -274,10 +274,16 @@ export async function impersonateUser(uid) {
 }
 
 // QA לוג ב־DEV
+// expose helpers to window (dev / debug)
 if (isBrowser && isDev) {
-  onAuthStateChanged(auth, (u) => {
-    console.info("[Auth] state:", u ? { uid: u.uid, email: u.email } : "(signed out)");
-  });
+  try {
+    window.getAppCheckTokenSafe = getAppCheckTokenSafe;
+    window.ensureAuthTokenFresh = ensureAuthTokenFresh;
+  } catch (e) {
+    console.warn("[Firebase] expose helpers failed:", e);
+  }
 }
 
+
 export default app;
+
