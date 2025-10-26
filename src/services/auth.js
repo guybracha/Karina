@@ -12,8 +12,9 @@ import {
   signInWithEmailAndPassword,
   sendEmailVerification,
 
-  // Google (Redirect בלבד)
+  // Google
   GoogleAuthProvider,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
 
@@ -28,11 +29,11 @@ import {
   signInWithEmailLink,
 } from "firebase/auth";
 
-/* ========== Guards ========== */
+/* ==================== Guards ==================== */
 const isBrowser =
   typeof window !== "undefined" && typeof document !== "undefined";
 
-/* ========== UA helpers (SSR-safe) ========== */
+/* ==================== UA helpers (SSR-safe) ==================== */
 function getUA() {
   if (!isBrowser) return "";
   try { return navigator.userAgent || ""; } catch { return ""; }
@@ -43,41 +44,40 @@ function isIOS() {
 }
 function isInAppBrowser() {
   const ua = getUA();
+  // דפדפנים שבהם פופאפ נוטה להיחסם
   return /\bFBAV|FBAN|Instagram|Line\/|WeChat|Twitter|Pinterest|Snapchat|TikTok/i.test(ua);
 }
+const isDevHost = () => {
+  if (!isBrowser) return false;
+  const h = window.location.hostname;
+  return h === "localhost" || h === "127.0.0.1";
+};
 
-/* ========== Persistence & public API ========== */
+
+/* ==================== Persistence & observer ==================== */
 export const watchAuth = (cb) => onAuthStateChanged(auth, cb);
 
-// שמירת סשן מקומי; אם נכשל — מתעלמים בשקט
+// שמירת סשן מקומי; אם נכשל — מתעלמים (SSR/פרייבט-מוד)
 try { setPersistence(auth, browserLocalPersistence).catch(() => {}); } catch { /* SSR */ }
 
-/* ========== Redirect flag (sessionStorage) ========== */
+/* ==================== Redirect flag (sessionStorage) ==================== */
 const REDIRECT_FLAG = "karina:auth:redirecting";
-export const markRedirecting = () => {
-  if (!isBrowser) return;
-  try { sessionStorage.setItem(REDIRECT_FLAG, "1"); } catch {}
-};
-export const clearRedirecting = () => {
-  if (!isBrowser) return;
-  try { sessionStorage.removeItem(REDIRECT_FLAG); } catch {}
-};
-export const isRedirecting = () => {
-  if (!isBrowser) return false;
-  try { return sessionStorage.getItem(REDIRECT_FLAG) === "1"; } catch { return false; }
-};
+const setRedirecting = () => { if (!isBrowser) return; try { sessionStorage.setItem(REDIRECT_FLAG, "1"); } catch {} };
+const clearRedirecting = () => { if (!isBrowser) return; try { sessionStorage.removeItem(REDIRECT_FLAG); } catch {} };
+export const isRedirecting = () => { if (!isBrowser) return false; try { return sessionStorage.getItem(REDIRECT_FLAG) === "1"; } catch { return false; } };
 
-/* ========== Email/Password רגיל ========== */
-export const registerWithEmail = async (email, password) => {
+/* ==================== Email/Password ==================== */
+export async function registerWithEmail(email, password) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
+  // לא חובה אבל נחמד לשלוח אימות
   try { await sendEmailVerification(cred.user); } catch {}
   return cred; // UserCredential
-};
+}
 export const loginWithEmail = (email, password) =>
   signInWithEmailAndPassword(auth, email, password);
 export const logout = () => signOut(auth);
 
-/* ========== Guest Checkout (Anonymous) ========== */
+/* ==================== Guest (Anonymous) ==================== */
 export async function signInGuest() {
   return signInAnonymously(auth); // { user }
 }
@@ -89,7 +89,7 @@ export async function upgradeAnonWithEmail(email, password) {
   return linkWithCredential(auth.currentUser, cred); // שומר את אותו UID
 }
 
-/* ========== Magic Link (Passwordless Email) ========== */
+/* ==================== Magic Link (Email link) ==================== */
 const ACTION_CODE_SETTINGS = {
   url: `${isBrowser ? window.location.origin : ""}/auth?emailLink=1`,
   handleCodeInApp: true,
@@ -112,10 +112,12 @@ export async function completeMagicLinkSignIn() {
   return res; // { user }
 }
 
-/* ========== Google Sign-in (Redirect-only; לא עושים link כשאנונימי) ========== */
+/* ==================== Google Sign-in ==================== */
 /**
- * פתרון יציב: אם המשתמש אנונימי — נצא ואז נבצע Sign-in רגיל עם Redirect.
- * זה עוקף קונפליקטים כמו credential-already-in-use/account-exists-with-different-credential.
+ * אסטרטגיה:
+ * 1) ננסה קודם signInWithPopup (במיוחד ב-localhost) — מהיר, פחות רגיש לשגיאות reCAPTCHA.
+ * 2) אם פופאפ נחסם/נכשל → ניפול ל-signInWithRedirect.
+ * 3) אם המשתמש אנונימי — נצא לפני ההתחברות (מונע קונפליקטים של link).
  */
 export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
@@ -126,15 +128,37 @@ export async function signInWithGoogle() {
     try { await signOut(auth); } catch {}
   }
 
-  markRedirecting();
+  // עדיפות לפופאפ בלוקאל/דפדפנים שמאפשרים
+  try {
+    if (isDevHost() && !isIOS() && !isInAppBrowser()) {
+      const cred = await signInWithPopup(auth, provider);
+      return cred; // הצלחנו בפופאפ
+    }
+  } catch (e) {
+    // קודים שכיחים: auth/popup-closed-by-user, auth/cancelled-popup-request
+    // ניפול ל-Redirect בלי לחסום את הזרימה
+    // console.warn("Popup failed, falling back to redirect:", e);
+  }
+
+  // Redirect (ברירת מחדל אמינה)
+  setRedirecting();
   await signInWithRedirect(auth, provider);
-  return null; // ייאסף ע"י collectRedirectResultIfAny()
+  return null; // התוצאה תיאסף ע"י collectRedirectResultIfAny()
 }
 
-/* אופציונלי: alias */
-export const signInWithGoogleRedirectOnly = signInWithGoogle;
+// alias אם תרצה להכריח Redirect בלבד
+export const signInWithGoogleRedirectOnly = async () => {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  if (auth.currentUser?.isAnonymous) {
+    try { await signOut(auth); } catch {}
+  }
+  setRedirecting();
+  await signInWithRedirect(auth, provider);
+  return null;
+};
 
-/* ========== איסוף תוצאת Redirect ========== */
+/* ==================== איסוף תוצאת Redirect ==================== */
 export async function collectRedirectResultIfAny() {
   try {
     const res = await getRedirectResult(auth);
@@ -142,9 +166,14 @@ export async function collectRedirectResultIfAny() {
     return res || null; // UserCredential או null
   } catch (e) {
     clearRedirecting();
-    throw e; // חשוב: לא לבלוע! נותנים ל-UI לראות את הקוד/הודעה
+    throw e; // נותנים ל-UI להציג את קוד השגיאה האמיתי
   }
 }
 
-/* ========== (אופציונלי) מידע סביבתי לשימוש חיצוני ========== */
-export const envInfo = { isBrowser, isIOS: isIOS(), isInAppBrowser: isInAppBrowser() };
+/* ==================== מידע סביבתי (אופציונלי לשימוש חיצוני) ==================== */
+export const envInfo = {
+  isBrowser,
+  isIOS: isIOS(),
+  isInAppBrowser: isInAppBrowser(),
+  isDevHost: isDevHost(),
+};

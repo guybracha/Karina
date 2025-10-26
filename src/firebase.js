@@ -26,22 +26,31 @@ import { getFunctions, connectFunctionsEmulator, httpsCallable } from "firebase/
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider,
-  ReCaptchaV3Provider,
   onTokenChanged as onAppCheckTokenChanged,
   getToken as getAppCheckToken,
 } from "firebase/app-check";
 
 /* =========================
-   Environment & Guards
+   Environment helpers
    ========================= */
 const g = (typeof globalThis !== "undefined" ? globalThis : (typeof window !== "undefined" ? window : {}));
 const isBrowser = typeof window !== "undefined";
 const isDev = process.env.NODE_ENV !== "production";
 
-/** מאחד ENV בקומפילציה (process.env.REACT_APP_*) + ריצה (window.__ENV__) */
-function fromEnv(key, runtimeKey) {
+function fromEnv(...keys) {
   const runtime = (isBrowser && window.__ENV__) || {};
-  return (process.env[key] || runtime[runtimeKey] || "").toString().trim();
+  for (const raw of keys) {
+    // מאפשר גם REACT_APP_* וגם VITE_* וגם מפתח runtime
+    const v =
+      process.env[raw] ||
+      process.env[`REACT_APP_${raw}`] ||
+      process.env[`VITE_${raw}`] ||
+      runtime[raw] ||
+      runtime[`REACT_APP_${raw}`] ||
+      runtime[`VITE_${raw}`];
+    if (v) return String(v).trim();
+  }
+  return "";
 }
 
 /* =========================
@@ -49,13 +58,13 @@ function fromEnv(key, runtimeKey) {
    ========================= */
 function resolveFirebaseConfig() {
   const cfg = {
-    apiKey:            fromEnv("REACT_APP_FB_API_KEY",             "FIREBASE_API_KEY"),
-    authDomain:        fromEnv("REACT_APP_FB_AUTH_DOMAIN",         "FIREBASE_AUTH_DOMAIN"),
-    projectId:         fromEnv("REACT_APP_FB_PROJECT_ID",          "FIREBASE_PROJECT_ID"),
-    storageBucket:     fromEnv("REACT_APP_FB_STORAGE_BUCKET",      "FIREBASE_STORAGE_BUCKET"),
-    messagingSenderId: fromEnv("REACT_APP_FB_MESSAGING_SENDER_ID", "FIREBASE_MESSAGING_SENDER_ID"),
-    appId:             fromEnv("REACT_APP_FB_APP_ID",              "FIREBASE_APP_ID"),
-    measurementId:     fromEnv("REACT_APP_FB_MEASUREMENT_ID",      "FIREBASE_MEASUREMENT_ID") || undefined,
+    apiKey:            fromEnv("FB_API_KEY", "FIREBASE_API_KEY"),
+    authDomain:        fromEnv("FB_AUTH_DOMAIN", "FIREBASE_AUTH_DOMAIN"),
+    projectId:         fromEnv("FB_PROJECT_ID", "FIREBASE_PROJECT_ID"),
+    storageBucket:     fromEnv("FB_STORAGE_BUCKET", "FIREBASE_STORAGE_BUCKET"),
+    messagingSenderId: fromEnv("FB_MESSAGING_SENDER_ID", "FIREBASE_MESSAGING_SENDER_ID"),
+    appId:             fromEnv("FB_APP_ID", "FIREBASE_APP_ID"),
+    measurementId:     fromEnv("FB_MEASUREMENT_ID", "FIREBASE_MEASUREMENT_ID") || undefined,
   };
 
   if (isDev) {
@@ -65,15 +74,11 @@ function resolveFirebaseConfig() {
       appId:  cfg.appId  ? "<set>" : "<missing>",
       measurementId: cfg.measurementId ? "<set>" : "<missing>",
     });
-    if (!cfg.projectId) console.warn("⚠️ Missing projectId. ודא .env.* / הגדרות CI.");
-    if (cfg.storageBucket && !/\.(appspot\.com|firebasestorage\.app)$/i.test(cfg.storageBucket)) {
-      console.warn("⚠️ storageBucket לא נראה תקין (צפה ל־ <project>.appspot.com או firebasestorage.app)");
-    }
   }
 
   const must = ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"];
   const missing = must.filter(k => !cfg[k]);
-  if (missing.length) throw new Error(`[Firebase config] חסרים משתנים: ${missing.join(", ")}`);
+  if (missing.length) throw new Error(`[Firebase config] missing: ${missing.join(", ")}`);
 
   return cfg;
 }
@@ -86,28 +91,23 @@ const firebaseConfig = resolveFirebaseConfig();
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
-/* =========================
-   App Check  (חובה לפני Auth)
-   ========================= */
+/* =======================================================================
+   App Check — reCAPTCHA Enterprise ONLY (ללא v3, כדי למנוע התנגשויות)
+   ======================================================================= */
 export let appCheck = null;
+const ENABLE_APPCHECK = (fromEnv("ENABLE_APPCHECK") || "true").toLowerCase() === "true";
 
-// שליטה מאוחדת: הפעלת App Check + בחירת פרוביידר דרך ENV
-const ENABLE_APPCHECK =
-  (fromEnv("REACT_APP_ENABLE_APPCHECK", "ENABLE_APPCHECK") || "true").toLowerCase() === "true";
-
-// תמיכה בשמות חלופיים ל-site key:
+// השם האחיד ל־site key של reCAPTCHA Enterprise
 const ENTERPRISE_SITE_KEY =
-  fromEnv("REACT_APP_APPCHECK_E_SITE_KEY", "APPCHECK_E_SITE_KEY") ||
-  fromEnv("REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
+  fromEnv("RECAPTCHA_ENTERPRISE_SITE_KEY", "APPCHECK_E_SITE_KEY", "RECAPTCHA_SITE_KEY");
 
-const V3_SITE_KEY = fromEnv("REACT_APP_RECAPTCHA_V3_SITE_KEY", "RECAPTCHA_V3_SITE_KEY");
-const ENV_DEBUG_TOKEN = fromEnv("REACT_APP_APPCHECK_DEBUG_TOKEN", "APPCHECK_DEBUG_TOKEN");
-
-// בלוקאל בלבד: תן ל-SDK לייצר debug token חדש אם לא סיפקת אחד
+// Debug token לפיתוח (localhost) – קבוע שהצגת לי: 61BA4D5C-65FC-433B-83F7-78D9890F5D24
+const ENV_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN");
 if (isBrowser) {
   const host = g?.location?.hostname || "";
   if (host === "localhost" || host === "127.0.0.1") {
-    g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN || true;
+    // אם נתת טוקן – נשתמש בו; אחרת אפשר true ליצירה אוטומטית
+    g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN || "61BA4D5C-65FC-433B-83F7-78D9890F5D24";
   }
 }
 
@@ -121,38 +121,24 @@ async function getAppCheckAttestation(forceRefresh = false) {
 
 if (isBrowser && ENABLE_APPCHECK) {
   try {
-    let provider = null;
-    // Enterprise קודם; אם אין — fallback ל-v3
-    if (ENTERPRISE_SITE_KEY) {
-      provider = new ReCaptchaEnterpriseProvider(ENTERPRISE_SITE_KEY);
-      if (isDev) console.log("[AppCheck] Provider: Enterprise");
-    } else if (V3_SITE_KEY) {
-      provider = new ReCaptchaV3Provider(V3_SITE_KEY);
-      if (isDev) console.log("[AppCheck] Provider: v3");
-    }
-
-    if (!provider) {
-      console.warn("[AppCheck] No SITE KEY (Enterprise/v3). Skipping App Check init.");
+    if (!ENTERPRISE_SITE_KEY) {
+      console.warn("[AppCheck] Missing RECAPTCHA_ENTERPRISE_SITE_KEY – skipping init.");
     } else {
       appCheck = initializeAppCheck(app, {
-        provider,
+        provider: new ReCaptchaEnterpriseProvider(ENTERPRISE_SITE_KEY),
         isTokenAutoRefreshEnabled: true,
       });
 
       try {
         window.appCheck = appCheck;
         window.getAppCheckToken = () => getAppCheckToken(appCheck, true);
-        window.printAppCheckState = async () => {
-          const t = await window.getAppCheckToken().catch(() => null);
-          console.log("[AppCheck] token:", t?.token ? (t.token.slice(0, 12) + "…") : "(missing)");
-        };
       } catch {}
 
       onAppCheckTokenChanged(appCheck, (tok) => {
         if (isDev) console.log("[AppCheck] token state:", tok ? "OK" : "MISSING");
       });
 
-      // טריגר ראשוני לאימות תקין
+      // טריגר ראשוני כדי לוודא שהטוקן מונפק לפני פעולות Auth/OAuth
       getAppCheckToken(appCheck, true).catch(e =>
         console.warn("[AppCheck] getToken failed:", e?.message || e)
       );
@@ -202,7 +188,7 @@ const bucket = (firebaseConfig.storageBucket || "").trim();
 export const storage = bucket ? getStorage(app, `gs://${bucket}`) : getStorage(app);
 if (isDev) console.info("[Storage] using bucket:", bucket ? `gs://${bucket}` : "(default)");
 
-const FUNCTIONS_REGION = fromEnv("REACT_APP_FB_FUNCTIONS_REGION", "FB_FUNCTIONS_REGION") || "europe-west1";
+const FUNCTIONS_REGION = fromEnv("FB_FUNCTIONS_REGION") || "europe-west1";
 export const functions = getFunctions(app, FUNCTIONS_REGION);
 
 /* =========================
@@ -245,7 +231,7 @@ if (isBrowser) {
 /* =========================
    Emulators (optional)
    ========================= */
-const wantEmulators = (fromEnv("REACT_APP_USE_EMULATORS", "USE_EMULATORS") || "false").toLowerCase() === "true";
+const wantEmulators = (fromEnv("USE_EMULATORS") || "false").toLowerCase() === "true";
 const isLocalHost = isBrowser && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname);
 
 if (wantEmulators && isLocalHost) {
@@ -273,7 +259,7 @@ export async function ensureAuthTokenFresh() {
 async function getAppCheckTokenSafe() { return await getAppCheckAttestation(false); }
 
 // התחזות כ-UID (Cloud Function adminImpersonate)
-const IMPERSONATE_FN_NAME = fromEnv("REACT_APP_FN_IMPERSONATE", "FN_IMPERSONATE") || "adminImpersonate";
+const IMPERSONATE_FN_NAME = fromEnv("FN_IMPERSONATE") || "adminImpersonate";
 export async function impersonateUser(uid) {
   const appCheckToken = await getAppCheckTokenSafe(); // יכול להיות null; הפונקציה בענן צריכה לדעת לקבל null
   const call = httpsCallable(functions, IMPERSONATE_FN_NAME);
