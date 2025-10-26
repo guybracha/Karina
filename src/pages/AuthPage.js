@@ -1,75 +1,32 @@
-// src/pages/AuthPage.js
 import React, { useEffect, useState } from "react";
-import { useRecaptcha } from "../hooks/useRecaptcha";
-import { useLocation, useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
   registerWithEmail,
-  signInWithGoogle,           // Redirect-only (ב-service)
-  collectRedirectResultIfAny, // איסוף תוצאת redirect
-  isRedirecting,              // דגל redirect ב-sessionStorage
-  sendMagicLink,              // magic link
-  completeMagicLinkSignIn,    // magic link
-  signInGuest,                // anonymous
-  upgradeAnonWithEmail,       // upgrade guest -> email/password
+  signInWithGoogle,
+  collectRedirectResultIfAny,
+  sendMagicLink,
+  completeMagicLinkSignIn,
+  signInGuest,
+  upgradeAnonWithEmail,
 } from "../services/auth";
-import { ensureUserDoc } from "../services/users";
 import { auth } from "../firebase";
+import { getAdditionalUserInfo, onAuthStateChanged, signOut } from "firebase/auth";
 
-import {
-  getAdditionalUserInfo,
-  onAuthStateChanged,
-  signOut,
-} from "firebase/auth";
-
-const LS_GOOGLE_CONSENT_KEY = "karina:auth:googleConsent";
-const LS_RETURN_TO = "karina:auth:returnTo";
-
-// Env detection that works in CRA (process.env), Vite (import.meta.env) and window.__ENV__.
-const SKIP_RECAPTCHA =
-  (typeof import.meta !== "undefined" &&
-    import.meta.env &&
-    import.meta.env.VITE_AUTH_SKIP_RECAPTCHA === "1") ||
-  (typeof process !== "undefined" &&
-    process.env &&
-    process.env.REACT_APP_AUTH_SKIP_RECAPTCHA === "1") ||
-  (typeof window !== "undefined" &&
-    window.__ENV__ &&
-    window.__ENV__.AUTH_SKIP_RECAPTCHA === "1");
-
-/* ============ Helpers ============ */
-function friendlyError(e) {
-  const code = e?.code || "";
-  const msg  = e?.message || "";
-
-  // App Check / רשת
-  if (code.includes("appCheck") || /app\-check/i.test(msg) || /fetch-status-error/i.test(msg)) {
-    return "נראה שיש בעיית App Check / רשת. רעננו את העמוד או נסו אינקוגניטו.";
-  }
-  // Popup
-  if (code === "auth/popup-blocked") return "הדפדפן חסם את חלון ההתחברות. בטלו חסימה או השתמשו בכניסה בעזרת Redirect.";
-  if (code === "auth/popup-closed-by-user") return "חלון Google נסגר לפני השלמת ההתחברות.";
-  if (code === "auth/cancelled-popup-request") return "בקשת התחברות קודמת בוטלה.";
-  // אימות/קרדנצ'יאל
-  if (code === "auth/invalid-credential") return "פרטי ההתחברות שגויים.";
-  if (code === "auth/user-not-found") return "לא נמצא משתמש עם האימייל הזה.";
-  if (code === "auth/wrong-password") return "הסיסמה שגויה.";
-  if (code === "auth/too-many-requests") return "יותר מדי ניסיונות. נסו שוב מאוחר יותר.";
-  if (code === "auth/internal-error") {
-    return "שגיאה פנימית באימות. נסו לרענן ולבדוק שהדומיין/Redirect מאושרים.";
-  }
-  if (code === "auth/unauthorized-domain") return "הדומיין הנוכחי לא מאושר לאימות. בדקו Authorized domains בקונסול.";
-  if (code === "auth/credential-already-in-use" || code === "auth/account-exists-with-different-credential") {
-    return "כבר קיים חשבון לאימייל הזה. התחברו עם Google (לא כשדרוג אורח) ונמזג לכם את הנתונים.";
-  }
-  return msg || "שגיאה לא צפויה. נסו שוב.";
+/* ============ קטן לשגיאות ידידותיות ============ */
+function friendly(err) {
+  const c = err?.code || "";
+  if (c === "auth/invalid-credential") return "פרטי ההתחברות שגויים.";
+  if (c === "auth/user-not-found") return "לא נמצא משתמש עם האימייל הזה.";
+  if (c === "auth/wrong-password") return "הסיסמה שגויה.";
+  if (c === "auth/email-already-in-use") return "האימייל כבר רשום.";
+  if (c === "auth/too-many-requests") return "יותר מדי ניסיונות. נסו שוב מאוחר יותר.";
+  if (c === "auth/popup-blocked") return "הדפדפן חסם את חלון Google. נסו Redirect.";
+  if (c === "auth/popup-closed-by-user") return "חלון Google נסגר לפני השלמת ההתחברות.";
+  return err?.message || "שגיאה בלתי צפויה.";
 }
 
-const pickUser = (res) => (res?.user ? res.user : res);
-
-/* ============ Component ============ */
 export default function AuthPage() {
-  const [tab, setTab] = useState("login"); // "login" | "register"
+  const [tab, setTab] = useState("login"); // 'login' | 'register'
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
@@ -77,413 +34,158 @@ export default function AuthPage() {
   const [info, setInfo] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // reCAPTCHA (ל Login/Register בלבד)
-  const { ready: recaptchaReady, error: recaptchaError, verify } = useRecaptcha();
-
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  // יעד ברירת מחדל (אם אין החזרה שמורה ב-sessionStorage)
-  const defaultFrom = location.state?.from?.pathname || "/account";
-
-  async function afterAuth(user, extra = null) {
-    const u = user || auth.currentUser;
-    if (!u) return;
-
-    // יעד מועדף: החזרה שמורה מה-redirect, אחרת היעד מה-state, אחרת /account
-    let target = defaultFrom;
-    try {
-      const saved = sessionStorage.getItem(LS_RETURN_TO);
-      if (saved) {
-        target = saved;
-        sessionStorage.removeItem(LS_RETURN_TO);
-      }
-    } catch {}
-
-    // ניווט מיידי – לא מחכים ל-Firestore
-    navigate(target, { replace: true });
-
-    // יצירת/מיזוג מסמך המשתמש (רקע, עם תקרת זמן קצרה)
-    try {
-      await Promise.race([
-        ensureUserDoc(u, extra || undefined),
-        new Promise((resolve) => setTimeout(resolve, 800)),
-      ]);
-    } catch (e) {
-      console.warn("[Auth] ensureUserDoc failed (background):", e?.code || e?.message || e);
-    }
-  }
-
-  // --- טיפול ב-Magic Link + תוצאת Redirect (Google) ---
+  // איסוף תוצאת redirect ומג'יק לינק אם חזרנו
   useEffect(() => {
-    let mounted = true;
     (async () => {
-      // 1) Magic link
       try {
         const magic = await completeMagicLinkSignIn();
-        if (mounted && magic?.user) {
-          await afterAuth(magic.user, {
-            marketingConsent: marketingOptIn || false,
-            marketingConsentMethod: "email_link",
-          });
-          return; // כבר נכנסנו
+        if (magic?.user) {
+          setInfo("נכנסת בהצלחה עם לינק!");
+          return;
         }
-      } catch (e) {
-        setError(friendlyError(e));
-      }
-
-      // 2) Google redirect
-      const wasRedirecting = isRedirecting();
-      if (wasRedirecting) setInfo("מסיים התחברות…");
+      } catch (e) { setError(friendly(e)); }
 
       try {
-        const res = await collectRedirectResultIfAny(); // זורק בשגיאה
-        if (!mounted) return;
-
-        // אם התקבל user → המשך כרגיל
-        if (res?.user) {
-          const infoRes = getAdditionalUserInfo(res);
-          const isNew = !!infoRes?.isNewUser;
-
-          let wantConsent = false;
-          try { wantConsent = localStorage.getItem(LS_GOOGLE_CONSENT_KEY) === "1"; } catch {}
-          try { localStorage.removeItem(LS_GOOGLE_CONSENT_KEY); } catch {}
-
-          if (isNew && !wantConsent) {
-            try { await signOut(auth); } catch {}
-            setTab("register");
-            setError("זו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים. סמנו את הצ׳קבוקס והמשיכו.");
-            return;
-          }
-
-          const extra = (isNew && wantConsent)
-            ? { marketingConsent: true, marketingConsentMethod: "google_first_signin_checkbox" }
-            : null;
-
-          await afterAuth(res.user, extra);
-          return;
-        }
-
-        // res=null — לפעמים כבר יש currentUser מחובר; נווט בכל מקרה אם יש user.
-        if (auth.currentUser) {
-          await afterAuth(auth.currentUser);
-          return;
-        }
-
-        // אין res ואין currentUser → כשל/ביטול
-        setError("ההתחברות דרך Google לא הושלמה. נסו שוב.");
-
-      } catch (e) {
-        console.error("[Google Redirect] getRedirectResult error:", e);
-        const raw = [e?.code, e?.message].filter(Boolean).join(" · ");
-        setError(`${friendlyError(e)}${raw ? ` (${raw})` : ""}`);
-      } finally {
-        if (wasRedirecting) setInfo(null);
-      }
+        const res = await collectRedirectResultIfAny();
+        if (res?.user) setInfo("התחברות Google הושלמה.");
+      } catch (e) { setError(friendly(e)); }
     })();
-
-    return () => { mounted = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- אם כבר מחוברים – ננווט פנימה (לא בזמן redirect) ---
+  // אם כבר מחוברים — אפשר להציג הודעה/להפנות
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u && !isRedirecting()) {
-        let target = defaultFrom;
-        try {
-          const saved = sessionStorage.getItem(LS_RETURN_TO);
-          if (saved) {
-            target = saved;
-            sessionStorage.removeItem(LS_RETURN_TO);
-          }
-        } catch {}
-        navigate(target, { replace: true });
-      }
+      if (u) setInfo("את/ה מחובר/ת.");
     });
     return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- Email/Password ---
-  async function handleLogin(e) {
+  async function onLogin(e) {
     e.preventDefault();
-    setError(null);
-    setInfo(null);
-    setLoading(true);
+    setError(null); setInfo(null); setLoading(true);
     try {
-      // reCAPTCHA לפני התחברות (אלא אם Skip)
-      if (!SKIP_RECAPTCHA) {
-        if (!recaptchaReady) throw new Error("reCAPTCHA not ready");
-        const verdict = await verify("login");
-        if (!verdict.valid || !verdict.passed) {
-          throw new Error("אימות בוטים נכשל. נסו שוב.");
-        }
-      }
-
-      const res = await loginWithEmail(email.trim(), password);
-      const user = pickUser(res);
-      if (!user) throw new Error("Login returned no user.");
-      await afterAuth(user);
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setLoading(false);
-    }
+      await loginWithEmail(email.trim(), password);
+      setInfo("התחברת בהצלחה.");
+    } catch (e) { setError(friendly(e)); }
+    finally { setLoading(false); }
   }
 
-  async function handleRegister(e) {
-    e.preventDefault();
-    setError(null);
-    setInfo(null);
-
-    if (!marketingOptIn) {
-      setError("יש לאשר קבלת דיוורים כדי להירשם.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // reCAPTCHA לפני רישום (אלא אם Skip)
-      if (!SKIP_RECAPTCHA) {
-        if (!recaptchaReady) throw new Error("reCAPTCHA not ready");
-        const verdict = await verify("register");
-        if (!verdict.valid || !verdict.passed) {
-          throw new Error("אימות בוטים נכשל. נסו שוב.");
-        }
-      }
-
-      // אם יש אורח מחובר — נשדרג במקום ליצור משתמש חדש (שומר UID)
-      let res, user;
-      if (auth.currentUser?.isAnonymous) {
-        res = await upgradeAnonWithEmail(email.trim(), password);
-        user = pickUser(res);
-      } else {
-        res = await registerWithEmail(email.trim(), password);
-        user = pickUser(res);
-      }
-      if (!user) throw new Error("Register returned no user.");
-
-      await afterAuth(user, {
-        marketingConsent: true,
-        marketingConsentMethod: auth.currentUser?.isAnonymous
-          ? "guest_upgrade_email"
-          : "email_checkbox_register",
-      });
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // --- Magic Link ---
-  async function handleSendMagicLink(e) {
+  async function onRegister(e) {
     e.preventDefault();
     setError(null); setInfo(null);
+    if (!marketingOptIn) { setError("יש לאשר קבלת דיוורים כדי להירשם."); return; }
+    setLoading(true);
+    try {
+      // אם אורח – שדרג, אחרת רשום משתמש חדש
+      if (auth.currentUser?.isAnonymous) {
+        await upgradeAnonWithEmail(email.trim(), password);
+      } else {
+        await registerWithEmail(email.trim(), password);
+      }
+      setInfo("נרשמת בהצלחה.");
+    } catch (e) { setError(friendly(e)); }
+    finally { setLoading(false); }
+  }
 
-    if (tab === "register" && !marketingOptIn) {
-      setError("יש לאשר קבלת דיוורים כדי להירשם.");
-      return;
-    }
+  async function onGoogle() {
+    setError(null); setInfo(null); setLoading(true);
+    try {
+      const res = await signInWithGoogle(); // ייתכן שיחזור null בעת redirect
+      if (!res?.user) setInfo("מועברים להשלמת התחברות…");
+      else {
+        const isNew = !!getAdditionalUserInfo(res)?.isNewUser;
+        if (isNew && !marketingOptIn) {
+          try { await signOut(auth); } catch {}
+          setTab("register");
+          setError("זהו חיבור ראשון עם Google. אנא אשר/י קבלת דיוורים והרשמה.");
+        } else {
+          setInfo("התחברת עם Google.");
+        }
+      }
+    } catch (e) { setError(friendly(e)); }
+    finally { setLoading(false); }
+  }
 
+  async function onMagicLink() {
+    setError(null); setInfo(null); setLoading(true);
     try {
       await sendMagicLink(email.trim());
-      setInfo("שלחנו לינק כניסה לאימייל. בדקו דואר נכנס/ספאם ופתחו במכשיר הזה.");
-    } catch (e) {
-      setError(friendlyError(e));
-    }
+      setInfo("שלחנו לינק כניסה לאימייל. בדקו דואר נכנס/ספאם.");
+    } catch (e) { setError(friendly(e)); }
+    finally { setLoading(false); }
   }
 
-  // --- Guest (Anonymous) ---
-  async function handleGuest() {
-    setError(null); setInfo(null);
+  async function onGuest() {
+    setError(null); setInfo(null); setLoading(true);
     try {
-      const target = defaultFrom || "/account";
-      sessionStorage.setItem(LS_RETURN_TO, target);
-    } catch {}
-
-    setLoading(true);
-    try {
-      const res = await signInGuest(); // { user } אנונימי
-      await ensureUserDoc(res.user, { isGuest: true });
-      await afterAuth(res.user);
-    } catch (e) {
-      setError(friendlyError(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // --- Google (Redirect-only; ללא reCAPTCHA) ---
-  async function handleGoogle() {
-    setError(null);
-    setInfo(null);
-
-    const mustConsent = (tab === "register");
-    if (mustConsent && !marketingOptIn) {
-      setError("יש לאשר קבלת דיוורים כדי להירשם.");
-      return;
-    }
-
-    // נשמור את בחירת ההסכמה לדיוור לטיפול אחרי redirect
-    try { localStorage.setItem(LS_GOOGLE_CONSENT_KEY, (marketingOptIn ? "1" : "0")); } catch {}
-
-    // נשמור יעד חזרה בטוח (למקרה של redirect)
-    try {
-      const target = defaultFrom || "/account";
-      sessionStorage.setItem(LS_RETURN_TO, target);
-    } catch {}
-
-    setLoading(true);
-    try {
-      // לא מריצים reCAPTCHA כאן
-      const res = await signInWithGoogle(); // Redirect-only; res=null צפוי
-      if (!res?.user) {
-        setInfo("מועברים להשלמת התחברות…");
-        return; // ה-useEffect של redirect יאסוף כשנחזור
-      }
-
-      // מקרה נדיר של UserCredential מיידי
-      const infoRes = getAdditionalUserInfo(res);
-      const isNew = !!infoRes?.isNewUser;
-      if (isNew && !marketingOptIn) {
-        try { await signOut(auth); } catch {}
-        setTab("register");
-        setError("זו התחברות ראשונה עם Google. כדי ליצור חשבון חדש יש לאשר קבלת דיוורים.");
-        return;
-      }
-
-      const extra = (isNew && marketingOptIn)
-        ? { marketingConsent: true, marketingConsentMethod: "google_first_signin_checkbox" }
-        : null;
-
-      await afterAuth(res.user, extra);
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setLoading(false);
-    }
+      await signInGuest();
+      setInfo("נכנסת כאורח. ניתן לשדרג לחשבון מלא מאוחר יותר.");
+    } catch (e) { setError(friendly(e)); }
+    finally { setLoading(false); }
   }
 
   return (
     <div className="container py-5" style={{ maxWidth: 480 }}>
       <h1 className="mb-4 text-center">ברוכים הבאים לקארינה חולצות מודפסות</h1>
 
-      <div className="btn-group w-100 mb-3" role="tablist" aria-label="Auth tabs">
-        <button
-          className={`btn ${tab === "login" ? "btn-primary" : "btn-outline-primary"}`}
-          onClick={() => setTab("login")}
-          disabled={loading}
-          aria-pressed={tab === "login"}
-        >
+      <div className="btn-group w-100 mb-3" role="tablist">
+        <button className={`btn ${tab === "login" ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => setTab("login")} disabled={loading}>
           כניסה
         </button>
-        <button
-          className={`btn ${tab === "register" ? "btn-primary" : "btn-outline-primary"}`}
-          onClick={() => setTab("register")}
-          disabled={loading}
-          aria-pressed={tab === "register"}
-        >
+        <button className={`btn ${tab === "register" ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => setTab("register")} disabled={loading}>
           הרשמה
         </button>
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}
       {info && <div className="alert alert-info">{info}</div>}
-      {!SKIP_RECAPTCHA && recaptchaError && (
-        <div className="alert alert-warning">שגיאה בטעינת אימות הבוטים: {recaptchaError}</div>
-      )}
-      {SKIP_RECAPTCHA && (
-        <div className="alert alert-secondary">
-          מצב פיתוח: reCAPTCHA כבוי (AUTH_SKIP_RECAPTCHA=1). אל תשאירו כך בפרוד.
-        </div>
-      )}
 
-      <form
-        onSubmit={tab === "login" ? handleLogin : handleRegister}
-        className="card card-body"
-        noValidate
-      >
+      <form onSubmit={tab === "login" ? onLogin : onRegister} className="card card-body" noValidate>
         <div className="mb-3">
-          <label className="form-label" htmlFor="authEmail">Email</label>
-          <input
-            id="authEmail"
-            type="email"
-            className="form-control"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            disabled={loading}
-            inputMode="email"
-          />
+          <label className="form-label" htmlFor="email">Email</label>
+          <input id="email" type="email" className="form-control"
+                 value={email} onChange={(e) => setEmail(e.target.value)}
+                 required autoComplete="email" disabled={loading}/>
         </div>
 
         <div className="mb-3">
-          <label className="form-label" htmlFor="authPassword">Password</label>
-          <input
-            id="authPassword"
-            type="password"
-            className="form-control"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-            autoComplete={tab === "login" ? "current-password" : "new-password"}
-            disabled={loading}
-          />
+          <label className="form-label" htmlFor="pwd">Password</label>
+          <input id="pwd" type="password" className="form-control"
+                 value={password} onChange={(e) => setPassword(e.target.value)}
+                 required minLength={6}
+                 autoComplete={tab === "login" ? "current-password" : "new-password"}
+                 disabled={loading}/>
         </div>
 
-        {/* צ'קבוקס הסכמה לדיוור – נאכף בהרשמה וב-First Google Sign-in */}
         <div className="form-check mb-3">
-          <input
-            className="form-check-input"
-            type="checkbox"
-            id="marketingOptIn"
-            checked={marketingOptIn}
-            onChange={(e) => setMarketingOptIn(e.target.checked)}
-            disabled={loading}
-          />
-          <label className="form-check-label" htmlFor="marketingOptIn">
-            <span className="text-danger">*</span>{" "}
-            אני מאשר/ת קבלת דיוורים וחומר פרסומי במייל מהחנות (ניתן להסרה בכל עת).
+          <input id="mk" className="form-check-input" type="checkbox"
+                 checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)}
+                 disabled={loading}/>
+          <label className="form-check-label" htmlFor="mk">
+            <span className="text-danger">*</span> אני מאשר/ת קבלת דיוורים במייל (ניתן להסרה בכל עת).
           </label>
-          {(tab === "register" && !marketingOptIn) && (
-            <div className="form-text text-danger">חובה לאשר כדי להשלים הרשמה.</div>
-          )}
+          {(tab === "register" && !marketingOptIn) &&
+            <div className="form-text text-danger">חובה לאשר כדי להשלים הרשמה.</div>}
         </div>
 
-        <button className="btn btn-primary w-100" disabled={loading || (!SKIP_RECAPTCHA && !recaptchaReady)}>
-          {loading ? "Please wait…" : tab === "login" ? "Login" : "Create account"}
+        <button className="btn btn-primary w-100" disabled={loading}>
+          {loading ? "מעבד…" : tab === "login" ? "Login" : "Create account"}
         </button>
 
-        <button
-          type="button"
-          className="btn btn-outline-secondary w-100 mt-2"
-          onClick={handleGoogle}
-          disabled={loading} // לא תלוי ב-reCAPTCHA
-        >
+        <button type="button" className="btn btn-outline-secondary w-100 mt-2"
+                onClick={onGoogle} disabled={loading}>
           Continue with Google
         </button>
 
-        {/* Magic Link */}
-        <button
-          type="button"
-          className="btn btn-outline-primary w-100 mt-2"
-          onClick={handleSendMagicLink}
-          disabled={loading}
-        >
+        <button type="button" className="btn btn-outline-primary w-100 mt-2"
+                onClick={onMagicLink} disabled={loading}>
           שלחו לי לינק כניסה במייל
         </button>
 
-        {/* Guest (Anonymous) */}
-        <button
-          type="button"
-          className="btn btn-outline-dark w-100 mt-2"
-          onClick={handleGuest}
-          disabled={loading}
-        >
+        <button type="button" className="btn btn-outline-dark w-100 mt-2"
+                onClick={onGuest} disabled={loading}>
           המשך כאורח (ללא הרשמה)
         </button>
       </form>

@@ -40,7 +40,6 @@ const isDev = process.env.NODE_ENV !== "production";
 function fromEnv(...keys) {
   const runtime = (isBrowser && window.__ENV__) || {};
   for (const raw of keys) {
-    // מאפשר גם REACT_APP_* וגם VITE_* וגם מפתח runtime
     const v =
       process.env[raw] ||
       process.env[`REACT_APP_${raw}`] ||
@@ -92,64 +91,51 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =======================================================================
-   App Check — reCAPTCHA Enterprise ONLY (ללא v3, כדי למנוע התנגשויות)
+   App Check (reCAPTCHA Enterprise)
+   - ודא שב- Firebase Console › App Check: מוגדר reCAPTCHA Enterprise וב-enforcement התחל כ- "Monitoring" ואז העלה ל-"Enforced"
+   - ודא שב- reCAPTCHA Enterprise › Key: הוספת דומיינים (localhost/127.0.0.1/karina.co.il)
    ======================================================================= */
-export let appCheck = null;
-const ENABLE_APPCHECK = (fromEnv("ENABLE_APPCHECK") || "true").toLowerCase() === "true";
+const RECAPTCHA_ENTERPRISE_SITE_KEY =
+  fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
 
-// השם האחיד ל־site key של reCAPTCHA Enterprise
-const ENTERPRISE_SITE_KEY =
-  fromEnv("RECAPTCHA_ENTERPRISE_SITE_KEY", "APPCHECK_E_SITE_KEY", "RECAPTCHA_SITE_KEY");
+// Debug token (אופציונלי): שים מחרוזת שנוצרה בקונסול, או TRUE לייצר טוקן בקונסול הדפדפן
+const APP_CHECK_DEBUG = fromEnv("APP_CHECK_DEBUG_TOKEN", "FB_APPCHECK_DEBUG_TOKEN");
 
-// Debug token לפיתוח (localhost) – קבוע שהצגת לי: 61BA4D5C-65FC-433B-83F7-78D9890F5D24
-const ENV_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN");
-if (isBrowser) {
-  const host = g?.location?.hostname || "";
-  if (host === "localhost" || host === "127.0.0.1") {
-    // אם נתת טוקן – נשתמש בו; אחרת אפשר true ליצירה אוטומטית
-    g.FIREBASE_APPCHECK_DEBUG_TOKEN = ENV_DEBUG_TOKEN || "61BA4D5C-65FC-433B-83F7-78D9890F5D24";
+if (isBrowser && APP_CHECK_DEBUG) {
+  // אם שמים "true" – ה-SDK ידפיס קוד חד-פעמי בקונסול; אם מחרוזת – ישתמש בה ישירות
+  g.FIREBASE_APPCHECK_DEBUG_TOKEN =
+    (APP_CHECK_DEBUG.toLowerCase?.() === "true") ? true : APP_CHECK_DEBUG;
+}
+
+export const appCheck = (function initAppCheck() {
+  if (!isBrowser) return null;
+  if (!RECAPTCHA_ENTERPRISE_SITE_KEY) {
+    console.warn("[AppCheck] Missing reCAPTCHA Enterprise site key – App Check not initialized.");
+    return null;
   }
-}
-
-async function getAppCheckAttestation(forceRefresh = false) {
   try {
-    if (!appCheck) return null;
-    const tok = await getAppCheckToken(appCheck, forceRefresh);
-    return tok?.token || null;
-  } catch { return null; }
-}
+    const inst = initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_ENTERPRISE_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
 
-if (isBrowser && ENABLE_APPCHECK) {
-  try {
-    if (!ENTERPRISE_SITE_KEY) {
-      console.warn("[AppCheck] Missing RECAPTCHA_ENTERPRISE_SITE_KEY – skipping init.");
-    } else {
-      appCheck = initializeAppCheck(app, {
-        provider: new ReCaptchaEnterpriseProvider(ENTERPRISE_SITE_KEY),
-        isTokenAutoRefreshEnabled: true,
-      });
+    // לוג מצב טוקן (נוח לדיבוג)
+    onAppCheckTokenChanged(inst, (token) => {
+      if (isDev) console.info("[AppCheck] token state:", token ? "OK" : "MISSING");
+    });
 
-      try {
-        window.appCheck = appCheck;
-        window.getAppCheckToken = () => getAppCheckToken(appCheck, true);
-      } catch {}
+    // משיכת טוקן ראשונית (לא חובה, עוזר לזהות שגיאות מוקדם)
+    getAppCheckToken(inst, /* forceRefresh */ false).catch(() => {});
 
-      onAppCheckTokenChanged(appCheck, (tok) => {
-        if (isDev) console.log("[AppCheck] token state:", tok ? "OK" : "MISSING");
-      });
-
-      // טריגר ראשוני כדי לוודא שהטוקן מונפק לפני פעולות Auth/OAuth
-      getAppCheckToken(appCheck, true).catch(e =>
-        console.warn("[AppCheck] getToken failed:", e?.message || e)
-      );
-    }
+    return inst;
   } catch (e) {
-    console.error("[AppCheck] init failed:", e?.message || e);
+    console.warn("[AppCheck] init failed:", e?.message || e);
+    return null;
   }
-}
+})();
 
 /* =========================
-   Auth (אחרי App Check)
+   Auth
    ========================= */
 export const auth = (() => {
   try {
@@ -249,19 +235,29 @@ if (wantEmulators && isLocalHost) {
 /* =========================
    Helpers
    ========================= */
-export async function ensureAuthTokenFresh() {
+
+// מחזיר ID token עדכני של המשתמש המחובר
+export async function ensureAuthTokenFresh(force = true) {
   const user = auth.currentUser;
   if (!user) throw new Error("No authenticated user");
-  return await user.getIdToken(true);
+  return await user.getIdToken(!!force);
 }
 
-// App Check token (אם מאותחל)
-async function getAppCheckTokenSafe() { return await getAppCheckAttestation(false); }
+// קבלת App Check token (ייתכן null אם לא מאותחל/Monitoring בלבד)
+export async function getAppCheckTokenSafe(force = false) {
+  try {
+    if (!appCheck) return null;
+    const { token } = await getAppCheckToken(appCheck, !!force);
+    return token || null;
+  } catch {
+    return null;
+  }
+}
 
 // התחזות כ-UID (Cloud Function adminImpersonate)
 const IMPERSONATE_FN_NAME = fromEnv("FN_IMPERSONATE") || "adminImpersonate";
 export async function impersonateUser(uid) {
-  const appCheckToken = await getAppCheckTokenSafe(); // יכול להיות null; הפונקציה בענן צריכה לדעת לקבל null
+  const appCheckToken = await getAppCheckTokenSafe(); // יכול להיות null (מותר)
   const call = httpsCallable(functions, IMPERSONATE_FN_NAME);
   const { data } = await call({ uid, appCheckToken });
   if (!data?.customToken) throw new Error("Impersonate failed: no customToken");
@@ -275,3 +271,5 @@ if (isBrowser && isDev) {
     console.info("[Auth] state:", u ? { uid: u.uid, email: u.email } : "(signed out)");
   });
 }
+
+export default app;
