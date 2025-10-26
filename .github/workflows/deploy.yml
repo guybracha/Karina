@@ -36,9 +36,7 @@ jobs:
 
       # ===== App Check (reCAPTCHA Enterprise) =====
       FB_RECAPTCHA_ENTERPRISE_KEY: ${{ secrets.FB_RECAPTCHA_ENTERPRISE_KEY }}
-      # הפעלה/כיבוי — רשות: "true"/"false". אם ריק, יופעל אוטומטית רק אם יש מפתח
       APPCHECK_ENABLE: ${{ secrets.APPCHECK_ENABLE }}
-      # רשות: "true" או טוקן קבוע לדיבוג
       APPCHECK_DEBUG_TOKEN: ${{ secrets.APPCHECK_DEBUG_TOKEN }}
 
       # ===== Functions =====
@@ -97,11 +95,11 @@ jobs:
             exit 1
           fi
 
-      # יצירת __ENV__.js בזמן deploy
-      - name: Create runtime __ENV__.js
+      # יצירת _ENV_.js בזמן deploy (שם עם קו תחתון אחד)
+      - name: Create runtime _ENV_.js
         run: |
           d=${{ steps.detect.outputs.dir }}
-          cat > "$d/__ENV__.js" <<EOF
+          cat > "$d/_ENV_.js" <<EOF
           window.__ENV__ = {
             // ---- FB_* ----
             FB_API_KEY:              "${FB_API_KEY}",
@@ -132,27 +130,27 @@ jobs:
           EOF
 
           # וידוא שאין פלייסהולדרים שלא הוחלפו
-          if grep -q '\${[A-Z_]\+}' "$d/__ENV__.js"; then
-            echo "::error::Placeholders remained in __ENV__.js (variables not expanded). Check heredoc quoting and env inputs."
-            sed -n '1,160p' "$d/__ENV__.js"
+          if grep -q '\${[A-Z_]\+}' "$d/_ENV_.js"; then
+            echo "::error::Placeholders remained in _ENV_.js (variables not expanded)."
+            sed -n '1,160p' "$d/_ENV_.js"
             exit 1
           fi
 
       # הזרקה אוטומטית של הסקריפט ל-index.html (לפני </head>)
-      - name: Inject __ENV__.js into index.html
+      - name: Inject _ENV_.js into index.html
         run: |
           d=${{ steps.detect.outputs.dir }}
           index="$d/index.html"
           if [ -f "$index" ]; then
             if grep -q '</head>' "$index"; then
-              if ! grep -q '__ENV__.js' "$index"; then
-                sed -i 's#</head>#  <script src="/__ENV__.js"></script>\n</head>#' "$index"
-                echo "Injected <script src=\"/__ENV__.js\"></script> into index.html"
+              if ! grep -q '_ENV_.js' "$index"; then
+                sed -i 's#</head>#  <script src="/_ENV_.js"></script>\n</head>#' "$index"
+                echo "Injected <script src=\"/_ENV_.js\"></script> into index.html"
               else
-                echo "index.html already contains __ENV__.js"
+                echo "index.html already contains _ENV_.js"
               fi
             else
-              echo "::warning::index.html missing </head> — please include <script src=\"/__ENV__.js\"></script> manually"
+              echo "::warning::index.html missing </head> — please include <script src=\"/_ENV_.js\"></script> manually"
             fi
           else
             echo "::error::index.html not found under $d"
@@ -162,7 +160,7 @@ jobs:
       - name: Add CNAME for custom domain
         run: echo "karina.co.il" > "${{ steps.detect.outputs.dir }}/CNAME"
 
-      # SPA fallback כדי לפתור 404 ב-/auth וכד'
+      # SPA fallback כדי לפתור 404 בריענון נתיבים
       - name: Add 404.html for SPA
         run: |
           d=${{ steps.detect.outputs.dir }}

@@ -4,7 +4,8 @@ import {
   doc,
   getDoc,
   getDocFromCache,
-  getDocFromServer,     // ⬅️ חשוב: נשתמש במקום getDoc(..., {source:'server'})
+  // בגרסאות מודרניות של Firestore זה קיים; נשמור Fallback אם לא
+  getDocFromServer as _getDocFromServer,
   setDoc,
   serverTimestamp,
   deleteField,
@@ -32,12 +33,12 @@ const ALLOWED_KEYS = new Set([
 const clean = (v) => (typeof v === "string" ? v.trim() : v);
 const normalizePhone = (s = "") => String(s || "").replace(/\D+/g, ""); // שומר רק ספרות
 
-const isValidEmail = (v) =>
-  typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+const isValidEmail =
+  (v) => typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 // 7–15 ספרות (אחסון נקי אחרי normalizePhone)
-const isValidPhoneDigits = (v) =>
-  typeof v === "string" && /^\d{7,15}$/.test(v);
+const isValidPhoneDigits =
+  (v) => typeof v === "string" && /^\d{7,15}$/.test(v);
 
 function pickAllowed(obj = {}) {
   const out = {};
@@ -49,7 +50,8 @@ function pickAllowed(obj = {}) {
 
 async function readFresh(ref) {
   // קורא ישירות מהשרת כדי לעקוף קאש/IndexedDB
-  const fresh = await getDocFromServer(ref);
+  const getFresh = _getDocFromServer || getDoc; // Fallback אם הפונקציה לא קיימת בגרסה
+  const fresh = await getFresh(ref);
   return fresh.exists() ? { id: fresh.id, ...fresh.data() } : null;
 }
 
@@ -85,7 +87,7 @@ export async function ensureUserDoc(user, extra = null) {
     phone: deleteField(),
   };
 
-  // שדות Marketing אופציונליים
+  // שדות Marketing אופציונליים (מסוננים — לא מקבלים createdAt/updatedAt מהקליינט)
   let marketing = {};
   if (extra && typeof extra === "object") {
     const e = pickAllowed(extra);

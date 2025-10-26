@@ -55,10 +55,10 @@ function friendlyFirestoreError(err) {
   const code = err?.code || "";
   const msg  = err?.message || "";
   if (/app\-check/i.test(code) || /appCheck/i.test(msg) || /throttled/i.test(msg)) {
-    return "נחסמה הגישה עקב App Check (אבטחה). נסו לרענן דף, להתחבר מחדש, או לעבוד בחלון אינקוגניטו. אם הבעיה נמשכת — כבו זמנית Enforcement ב־App Check או הפעילו DEBUG token.";
+    return "נחסמה הגישה עקב App Check (אבטחה). נסו לרענן דף, להתחבר מחדש, או לעבוד בחלון אינקוגניטו. אם הבעיה נמשכת — ודאו שבקוד לא מאותחל App Check/שווה ערך.";
   }
   if (code === "permission-denied" || /Missing or insufficient permissions/i.test(msg)) {
-    return "אין הרשאה לשמור או לקרוא כעת (יתכן עקב App Check או כללי אבטחה).";
+    return "אין הרשאה לשמור או לקרוא כעת (בד\"כ עקב כללי Firestore).";
   }
   return null;
 }
@@ -509,7 +509,7 @@ export default function Account() {
                     ביטול
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={saving || !user}>
-                    {saving ? "শומר…" : "שמור"}
+                    {saving ? "שומר…" : "שמור"}
                   </button>
                 </div>
               </form>
