@@ -36,8 +36,12 @@ jobs:
 
       # ===== App Check (reCAPTCHA Enterprise) =====
       FB_RECAPTCHA_ENTERPRISE_KEY: ${{ secrets.FB_RECAPTCHA_ENTERPRISE_KEY }}
+      # הפעלה/כיבוי — רשות: "true"/"false". אם ריק, יופעל אוטומטית רק אם יש מפתח
+      APPCHECK_ENABLE: ${{ secrets.APPCHECK_ENABLE }}
+      # רשות: "true" או טוקן קבוע לדיבוג
+      APPCHECK_DEBUG_TOKEN: ${{ secrets.APPCHECK_DEBUG_TOKEN }}
 
-      # ===== Functions (optional) =====
+      # ===== Functions =====
       FB_FUNCTIONS_REGION: europe-west1
 
     steps:
@@ -53,7 +57,6 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
-      # ולידציה של ENV לפני build
       - name: Verify Firebase & App Check env are present
         run: |
           missing=0
@@ -67,14 +70,14 @@ jobs:
             fi
           done
 
-          if [ -z "${FB_RECAPTCHA_ENTERPRISE_KEY}" ]; then
-            echo "::warning::FB_RECAPTCHA_ENTERPRISE_KEY not set (App Check Enterprise will be disabled in code if you guard it)."
-          else
-            echo "✅ App Check site key OK"
-          fi
-
           if [ -z "${FB_MEASUREMENT_ID}" ]; then
             echo "::warning::FB_MEASUREMENT_ID not set (Analytics off)."
+          fi
+
+          if [ -z "${FB_RECAPTCHA_ENTERPRISE_KEY}" ]; then
+            echo "::warning::FB_RECAPTCHA_ENTERPRISE_KEY not set — App Check Enterprise will initialize only if enabled and key exists."
+          else
+            echo "✅ App Check site key OK"
           fi
 
           [ "$missing" -eq 1 ] && exit 1 || echo "ENV OK"
@@ -94,7 +97,7 @@ jobs:
             exit 1
           fi
 
-      # יצירת __ENV__.js בזמן deploy (חשוב: EOF ללא גרשיים כדי שהמשתנים יורחבו!)
+      # יצירת __ENV__.js בזמן deploy
       - name: Create runtime __ENV__.js
         run: |
           d=${{ steps.detect.outputs.dir }}
@@ -111,6 +114,10 @@ jobs:
             FB_RECAPTCHA_ENTERPRISE_KEY: "${FB_RECAPTCHA_ENTERPRISE_KEY}",
             FB_FUNCTIONS_REGION:     "${FB_FUNCTIONS_REGION}",
 
+            // ---- App Check flags ----
+            APPCHECK_ENABLE:         "${APPCHECK_ENABLE}",
+            APPCHECK_DEBUG_TOKEN:    "${APPCHECK_DEBUG_TOKEN}",
+
             // ---- Mirrored REACT_APP_* for compatibility ----
             REACT_APP_FB_API_KEY:              "${FB_API_KEY}",
             REACT_APP_FB_AUTH_DOMAIN:          "${FB_AUTH_DOMAIN}",
@@ -119,16 +126,15 @@ jobs:
             REACT_APP_FB_MESSAGING_SENDER_ID:  "${FB_MESSAGING_SENDER_ID}",
             REACT_APP_FB_APP_ID:               "${FB_APP_ID}",
             REACT_APP_FB_MEASUREMENT_ID:       "${FB_MEASUREMENT_ID}",
-            REACT_APP_APPCHECK_E_SITE_KEY:     "${FB_RECAPTCHA_ENTERPRISE_KEY}",
             REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: "${FB_RECAPTCHA_ENTERPRISE_KEY}",
             REACT_APP_FB_FUNCTIONS_REGION:     "${FB_FUNCTIONS_REGION}"
           };
           EOF
 
-          # בדיקת סניטציה: שלא נשארו פלייסהולדרים בסגנון ${...}
+          # וידוא שאין פלייסהולדרים שלא הוחלפו
           if grep -q '\${[A-Z_]\+}' "$d/__ENV__.js"; then
             echo "::error::Placeholders remained in __ENV__.js (variables not expanded). Check heredoc quoting and env inputs."
-            sed -n '1,120p' "$d/__ENV__.js"
+            sed -n '1,160p' "$d/__ENV__.js"
             exit 1
           fi
 
@@ -139,7 +145,6 @@ jobs:
           index="$d/index.html"
           if [ -f "$index" ]; then
             if grep -q '</head>' "$index"; then
-              # הימנע מהזרקה כפולה
               if ! grep -q '__ENV__.js' "$index"; then
                 sed -i 's#</head>#  <script src="/__ENV__.js"></script>\n</head>#' "$index"
                 echo "Injected <script src=\"/__ENV__.js\"></script> into index.html"
@@ -157,10 +162,16 @@ jobs:
       - name: Add CNAME for custom domain
         run: echo "karina.co.il" > "${{ steps.detect.outputs.dir }}/CNAME"
 
+      # SPA fallback כדי לפתור 404 ב-/auth וכד'
       - name: Add 404.html for SPA
         run: |
           d=${{ steps.detect.outputs.dir }}
-          [ -f "$d/index.html" ] && cp -f "$d/index.html" "$d/404.html" || echo "::warning::index.html not found for 404 fallback"
+          if [ -f "$d/index.html" ]; then
+            cp -f "$d/index.html" "$d/404.html"
+            echo "Created SPA fallback 404.html"
+          else
+            echo "::warning::index.html not found for 404 fallback"
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

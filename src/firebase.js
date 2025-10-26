@@ -33,7 +33,6 @@ import {
 /* =========================
    Environment helpers
    ========================= */
-const g = (typeof globalThis !== "undefined" ? globalThis : (typeof window !== "undefined" ? window : {}));
 const isBrowser = typeof window !== "undefined";
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -47,7 +46,7 @@ function fromEnv(...keys) {
       runtime[raw] ||
       runtime[`REACT_APP_${raw}`] ||
       runtime[`VITE_${raw}`];
-    if (v) return String(v).trim();
+    if (v != null && String(v).trim() !== "") return String(v).trim();
   }
   return "";
 }
@@ -91,13 +90,33 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =======================================================================
-   App Check (reCAPTCHA Enterprise)
+   App Check (reCAPTCHA Enterprise) — ניתן לכיבוי/הפעלה דרך ENV
    ======================================================================= */
 const RECAPTCHA_ENTERPRISE_SITE_KEY =
   fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
 
+const APPCHECK_ENABLE = (() => {
+  // "true" / "false" / "" (ברירת מחדל: true אם יש מפתח)
+  const raw = fromEnv("APPCHECK_ENABLE");
+  if (!raw) return !!RECAPTCHA_ENTERPRISE_SITE_KEY; // יש מפתח? נפעיל
+  return /^1|true|yes$/i.test(raw);
+})();
+
+const APPCHECK_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN"); // אופציונלי: ערך "true" או טוקן ידני
+
+if (isBrowser && APPCHECK_DEBUG_TOKEN) {
+  // מאפשר לעקוף Throttle בסביבת פיתוח / מכשיר בעייתי
+  // שים "true" לקבלת טוקן אקראי בקונסול כרום, או הדבק טוקן ספציפי
+  // eslint-disable-next-line no-undef
+  self.FIREBASE_APPCHECK_DEBUG_TOKEN = APPCHECK_DEBUG_TOKEN === "true" ? true : APPCHECK_DEBUG_TOKEN;
+}
+
 export const appCheck = (function initAppCheck() {
   if (!isBrowser) return null;
+  if (!APPCHECK_ENABLE) {
+    console.warn("[AppCheck] Disabled by APPCHECK_ENABLE or missing site key.");
+    return null;
+  }
   if (!RECAPTCHA_ENTERPRISE_SITE_KEY) {
     console.warn("[AppCheck] Missing reCAPTCHA Enterprise site key – App Check not initialized.");
     return null;
@@ -112,8 +131,7 @@ export const appCheck = (function initAppCheck() {
       onAppCheckTokenChanged(inst, (token) => {
         console.info("[AppCheck] token state:", token ? "OK" : "MISSING");
       });
-      // שאיבה ראשונית לדיבוג (לא חובה)
-      getAppCheckToken(inst, false).catch(() => {});
+      getAppCheckToken(inst, false).catch(() => {}); // שאיבה ראשונית (אופציונלי)
     }
 
     return inst;
