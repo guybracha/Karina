@@ -92,20 +92,9 @@ if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =======================================================================
    App Check (reCAPTCHA Enterprise)
-   - ודא שב- Firebase Console › App Check: מוגדר reCAPTCHA Enterprise וב-enforcement התחל כ- "Monitoring" ואז העלה ל-"Enforced"
-   - ודא שב- reCAPTCHA Enterprise › Key: הוספת דומיינים (localhost/127.0.0.1/karina.co.il)
    ======================================================================= */
 const RECAPTCHA_ENTERPRISE_SITE_KEY =
   fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
-
-// Debug token (אופציונלי): שים מחרוזת שנוצרה בקונסול, או TRUE לייצר טוקן בקונסול הדפדפן
-const APP_CHECK_DEBUG = fromEnv("APP_CHECK_DEBUG_TOKEN", "FB_APPCHECK_DEBUG_TOKEN");
-
-if (isBrowser && APP_CHECK_DEBUG) {
-  // אם שמים "true" – ה-SDK ידפיס קוד חד-פעמי בקונסול; אם מחרוזת – ישתמש בה ישירות
-  g.FIREBASE_APPCHECK_DEBUG_TOKEN =
-    (APP_CHECK_DEBUG.toLowerCase?.() === "true") ? true : APP_CHECK_DEBUG;
-}
 
 export const appCheck = (function initAppCheck() {
   if (!isBrowser) return null;
@@ -119,13 +108,13 @@ export const appCheck = (function initAppCheck() {
       isTokenAutoRefreshEnabled: true,
     });
 
-    // לוג מצב טוקן (נוח לדיבוג)
-    onAppCheckTokenChanged(inst, (token) => {
-      if (isDev) console.info("[AppCheck] token state:", token ? "OK" : "MISSING");
-    });
-
-    // משיכת טוקן ראשונית (לא חובה, עוזר לזהות שגיאות מוקדם)
-    getAppCheckToken(inst, /* forceRefresh */ false).catch(() => {});
+    if (isDev) {
+      onAppCheckTokenChanged(inst, (token) => {
+        console.info("[AppCheck] token state:", token ? "OK" : "MISSING");
+      });
+      // שאיבה ראשונית לדיבוג (לא חובה)
+      getAppCheckToken(inst, false).catch(() => {});
+    }
 
     return inst;
   } catch (e) {
@@ -218,7 +207,8 @@ if (isBrowser) {
    Emulators (optional)
    ========================= */
 const wantEmulators = (fromEnv("USE_EMULATORS") || "false").toLowerCase() === "true";
-const isLocalHost = isBrowser && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname);
+const isLocalHost =
+  isBrowser && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(window.location.hostname);
 
 if (wantEmulators && isLocalHost) {
   try {

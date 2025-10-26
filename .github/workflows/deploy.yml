@@ -26,21 +26,19 @@ jobs:
       DISABLE_ESLINT_PLUGIN: true
 
       # ===== Firebase (from Secrets) =====
-      REACT_APP_FB_API_KEY:             ${{ secrets.REACT_APP_FB_API_KEY }}
-      REACT_APP_FB_AUTH_DOMAIN:         ${{ secrets.REACT_APP_FB_AUTH_DOMAIN }}
-      REACT_APP_FB_PROJECT_ID:          ${{ secrets.REACT_APP_FB_PROJECT_ID }}
-      REACT_APP_FB_STORAGE_BUCKET:      ${{ secrets.REACT_APP_FB_STORAGE_BUCKET }}
-      REACT_APP_FB_MESSAGING_SENDER_ID: ${{ secrets.REACT_APP_FB_MESSAGING_SENDER_ID }}
-      REACT_APP_FB_APP_ID:              ${{ secrets.REACT_APP_FB_APP_ID }}
-      REACT_APP_FB_MEASUREMENT_ID:      ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
+      FB_API_KEY:              ${{ secrets.FB_API_KEY }}
+      FB_AUTH_DOMAIN:          ${{ secrets.FB_AUTH_DOMAIN }}
+      FB_PROJECT_ID:           ${{ secrets.FB_PROJECT_ID }}
+      FB_STORAGE_BUCKET:       ${{ secrets.FB_STORAGE_BUCKET }}
+      FB_MESSAGING_SENDER_ID:  ${{ secrets.FB_MESSAGING_SENDER_ID }}
+      FB_APP_ID:               ${{ secrets.FB_APP_ID }}
+      FB_MEASUREMENT_ID:       ${{ secrets.FB_MEASUREMENT_ID }}
 
       # ===== App Check (reCAPTCHA Enterprise) =====
-      # מותר שיהיה פומבי בצד לקוח
-      REACT_APP_APPCHECK_E_SITE_KEY:          ${{ secrets.REACT_APP_APPCHECK_E_SITE_KEY }}
-      REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY }}
+      FB_RECAPTCHA_ENTERPRISE_KEY: ${{ secrets.FB_RECAPTCHA_ENTERPRISE_KEY }}
 
       # ===== Functions (optional) =====
-      REACT_APP_FB_FUNCTIONS_REGION: europe-west1
+      FB_FUNCTIONS_REGION: europe-west1
 
     steps:
       - name: Checkout
@@ -55,28 +53,20 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
-      # נירמול שם משתנה ה-App Check (תמיכה בשני השמות)
-      - name: Normalize App Check env var
-        run: |
-          if [ -z "${REACT_APP_APPCHECK_E_SITE_KEY}" ] && [ -n "${REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY}" ]; then
-            echo "REACT_APP_APPCHECK_E_SITE_KEY=${REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY}" >> $GITHUB_ENV
-            echo "Mapped REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY -> REACT_APP_APPCHECK_E_SITE_KEY"
-          fi
-
       # ולידציה של ENV לפני build
       - name: Verify Firebase & App Check env are present
         run: |
           missing=0
-          required=( REACT_APP_FB_API_KEY REACT_APP_FB_AUTH_DOMAIN REACT_APP_FB_PROJECT_ID REACT_APP_FB_STORAGE_BUCKET REACT_APP_FB_MESSAGING_SENDER_ID REACT_APP_FB_APP_ID )
+          required=( FB_API_KEY FB_AUTH_DOMAIN FB_PROJECT_ID FB_STORAGE_BUCKET FB_MESSAGING_SENDER_ID FB_APP_ID )
           for k in "${required[@]}"; do
             if [ -z "${!k}" ]; then echo "::error::Missing $k"; missing=1; else echo "✅ $k"; fi
           done
-          if [ -z "${REACT_APP_APPCHECK_E_SITE_KEY}" ] && [ -z "${REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY}" ]; then
-            echo "::error::Missing App Check site key (REACT_APP_APPCHECK_E_SITE_KEY or REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY)"; missing=1
+          if [ -z "${FB_RECAPTCHA_ENTERPRISE_KEY}" ]; then
+            echo "::error::Missing FB_RECAPTCHA_ENTERPRISE_KEY"; missing=1
           else
             echo "✅ App Check site key OK"
           fi
-          [ -z "${REACT_APP_FB_MEASUREMENT_ID}" ] && echo "::warning::REACT_APP_FB_MEASUREMENT_ID not set (Analytics off)."
+          [ -z "${FB_MEASUREMENT_ID}" ] && echo "::warning::FB_MEASUREMENT_ID not set (Analytics off)."
           [ "$missing" -eq 1 ] && exit 1 || echo "ENV OK"
 
       - name: Build
@@ -94,26 +84,42 @@ jobs:
             exit 1
           fi
 
-      # יצירת __ENV__.js בזמן deploy (לטעינת ENV גם בזמן ריצה)
+      # יצירת __ENV__.js בזמן deploy (טעינת ENV בזמן ריצה + תאימות גם ל-REACT_APP_*)
       - name: Create runtime __ENV__.js
         run: |
           d=${{ steps.detect.outputs.dir }}
           cat > "$d/__ENV__.js" << 'EOF'
           window.__ENV__ = {
-            REACT_APP_FB_API_KEY:             "${REACT_APP_FB_API_KEY}",
-            REACT_APP_FB_AUTH_DOMAIN:         "${REACT_APP_FB_AUTH_DOMAIN}",
-            REACT_APP_FB_PROJECT_ID:          "${REACT_APP_FB_PROJECT_ID}",
-            REACT_APP_FB_STORAGE_BUCKET:      "${REACT_APP_FB_STORAGE_BUCKET}",
-            REACT_APP_FB_MESSAGING_SENDER_ID: "${REACT_APP_FB_MESSAGING_SENDER_ID}",
-            REACT_APP_FB_APP_ID:              "${REACT_APP_FB_APP_ID}",
-            REACT_APP_FB_MEASUREMENT_ID:      "${REACT_APP_FB_MEASUREMENT_ID}",
-            REACT_APP_FB_FUNCTIONS_REGION:    "${REACT_APP_FB_FUNCTIONS_REGION}",
-            REACT_APP_FB_RECAPTCHA_ENTERPRISE_KEY: "${REACT_APP_APPCHECK_E_SITE_KEY}"
+            // ---- FB_* ----
+            FB_API_KEY:              "${FB_API_KEY}",
+            FB_AUTH_DOMAIN:          "${FB_AUTH_DOMAIN}",
+            FB_PROJECT_ID:           "${FB_PROJECT_ID}",
+            FB_STORAGE_BUCKET:       "${FB_STORAGE_BUCKET}",
+            FB_MESSAGING_SENDER_ID:  "${FB_MESSAGING_SENDER_ID}",
+            FB_APP_ID:               "${FB_APP_ID}",
+            FB_MEASUREMENT_ID:       "${FB_MEASUREMENT_ID}",
+            FB_RECAPTCHA_ENTERPRISE_KEY: "${FB_RECAPTCHA_ENTERPRISE_KEY}",
+            FB_FUNCTIONS_REGION:     "${FB_FUNCTIONS_REGION}",
+
+            // ---- Mirrored REACT_APP_* for compatibility ----
+            REACT_APP_FB_API_KEY:              "${FB_API_KEY}",
+            REACT_APP_FB_AUTH_DOMAIN:          "${FB_AUTH_DOMAIN}",
+            REACT_APP_FB_PROJECT_ID:           "${FB_PROJECT_ID}",
+            REACT_APP_FB_STORAGE_BUCKET:       "${FB_STORAGE_BUCKET}",
+            REACT_APP_FB_MESSAGING_SENDER_ID:  "${FB_MESSAGING_SENDER_ID}",
+            REACT_APP_FB_APP_ID:               "${FB_APP_ID}",
+            REACT_APP_FB_MEASUREMENT_ID:       "${FB_MEASUREMENT_ID}",
+            REACT_APP_APPCHECK_E_SITE_KEY:     "${FB_RECAPTCHA_ENTERPRISE_KEY}",
+            REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: "${FB_RECAPTCHA_ENTERPRISE_KEY}",
+            REACT_APP_FB_FUNCTIONS_REGION:     "${FB_FUNCTIONS_REGION}"
           };
           EOF
-          # הזרקת הטעינה ל-index.html (לפני סקריפטים אחרים)
+
+          # הזרקה אוטומטית של הסקריפט ל-index.html (לפני </head>)
           if grep -q "</head>" "$d/index.html"; then
             sed -i 's#</head>#  <script src="/__ENV__.js"></script>\n</head>#' "$d/index.html"
+          else
+            echo "::warning::index.html not found or missing </head> — please include <script src=\"/__ENV__.js\"></script> manually"
           fi
 
       - name: Add CNAME for custom domain
