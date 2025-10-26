@@ -25,7 +25,7 @@ jobs:
       CI: false
       DISABLE_ESLINT_PLUGIN: true
 
-      # ===== Firebase (מ-Secrets) =====
+      # ===== Firebase (from Secrets) =====
       REACT_APP_FB_API_KEY:             ${{ secrets.REACT_APP_FB_API_KEY }}
       REACT_APP_FB_AUTH_DOMAIN:         ${{ secrets.REACT_APP_FB_AUTH_DOMAIN }}
       REACT_APP_FB_PROJECT_ID:          ${{ secrets.REACT_APP_FB_PROJECT_ID }}
@@ -34,13 +34,12 @@ jobs:
       REACT_APP_FB_APP_ID:              ${{ secrets.REACT_APP_FB_APP_ID }}
       REACT_APP_FB_MEASUREMENT_ID:      ${{ secrets.REACT_APP_FB_MEASUREMENT_ID }}
 
-      # ===== App Check =====
-      REACT_APP_ENABLE_APPCHECK: "true"
-      # אתה יכול להשתמש באחד מהשניים (או בשניהם לאותו value ב-Secrets):
+      # ===== App Check (reCAPTCHA Enterprise) =====
+      # מותר שיהיה פומבי בצד לקוח
       REACT_APP_APPCHECK_E_SITE_KEY:          ${{ secrets.REACT_APP_APPCHECK_E_SITE_KEY }}
       REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY }}
 
-      # ===== Functions (אם רלוונטי) =====
+      # ===== Functions (optional) =====
       REACT_APP_FB_FUNCTIONS_REGION: europe-west1
 
     steps:
@@ -59,41 +58,26 @@ jobs:
       # נירמול שם משתנה ה-App Check (תמיכה בשני השמות)
       - name: Normalize App Check env var
         run: |
-          # אם REACT_APP_APPCHECK_E_SITE_KEY ריק אבל יש REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY,
-          # נמפה אותו כדי שהקוד ימצא את המשתנה האחיד.
           if [ -z "${REACT_APP_APPCHECK_E_SITE_KEY}" ] && [ -n "${REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY}" ]; then
             echo "REACT_APP_APPCHECK_E_SITE_KEY=${REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY}" >> $GITHUB_ENV
             echo "Mapped REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY -> REACT_APP_APPCHECK_E_SITE_KEY"
           fi
 
-      # ואלידציה של ENV לפני ה-build
+      # ולידציה של ENV לפני build
       - name: Verify Firebase & App Check env are present
         run: |
           missing=0
-          required=( \
-            REACT_APP_FB_API_KEY REACT_APP_FB_AUTH_DOMAIN REACT_APP_FB_PROJECT_ID \
-            REACT_APP_FB_STORAGE_BUCKET REACT_APP_FB_MESSAGING_SENDER_ID REACT_APP_FB_APP_ID \
-          )
+          required=( REACT_APP_FB_API_KEY REACT_APP_FB_AUTH_DOMAIN REACT_APP_FB_PROJECT_ID REACT_APP_FB_STORAGE_BUCKET REACT_APP_FB_MESSAGING_SENDER_ID REACT_APP_FB_APP_ID )
           for k in "${required[@]}"; do
-            if [ -z "${!k}" ]; then
-              echo "::error::Missing $k"
-              missing=1
-            else
-              echo "✅ $k"
-            fi
+            if [ -z "${!k}" ]; then echo "::error::Missing $k"; missing=1; else echo "✅ $k"; fi
           done
-
-          # אחד משני משתני ה-site key של App Check חייב להיות קיים אחרי הנירמול
-          if [ -z "${REACT_APP_APPCHECK_E_SITE_KEY}" ]; then
-            echo "::error::Missing App Check site key (REACT_APP_APPCHECK_E_SITE_KEY or REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY)"
-            missing=1
+          if [ -z "${REACT_APP_APPCHECK_E_SITE_KEY}" ] && [ -z "${REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY}" ]; then
+            echo "::error::Missing App Check site key (REACT_APP_APPCHECK_E_SITE_KEY or REACT_APP_RECAPTCHA_ENTERPRISE_SITE_KEY)"; missing=1
           else
             echo "✅ App Check site key OK"
           fi
-
           [ -z "${REACT_APP_FB_MEASUREMENT_ID}" ] && echo "::warning::REACT_APP_FB_MEASUREMENT_ID not set (Analytics off)."
-          if [ "$missing" -eq 1 ]; then exit 1; fi
-          echo "ENV OK"
+          [ "$missing" -eq 1 ] && exit 1 || echo "ENV OK"
 
       - name: Build
         run: npm run build
@@ -110,15 +94,35 @@ jobs:
             exit 1
           fi
 
+      # יצירת __ENV__.js בזמן deploy (לטעינת ENV גם בזמן ריצה)
+      - name: Create runtime __ENV__.js
+        run: |
+          d=${{ steps.detect.outputs.dir }}
+          cat > "$d/__ENV__.js" << 'EOF'
+          window.__ENV__ = {
+            REACT_APP_FB_API_KEY:             "${REACT_APP_FB_API_KEY}",
+            REACT_APP_FB_AUTH_DOMAIN:         "${REACT_APP_FB_AUTH_DOMAIN}",
+            REACT_APP_FB_PROJECT_ID:          "${REACT_APP_FB_PROJECT_ID}",
+            REACT_APP_FB_STORAGE_BUCKET:      "${REACT_APP_FB_STORAGE_BUCKET}",
+            REACT_APP_FB_MESSAGING_SENDER_ID: "${REACT_APP_FB_MESSAGING_SENDER_ID}",
+            REACT_APP_FB_APP_ID:              "${REACT_APP_FB_APP_ID}",
+            REACT_APP_FB_MEASUREMENT_ID:      "${REACT_APP_FB_MEASUREMENT_ID}",
+            REACT_APP_FB_FUNCTIONS_REGION:    "${REACT_APP_FB_FUNCTIONS_REGION}",
+            REACT_APP_FB_RECAPTCHA_ENTERPRISE_KEY: "${REACT_APP_APPCHECK_E_SITE_KEY}"
+          };
+          EOF
+          # הזרקת הטעינה ל-index.html (לפני סקריפטים אחרים)
+          if grep -q "</head>" "$d/index.html"; then
+            sed -i 's#</head>#  <script src="/__ENV__.js"></script>\n</head>#' "$d/index.html"
+          fi
+
       - name: Add CNAME for custom domain
         run: echo "karina.co.il" > "${{ steps.detect.outputs.dir }}/CNAME"
 
       - name: Add 404.html for SPA
         run: |
           d=${{ steps.detect.outputs.dir }}
-          if [ -f "$d/index.html" ]; then
-            cp -f "$d/index.html" "$d/404.html"
-          fi
+          [ -f "$d/index.html" ] && cp -f "$d/index.html" "$d/404.html"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
