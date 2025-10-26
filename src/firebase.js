@@ -86,6 +86,11 @@ const firebaseConfig = resolveFirebaseConfig();
    App (singleton)
    ========================= */
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+if (process.env.NODE_ENV !== "production") {
+  console.log("🔥 Firebase projectId:", app.options.projectId);
+  globalThis.__FIREBASE_APP__ = app;
+}
+
 if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =======================================================================
@@ -105,8 +110,9 @@ const APPCHECK_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN"); // אופציונ�
 
 if (isBrowser && APPCHECK_DEBUG_TOKEN) {
   // eslint-disable-next-line no-undef
-  self.FIREBASE_APPCHECK_DEBUG_TOKEN = APPCHECK_DEBUG_TOKEN === "true" ? true : APPCHECK_DEBUG_TOKEN;
-}
+    globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN =
+    APPCHECK_DEBUG_TOKEN === "true" ? true : APPCHECK_DEBUG_TOKEN;
+  }
 
 export const appCheck = (function initAppCheck() {
   if (!isBrowser) return null;

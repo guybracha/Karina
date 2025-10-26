@@ -6,8 +6,8 @@ import { getUserProfile, updateUserProfile } from "../services/users";
 import { getMyOrders } from "../services/orders";
 import { logout } from "../services/auth";
 
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { app, db } from "../firebase";
+// ⬇️ הורדנו getFunctions/httpsCallable
+import { db } from "../firebase";
 
 import {
   updateProfile,
@@ -92,10 +92,7 @@ export default function Account() {
   const [saveMsg, setSaveMsg] = useState(null);
   const [saveErr, setSaveErr] = useState(null);
 
-  // מצב לכפתור המייל
-  const [mailBusy, setMailBusy] = useState(false);
-  const [mailMsg, setMailMsg] = useState(null);
-  const [mailErr, setMailErr] = useState(null);
+  // ⬇️ ה־state והלוגיקה של “מייל בדיקה” הוסרו
 
   // ניהול timeouts כדי לנקות ב-unmount
   const timeoutsRef = useRef([]);
@@ -296,30 +293,6 @@ export default function Account() {
     }
   }
 
-  // שליחת מייל בדיקה (Cloud Functions)
-  async function handleSendTestEmail() {
-    setMailErr(null);
-    setMailMsg(null);
-    try {
-      setMailBusy(true);
-      const functions = getFunctions(app, "europe-west1");
-      const testSendEmail = httpsCallable(functions, "testSendEmail");
-      const res = await testSendEmail({
-        to: email || undefined,
-        subject: "Karina — בדיקת מייל",
-        text: `שלום ${displayName}, זהו מייל בדיקה ממערכת Karina.`,
-      });
-      const data = res?.data || {};
-      setMailMsg(`המייל נשלח בהצלחה אל: ${data.sentTo || "מייל החברה"}`);
-    } catch (e) {
-      console.error(e);
-      setMailErr(e?.message || "שליחת המייל נכשלה");
-    } finally {
-      setMailBusy(false);
-      pushTimeout(() => { setMailMsg(null); setMailErr(null); }, 6000);
-    }
-  }
-
   return (
     <div className="container py-5">
       <h1 className="mb-4">החשבון שלי</h1>
@@ -348,11 +321,7 @@ export default function Account() {
             <button className="btn btn-outline-primary" onClick={() => setShowEdit(true)} disabled={loadingProfile}>
               עריכת פרטים
             </button>
-            <button className="btn btn-outline-secondary" onClick={handleSendTestEmail} disabled={mailBusy}>
-              {mailBusy ? "שולח…" : "שלח מייל בדיקה"}
-            </button>
-            {mailMsg && <div className="text-success small">{mailMsg}</div>}
-            {mailErr && <div className="text-danger small">{mailErr}</div>}
+            {/* ⬇️ כפתור “שלח מייל בדיקה” והודעותיו הוסרו */}
           </div>
         </div>
       </div>
