@@ -60,7 +60,7 @@ export async function ensureUserDoc(user, extra = null) {
   if (!user?.uid) return null;
 
   const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
+  const snap = (_getDocFromServer ? await _getDocFromServer(ref) : await getDoc(ref));
   const exists = snap.exists();
 
   const displayName =
@@ -128,7 +128,7 @@ export async function getUserProfile(uid) {
     // ignore cache miss
   }
 
-  const snap = await getDoc(ref);
+  const snap = (_getDocFromServer ? await _getDocFromServer(ref) : await getDoc(ref));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
@@ -136,7 +136,7 @@ export async function getUserProfile(uid) {
 export async function updateUserProfile(uid, data = {}) {
   if (!uid) throw new Error("missing uid");
   const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
+  const snap = (_getDocFromServer ? await _getDocFromServer(ref) : await getDoc(ref));
   const exists = snap.exists();
   const current = exists ? snap.data() || {} : {};
 
@@ -271,3 +271,4 @@ export async function setMarketingConsentFalse(uid) {
   );
   return await readFresh(ref);
 }
+
