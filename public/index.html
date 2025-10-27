@@ -2,21 +2,12 @@
 <html lang="he" dir="rtl">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="קארינה חולצות מודפסות - בגדי עבודה ממותגים ואיכותיים לעסקים, צוותים ואירועים."
-    />
-    <meta
-      name="google-site-verification"
-      content="PffqXWWB9GbrIdYcb0-L-8INO4jgTbauDEkqgpHSpx8"
-    />
+    <meta name="description" content="קארינה חולצות מודפסות - בגדי עבודה ממותגים ואיכותיים לעסקים, צוותים ואירועים." />
+    <meta name="google-site-verification" content="PffqXWWB9GbrIdYcb0-L-8INO4jgTbauDEkqgpHSpx8" />
 
-    <!-- אייקונים ומניפסט (CRA: משתמשים ב-%PUBLIC_URL%) -->
+    <!-- Icons & manifest (CRA: use %PUBLIC_URL%) -->
     <link rel="icon" href="%PUBLIC_URL%/logo.png" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
@@ -27,25 +18,18 @@
     <title>קארינה חולצות מודפסות</title>
 
     <!-- Bootstrap CSS -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
-    />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" />
 
-    <!-- 1) טעינת ENV בזמן ריצה (חייב להיות לפני כל קוד שתלוי בו) -->
-    <!-- אם האתר בשורש הדומיין, גם '/_ENV_.js' יעבוד. ב-CRA עדיף %PUBLIC_URL% -->
+    <!-- 1) Load runtime ENV before any code that needs it -->
     <script src="%PUBLIC_URL%/_ENV_.js"></script>
 
-    <!-- 2) GA4 לפי ה-measurementId מתוך window.__ENV__ -->
+    <!-- 2) GA4 by measurementId from window.__ENV__ -->
     <script>
       (function initGA() {
         try {
           var E = (window.__ENV__ || {});
           var MID = E.FB_MEASUREMENT_ID;
-
-          // אם לא הוגדר measurementId אמיתי – אל תטען GA
-          if (!MID || /^\$\{.+\}$/.test(String(MID))) return;
-
+          if (!MID || /^\$\{.+\}$/.test(String(MID))) return; // skip if placeholder
           var gtm = document.createElement("script");
           gtm.async = true;
           gtm.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(MID);
@@ -54,38 +38,47 @@
           window.dataLayer = window.dataLayer || [];
           function gtag(){ dataLayer.push(arguments); }
           window.gtag = gtag;
-
           gtag("js", new Date());
           gtag("config", MID, { send_page_view: true });
-        } catch (e) {
-          console.warn("GA init skipped:", e);
-        }
+        } catch (e) { console.warn("GA init skipped:", e); }
       })();
     </script>
+
+    <!-- reCAPTCHA Enterprise (render with the same site key used by App Check) -->
     <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeSJ_crAAAAAIOZfuqfgAhdEk7d4u5H26WakOV4"></script>
 
-
-    <!-- הערה: אין לטעון כאן reCAPTCHA Enterprise עם ?k=... כדי לא לקבע מפתח ב-HTML.
-         ה-Firebase SDK של App Check יטען את הספרייה לפי ה-site key שב-window.__ENV__. -->
+    <!-- Note: Do NOT hardcode ?k=... here. App Check SDK will load the library using the same site key from ENV. -->
   </head>
-
   <body>
     <noscript>יש לאפשר JavaScript כדי להפעיל את האפליקציה.</noscript>
     <div id="root"></div>
 
     <!-- Bootstrap JS Bundle -->
-    <script
-      defer
-      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-    ></script>
-    <!-- Replace the variables below. -->
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Optional: DEBUG helper for manual token test (hidden in production) -->
     <script>
-  function onClick(e) {
-    e.preventDefault();
-    grecaptcha.enterprise.ready(async () => {
-      const token = await grecaptcha.enterprise.execute('6LeSJ_crAAAAAIOZfuqfgAhdEk7d4u5H26WakOV4', {action: 'LOGIN'});
-    });
-  }
-</script>
+      (function attachRecaptchaDebug(){
+        try {
+          var E = (window.__ENV__ || {});
+          var DEBUG_ON = String(E.APP_DEBUG || "").toLowerCase() === "true";
+          if (!DEBUG_ON) return; // expose only in debug mode
+
+          window.__recaptchaTest = async function(evt){
+            try {
+              if (evt && evt.preventDefault) evt.preventDefault();
+              await new Promise(r => grecaptcha.enterprise.ready(r));
+              const token = await grecaptcha.enterprise.execute('6LeSJ_crAAAAAIOZfuqfgAhdEk7d4u5H26WakOV4', { action: 'login' });
+              console.log('[reCAPTCHA] token:', token);
+              return token;
+            } catch (e) {
+              console.error('[reCAPTCHA] execute failed:', e);
+              return null;
+            }
+          };
+          console.info('[reCAPTCHA] debug helper attached: window.__recaptchaTest()');
+        } catch(e) {}
+      })();
+    </script>
   </body>
 </html>
