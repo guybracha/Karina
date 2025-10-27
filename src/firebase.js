@@ -103,7 +103,16 @@ const RECAPTCHA_ENTERPRISE_SITE_KEY =
 // ⚠️ שינוי חשוב: כברירת-מחדל FALSE, אפילו אם יש מפתח. הפעלה ידנית בלבד.
 const APPCHECK_ENABLE = (() => {
   const raw = fromEnv("APPCHECK_ENABLE"); // 'true' / '1' כדי להפעיל
-  return /^1|true|yes$/i.test(raw);
+  if (raw) {
+    return /^1|true|yes$/i.test(raw);
+  }
+
+  // Production fallback: אם יש מפתח reCAPTCHA וזו לא סביבת פיתוח – נפעיל אוטומטית.
+  if (!isDev && !!RECAPTCHA_ENTERPRISE_SITE_KEY) {
+    return true;
+  }
+
+  return false;
 })();
 
 const APPCHECK_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN"); // אופציונלי
