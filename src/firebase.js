@@ -102,7 +102,7 @@ const RECAPTCHA_ENTERPRISE_SITE_KEY =
 if (typeof window !== "undefined") {
   console.info("[AppCheck] site key:",
     RECAPTCHA_ENTERPRISE_SITE_KEY
-      ? RECAPTCHA_ENTERPRISE_SITE_KEY.slice(0, 8) + "�"
+      ? RECAPTCHA_ENTERPRISE_SITE_KEY.slice(0, 8) + "�"
       : "(missing)"
   );
 }
@@ -127,6 +127,9 @@ const APPCHECK_ENABLE = (() => {
 
   return false;
 })();
+if (typeof window !== "undefined") {
+  console.info("[AppCheck] APPCHECK_ENABLE effective:", APPCHECK_ENABLE);
+}
 
 const APPCHECK_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN"); // אופציונלי
 
@@ -151,12 +154,17 @@ export const appCheck = (function initAppCheck() {
       provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_ENTERPRISE_SITE_KEY),
       isTokenAutoRefreshEnabled: true,
     });
-    if (isDev) {
-      onAppCheckTokenChanged(inst, (token) => {
-        console.info("[AppCheck] token state:", token ? "OK" : "MISSING");
+    console.info("[AppCheck] initializeAppCheck success");
+    onAppCheckTokenChanged(inst, (token) => {
+      console.info("[AppCheck] token state:", token ? "OK" : "MISSING");
+    });
+    getAppCheckToken(inst, false)
+      .then(({ token }) => {
+        console.info("[AppCheck] getToken success:", token ? token.slice(0, 12) + "…" : "(empty)");
+      })
+      .catch((err) => {
+        console.error("[AppCheck] getToken failed:", err?.message || err);
       });
-      getAppCheckToken(inst, false).catch(() => {});
-    }
     return inst;
   } catch (e) {
     console.warn("[AppCheck] init failed:", e?.message || e);
@@ -326,6 +334,8 @@ if (typeof window !== "undefined") {
 }
 
 export default app;
+
+
 
 
 
