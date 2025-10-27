@@ -99,13 +99,26 @@ if (isBrowser) { try { window.firebaseApp = app; } catch {} }
    ======================================================================= */
 const RECAPTCHA_ENTERPRISE_SITE_KEY =
   fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
+if (typeof window !== "undefined") {
+  console.info("[AppCheck] site key:",
+    RECAPTCHA_ENTERPRISE_SITE_KEY
+      ? RECAPTCHA_ENTERPRISE_SITE_KEY.slice(0, 8) + "�"
+      : "(missing)"
+  );
+}
+
 
 // ⚠️ שינוי חשוב: כברירת-מחדל FALSE, אפילו אם יש מפתח. הפעלה ידנית בלבד.
 const APPCHECK_ENABLE = (() => {
-  const raw = fromEnv("APPCHECK_ENABLE"); // 'true' / '1' כדי להפעיל
+  const raw = fromEnv("APPCHECK_ENABLE");
   if (raw) {
-    return /^1|true|yes$/i.test(raw);
+    const enabled = /^1|true|yes$/i.test(raw);
+    if (typeof window !== "undefined") {
+      console.info("[AppCheck] APPCHECK_ENABLE from env:", raw, "->", enabled);
+    }
+    return enabled;
   }
+
 
   // Production fallback: אם יש מפתח reCAPTCHA וזו לא סביבת פיתוח – נפעיל אוטומטית.
   if (!isDev && !!RECAPTCHA_ENTERPRISE_SITE_KEY) {
@@ -313,3 +326,6 @@ if (typeof window !== "undefined") {
 }
 
 export default app;
+
+
+
