@@ -198,9 +198,24 @@ export const functions = getFunctions(app, FUNCTIONS_REGION);
    Online/Offline + DEV helpers
    ========================= */
 if (isBrowser) {
-  window.addEventListener("online",  () => enableNetwork(db));
-  window.addEventListener("offline", () => disableNetwork(db));
-  if (!navigator.onLine) { disableNetwork(db).catch(() => {}); }
+  const goOnline = () => {
+    enableNetwork(db).catch(() => {});
+  };
+
+  const goOffline = () => {
+    disableNetwork(db).catch(() => {});
+  };
+
+  window.addEventListener("online", goOnline);
+  window.addEventListener("offline", goOffline);
+
+  // `navigator.onLine` מחזיר לעיתים false בדפדפן כרום למרות שיש אינטרנט (למשל במחשבי Windows מסוימים).
+  // בעבר היינו מכבים כאן את Firestore (disableNetwork) מידית, אך זה השאיר משתמשים "מנותקים" ללא מידע.
+  // במקום זאת אנו סומכים על אירועי online/offline כדי להחליף מצבים, וכך אם Chrome טועה –
+  // לא נחסום את טעינת הנתונים.
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    console.warn("[Firebase] navigator.onLine reported 'offline' at startup; deferring Firestore toggle until events fire.");
+  }
 
   if (isDev) {
     try {
