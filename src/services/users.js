@@ -61,6 +61,7 @@ export async function ensureUserDoc(user, extra = null) {
 
   const ref = doc(db, "users", user.uid);
   const snap = await getDoc(ref);
+  const exists = snap.exists();
 
   const displayName =
     clean(user.displayName) ||
@@ -76,45 +77,41 @@ export async function ensureUserDoc(user, extra = null) {
   const phoneDigits = normalizePhone(user.phoneNumber || "");
   const phoneNumber = phoneDigits && isValidPhoneDigits(phoneDigits) ? phoneDigits : null;
 
-  const base = {
+  const payload = {
     displayName,
     email,
     phoneNumber,
-    company: null,
     photoURL: clean(user.photoURL) || null,
     updatedAt: serverTimestamp(),
-    // מחיקת השדה הישן אם קיים
-    phone: deleteField(),
   };
 
+  if (!exists) {
+    payload.company = null;
+    payload.createdAt = serverTimestamp();
+  }
+
   // שדות Marketing אופציונליים (מסוננים — לא מקבלים createdAt/updatedAt מהקליינט)
-  let marketing = {};
   if (extra && typeof extra === "object") {
     const e = pickAllowed(extra);
     if (typeof e.marketingConsent === "boolean") {
+      payload.marketingConsent = !!e.marketingConsent;
       if (e.marketingConsent) {
-        marketing.marketingConsent = true;
-        marketing.marketingConsentAt = serverTimestamp();
+        payload.marketingConsentAt = serverTimestamp();
         if (typeof e.marketingConsentMethod === "string" && e.marketingConsentMethod.trim()) {
-          marketing.marketingConsentMethod = clean(e.marketingConsentMethod);
+          payload.marketingConsentMethod = clean(e.marketingConsentMethod);
         }
-      } else {
-        marketing.marketingConsent = false;
-        marketing.marketingConsentAt = deleteField();
-        marketing.marketingConsentMethod = deleteField();
+      } else if (exists) {
+        payload.marketingConsentAt = deleteField();
+        payload.marketingConsentMethod = deleteField();
       }
     }
   }
 
-  if (!snap.exists()) {
-    await setDoc(
-      ref,
-      { ...base, ...marketing, createdAt: serverTimestamp() },
-      { merge: true }
-    );
-  } else {
-    await setDoc(ref, { ...base, ...marketing }, { merge: true });
+  if (exists && typeof snap.data()?.phone !== "undefined") {
+    payload.phone = deleteField();
   }
+
+  await setDoc(ref, payload, { merge: true });
 
   return await readFresh(ref);
 }
@@ -139,43 +136,67 @@ export async function getUserProfile(uid) {
 export async function updateUserProfile(uid, data = {}) {
   if (!uid) throw new Error("missing uid");
   const ref = doc(db, "users", uid);
+  const snap = await getDoc(ref);
+  const exists = snap.exists();
+  const current = exists ? snap.data() || {} : {};
 
   const safe = pickAllowed(data);
-  const payload = {
-    // מחיקה יזומה של השדה הישן
-    phone: deleteField(),
-  };
+  const payload = {};
+
+  if (exists && typeof current.phone !== "undefined") {
+    payload.phone = deleteField();
+  }
 
   // displayName
   if ("displayName" in safe) {
     const v = clean(safe.displayName);
-    payload.displayName = v || deleteField();
+    if (v) {
+      payload.displayName = v;
+    } else if (exists) {
+      payload.displayName = deleteField();
+    }
   }
 
   // email
   if ("email" in safe) {
     const v = clean(String(safe.email || "")).toLowerCase();
     if (v && !isValidEmail(v)) throw new Error("אימייל לא תקין.");
-    payload.email = v || deleteField();
+    if (v) {
+      payload.email = v;
+    } else if (exists) {
+      payload.email = deleteField();
+    }
   }
 
   // phoneNumber – שמירת ספרות בלבד
   if ("phoneNumber" in safe) {
     const digits = normalizePhone(safe.phoneNumber);
     if (digits && !isValidPhoneDigits(digits)) throw new Error("מספר טלפון לא תקין.");
-    payload.phoneNumber = digits || deleteField();
+    if (digits) {
+      payload.phoneNumber = digits;
+    } else if (exists) {
+      payload.phoneNumber = deleteField();
+    }
   }
 
   // company
   if ("company" in safe) {
     const v = clean(safe.company);
-    payload.company = v || deleteField();
+    if (v) {
+      payload.company = v;
+    } else if (exists) {
+      payload.company = deleteField();
+    }
   }
 
   // photoURL
   if ("photoURL" in safe) {
     const v = clean(safe.photoURL);
-    payload.photoURL = v || deleteField();
+    if (v) {
+      payload.photoURL = v;
+    } else if (exists) {
+      payload.photoURL = deleteField();
+    }
   }
 
   // Marketing
@@ -186,7 +207,7 @@ export async function updateUserProfile(uid, data = {}) {
       if (typeof safe.marketingConsentMethod === "string" && safe.marketingConsentMethod.trim()) {
         payload.marketingConsentMethod = clean(safe.marketingConsentMethod);
       }
-    } else {
+    } else if (exists) {
       payload.marketingConsentAt = deleteField();
       payload.marketingConsentMethod = deleteField();
     }
@@ -196,8 +217,14 @@ export async function updateUserProfile(uid, data = {}) {
   ) {
     // עדכון שיטת האיסוף ללא שינוי ה-boolean (אם ביקשת מפורשות)
     payload.marketingConsentMethod = clean(safe.marketingConsentMethod);
+  } else if (exists && "marketingConsentMethod" in safe) {
+    // ניקוי ערך אם שלחת מחרוזת ריקה
+    payload.marketingConsentMethod = deleteField();
   }
 
+  if (!exists) {
+    payload.createdAt = serverTimestamp();
+  }
   payload.updatedAt = serverTimestamp();
 
   // אל תבצע כתיבה מיותרת אם אין מה לשנות
