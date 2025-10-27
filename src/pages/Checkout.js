@@ -215,7 +215,7 @@ export default function Checkout() {
     if (!uid) throw new Error("not_authed");
 
     const safeName = (file.name || "logo").replace(/[^\w.\-]+/g, "_");
-    const path = `users/${uid}/logos/${logoId}_${Date.now()}_${safeName}`;
+    const path = `users_prod/${uid}/logos/${logoId}_${Date.now()}_${safeName}`;
     const r = ref(storage, path);
     const snap = await uploadBytes(r, file, { contentType: file.type || "application/octet-stream" });
     const url = await getDownloadURL(snap.ref);
@@ -243,7 +243,7 @@ export default function Checkout() {
       const [slug, side] = key.split(":");
       const ct = contentTypeFromDataUrl(dataUrl);
       const ext = ct.split("/")[1] || "png";
-      const path = `users/${uid}/mockups/${slug}/${side}-${Date.now()}.${ext}`;
+      const path = `users_prod/${uid}/mockups/${slug}/${side}-${Date.now()}.${ext}`;
       const r = ref(storage, path);
       const snap = await uploadString(r, dataUrl, "data_url", { contentType: ct });
       const url = await getDownloadURL(snap.ref);
@@ -446,7 +446,7 @@ export default function Checkout() {
       },
     };
 
-    await setDoc(doc(db, "orders", String(orderId)), orderDoc);
+    await setDoc(doc(db, "orders_prod", String(orderId)), orderDoc);
 
     // אופציונלי: ניקוי עגלה/פריוויוזים/מפת לוגואים אחרי הזמנה מוצלחת
     try {

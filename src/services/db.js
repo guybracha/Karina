@@ -17,7 +17,7 @@ export async function listActiveProducts() {
 export async function createOrder(userId, items) {
   const amount = items.reduce((s,i)=> s + i.price * i.qty, 0);
   const id = crypto.randomUUID(); // אם אין, אפשר לתת ל-Firestore אוטומטי
-  await setDoc(doc(db, "orders", id), {
+  await setDoc(doc(db, "orders_prod", id), {
     userId, items, amount, status: "pending", createdAt: serverTimestamp()
   });
   return id;

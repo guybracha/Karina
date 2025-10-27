@@ -120,7 +120,7 @@ function RootSEO() {
 }
 
 export default function AppAlt() {
-  // ---- חיווט יצירת/סנכרון users/{uid} ----
+  // ---- חיווט יצירת/סנכרון users_prod/{uid} ----
   const bootstrapped = useRef(false);
 
   useEffect(() => {

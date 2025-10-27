@@ -8,8 +8,8 @@ export function sanitizeName(name = "") {
     .toLowerCase();
 }
 
-/** בסיס נתיב להזמנה של משתמש: users/{uid}/orders/{orderId}__{firstName} */
+/** בסיס נתיב להזמנה של משתמש: users_prod/{uid}/orders_prod/{orderId}__{firstName} */
 export function userOrderBaseDir({ uid, displayName, orderId }) {
   const first = sanitizeName((displayName || "").split(" ")[0] || "user");
-  return `users/${uid}/orders/${orderId}__${first}`;
+  return `users_prod/${uid}/orders_prod/${orderId}__${first}`;
 }

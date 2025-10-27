@@ -11,7 +11,7 @@ import {
   deleteField,
 } from "firebase/firestore";
 
-/* ===== שדות מותרים במסמך users/{uid} =====
+/* ===== שדות מותרים במסמך users_prod/{uid} =====
    displayName, email, phoneNumber, company, photoURL,
    marketingConsent, marketingConsentAt, marketingConsentMethod,
    createdAt, updatedAt
@@ -59,7 +59,7 @@ async function readFresh(ref) {
 export async function ensureUserDoc(user, extra = null) {
   if (!user?.uid) return null;
 
-  const ref = doc(db, "users", user.uid);
+  const ref = doc(db, "users_prod", user.uid);
   const snap = (_getDocFromServer ? await _getDocFromServer(ref) : await getDoc(ref));
   const exists = snap.exists();
 
@@ -119,7 +119,7 @@ export async function ensureUserDoc(user, extra = null) {
 /* ---------- Read profile (cache-first) ---------- */
 export async function getUserProfile(uid) {
   if (!uid) return null;
-  const ref = doc(db, "users", uid);
+  const ref = doc(db, "users_prod", uid);
 
   try {
     const snapCache = await getDocFromCache(ref);
@@ -135,7 +135,7 @@ export async function getUserProfile(uid) {
 /* ---------- Update profile (merge) ---------- */
 export async function updateUserProfile(uid, data = {}) {
   if (!uid) throw new Error("missing uid");
-  const ref = doc(db, "users", uid);
+  const ref = doc(db, "users_prod", uid);
   const snap = (_getDocFromServer ? await _getDocFromServer(ref) : await getDoc(ref));
   const exists = snap.exists();
   const current = exists ? snap.data() || {} : {};
@@ -240,7 +240,7 @@ export async function updateUserProfile(uid, data = {}) {
 /* ---------- Marketing helpers ---------- */
 export async function setMarketingConsentTrue(uid, method = "manual_update") {
   if (!uid) throw new Error("missing uid");
-  const ref = doc(db, "users", uid);
+  const ref = doc(db, "users_prod", uid);
   await setDoc(
     ref,
     {
@@ -257,7 +257,7 @@ export async function setMarketingConsentTrue(uid, method = "manual_update") {
 
 export async function setMarketingConsentFalse(uid) {
   if (!uid) throw new Error("missing uid");
-  const ref = doc(db, "users", uid);
+  const ref = doc(db, "users_prod", uid);
   await setDoc(
     ref,
     {

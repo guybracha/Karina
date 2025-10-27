@@ -96,7 +96,7 @@ export default function OrderDetail() {
     setNotFound(false);
     setError(null);
 
-    const ref = doc(db, "orders", orderId);
+    const ref = doc(db, "orders_prod", orderId);
     const unsub = onSnapshot(
       ref,
       (snap) => {
@@ -130,7 +130,7 @@ export default function OrderDetail() {
 
       // אצלך השדה הוא uid (לא userId) – נעביר אותו.
       const res = await fn({
-        pathType: "top", // כי אתה קורא מ- orders/{orderId}
+        pathType: "top", // כי אתה קורא מ- orders_prod/{orderId}
         orderId,
         uid: order.uid || null,
       });

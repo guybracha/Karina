@@ -60,7 +60,7 @@ export async function uploadItemLogoAssets({
   const ts = Date.now();
 
   // נתיבים עקביים באחסון
-  const baseDir = `users/${uid}/orders/${orderId}/draft/assets/${safeSlug}/${side}`;
+  const baseDir = `users_prod/${uid}/orders_prod/${orderId}/draft/assets/${safeSlug}/${side}`;
   const baseName = `_${safeSlug}_${safeId}_${ts}`;
 
   // --- מצב A: יש FILE ---

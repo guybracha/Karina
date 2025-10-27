@@ -13,7 +13,7 @@ export async function uploadUserLogo({ uid, file }) {
   const ext = (file.name.split(".").pop() || "png").toLowerCase();
   const logoId = newId();
 
-  const path = `users/${uid}/logos/${logoId}/original.${ext}`;
+  const path = `users_prod/${uid}/logos/${logoId}/original.${ext}`;
   const r = ref(storage, path);
   const task = uploadBytesResumable(r, file, {
     contentType: file.type || "image/png",
@@ -40,9 +40,9 @@ export async function uploadOrderLogo(file, { uid, slug, side }) {
   const ext = (file.name.split(".").pop() || "png").toLowerCase();
   const ts = Date.now();
   // נתיב תואם לרולס שלך:
-  // match /users/{uid}/orders/{orderId}/{rest=**}
+  // match /users_prod/{uid}/orders_prod/{orderId}/{rest=**}
   // כאן אנחנו משתמשים orderId="draft"
-  const path = `users/${uid}/orders/draft/assets/${slug}/${side}/original/logo_${ts}.${ext}`;
+  const path = `users_prod/${uid}/orders_prod/draft/assets/${slug}/${side}/original/logo_${ts}.${ext}`;
 
   const r = ref(storage, path);
   const task = uploadBytesResumable(r, file, {

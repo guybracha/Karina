@@ -244,7 +244,7 @@ function getSizeTotalsFromItemOrAll(items, it) {
    Firestore refs
 ============================================================================ */
 function orderDraftDocRef(userId) {
-  return doc(db, "users", userId, "orders", "draft");
+  return doc(db, "users_prod", userId, "orders_prod", "draft");
 }
 
 /* =========================================================================

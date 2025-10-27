@@ -19,7 +19,7 @@ export default function Orders() {
 
       if (user) {
         // התחבר → טען הזמנות שלו
-        const ordersRef = collection(db, "users", user.uid, "orders");
+        const ordersRef = collection(db, "users_prod", user.uid, "orders_prod");
         const q = query(ordersRef, orderBy("createdAt", "desc"));
 
         unsubscribeOrders = onSnapshot(

@@ -123,7 +123,7 @@ function buildCustomer(input) {
  * ------------------------------*/
 
 /**
- * יצירת הזמנה חדשה ב-top-level: /orders/{orderId}
+ * יצירת הזמנה חדשה ב-top-level: /orders_prod/{orderId}
  *
  * @param {string|object} userIdOrCustomer - או UID (מחרוזת), או אובייקט { uid, name?, email?, phoneNumber?, company? }
  * @param {Array<Object>} items - פריטים (ראו normalizeItems)
@@ -200,7 +200,7 @@ export async function createOrder(userIdOrCustomer, items, opts = {}) {
     ...meta, // הרחבות נוספות (הקפד לא לכתוב שדות "אדמין")
   };
 
-  const ref = await addDoc(collection(db, "orders"), payload);
+  const ref = await addDoc(collection(db, "orders_prod"), payload);
   return ref.id;
 }
 
@@ -218,7 +218,7 @@ export async function getMyOrders(uid, pageSize = 20, cursor = null) {
   if (!uid) return { data: [], nextCursor: null };
 
   let base = query(
-    collection(db, "orders"),
+    collection(db, "orders_prod"),
     where("customer.uid", "==", uid),
     orderBy("createdAt", "desc"),
     limit(pageSize)
@@ -235,7 +235,7 @@ export async function getMyOrders(uid, pageSize = 20, cursor = null) {
 export function listenMyOrders(uid, cb) {
   if (!uid) return () => {};
   const q = query(
-    collection(db, "orders"),
+    collection(db, "orders_prod"),
     where("customer.uid", "==", uid),
     orderBy("createdAt", "desc")
   );
@@ -250,7 +250,7 @@ export function listenMyOrders(uid, cb) {
 
 /** סימון הזמנה כשולמה (מומלץ בצד שרת / Cloud Function) */
 export async function markOrderPaid(orderId, paymentId) {
-  await updateDoc(doc(db, "orders", orderId), {
+  await updateDoc(doc(db, "orders_prod", orderId), {
     status: ORDER_STATUSES.paid,
     paymentId: paymentId || null,
     paidAt: serverTimestamp(),
@@ -260,7 +260,7 @@ export async function markOrderPaid(orderId, paymentId) {
 
 /** סימון הזמנה ככושלת (תשלום נכשל) */
 export async function markOrderFailed(orderId, reason = null) {
-  await updateDoc(doc(db, "orders", orderId), {
+  await updateDoc(doc(db, "orders_prod", orderId), {
     status: ORDER_STATUSES.failed,
     failReason: s(reason),
     failedAt: serverTimestamp(),
@@ -270,7 +270,7 @@ export async function markOrderFailed(orderId, reason = null) {
 
 /** ביטול הזמנה */
 export async function cancelOrder(orderId, reason = null) {
-  await updateDoc(doc(db, "orders", orderId), {
+  await updateDoc(doc(db, "orders_prod", orderId), {
     status: ORDER_STATUSES.canceled,
     cancelReason: s(reason),
     canceledAt: serverTimestamp(),
@@ -292,12 +292,12 @@ export async function updateShippingInfo(orderId, info = {}) {
     shippedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
-  await updateDoc(doc(db, "orders", orderId), patch);
+  await updateDoc(doc(db, "orders_prod", orderId), patch);
 }
 
 /** סימון הזמנה כמולאה/הושלמה */
 export async function markFulfilled(orderId) {
-  await updateDoc(doc(db, "orders", orderId), {
+  await updateDoc(doc(db, "orders_prod", orderId), {
     status: ORDER_STATUSES.fulfilled,
     fulfilledAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

@@ -223,14 +223,14 @@ export default function ProductDetail() {
   async function ensureUserAndDraft(u) {
     if (!u) return;
     try {
-      await setDoc(doc(db, "users", u.uid), {
+      await setDoc(doc(db, "users_prod", u.uid), {
         uid: u.uid,
         email: u.email || null,
         displayName: u.displayName || null,
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
-      await setDoc(doc(db, "users", u.uid, "orders", "draft"), {
+      await setDoc(doc(db, "users_prod", u.uid, "orders_prod", "draft"), {
         status: "draft",
         updatedAt: serverTimestamp(),
       }, { merge: true });
@@ -247,7 +247,7 @@ export default function ProductDetail() {
       try {
         if (u) {
           await ensureUserAndDraft(u);
-          const snap = await getDoc(doc(db, "users", u.uid));
+          const snap = await getDoc(doc(db, "users_prod", u.uid));
           const data = snap.exists() ? snap.data() : {};
           const sellerFlag =
             data?.isSeller === true ||

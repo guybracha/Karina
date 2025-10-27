@@ -19,7 +19,7 @@ import { ensureUserDoc as ensureUserDocService } from "../services/users";
  */
 const AuthCtx = createContext({
   user: null,             // Firebase User (או null)
-  profile: null,          // users/{uid} (או null)
+  profile: null,          // users_prod/{uid} (או null)
   claims: null,           // custom claims (או null)
   authLoading: true,      // טוען את Firebase Auth בלבד
   profileLoading: false,  // טוען את מסמך הפרופיל (לא חוסם מסכים)
@@ -92,7 +92,7 @@ export function AuthProvider({ children }) {
 
       // האזן לפרופיל
       setLoadingProfile(true);
-      const ref = doc(db, "users", u.uid);
+      const ref = doc(db, "users_prod", u.uid);
       profileUnsubRef.current = onSnapshot(
         ref,
         (snap) => {

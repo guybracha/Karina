@@ -52,7 +52,7 @@ function blobToDataURL(blob) {
  * }
  *
  * שמות קבצים ייחודיים (timestamp) כדי למנוע בעיות קאשינג.
- * נתיב: users/{uid}/orders/{orderId}/previews/{slug}/{side}.{ext}
+ * נתיב: users_prod/{uid}/orders_prod/{orderId}/previews/{slug}/{side}.{ext}
  */
 export async function uploadPreview({
   uid,
@@ -99,7 +99,7 @@ export async function uploadPreview({
   }
 
   // 3) העלאה ל-Storage (עם שמות ייחודיים למניעת קאש)
-  const basePath = `users/${uid}/orders/${orderId}/previews/${cleanSlug}`;
+  const basePath = `users_prod/${uid}/orders_prod/${orderId}/previews/${cleanSlug}`;
   const cacheControl = `public,max-age=${cacheSeconds},immutable`;
 
   // PNG

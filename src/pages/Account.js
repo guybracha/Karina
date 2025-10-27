@@ -60,7 +60,7 @@ function friendlyFirestoreError(err) {
   if (code === "permission-denied" || /Missing or insufficient permissions/i.test(msg)) {
     return (
       "אין הרשאה לשמור או לקרוא כעת. ודאו שהמשתמש מחובר, שכתובת המייל שלו מאומתת (אם הכללים דורשים זאת), " +
-      "ושכללי האבטחה של Firestore מאפשרים ל-UID הזה לעדכן את users/{uid}. אם הפעלתם App Check חובה, ודאו שהוא מאופשר " +
+      "ושכללי האבטחה של Firestore מאפשרים ל-UID הזה לעדכן את users_prod/{uid}. אם הפעלתם App Check חובה, ודאו שהוא מאופשר " +
       "בדפדפן וקיים אסימון תקף."
     );
   }
@@ -145,7 +145,7 @@ export default function Account() {
   // מאזין בזמן אמת למסמך המשתמש — כולל טיפול בשגיאת הרשאות/AppCheck
   useEffect(() => {
     if (!user?.uid) return;
-    const ref = doc(db, "users", user.uid);
+    const ref = doc(db, "users_prod", user.uid);
     const unsub = onSnapshot(
       ref,
       (snap) => {

@@ -15,7 +15,7 @@ async function uploadOne(path: string, blob: Blob, contentType: string, meta: Re
 }
 
 /**
- * מעלה את כל הלוגואים הממתינים ל-Storage תחת users/{uid}/orders/{orderId}/logos/{logoId}/...
+ * מעלה את כל הלוגואים הממתינים ל-Storage תחת users_prod/{uid}/orders_prod/{orderId}/logos/{logoId}/...
  * מחזיר מערך עם פרטי ההעלאה לשילוב במסמך ההזמנה ב-Firestore.
  */
 export async function commitPendingLogos(orderId: string) {
@@ -34,7 +34,7 @@ export async function commitPendingLogos(orderId: string) {
   }> = [];
 
   for (const it of items) {
-    const basePath = `users/${uid}/orders/${orderId}/logos/${it.id}`;
+    const basePath = `users_prod/${uid}/orders_prod/${orderId}/logos/${it.id}`;
 
     // preview
     let preview;

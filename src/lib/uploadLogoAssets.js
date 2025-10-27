@@ -186,8 +186,8 @@ export async function uploadLogoAssets({
   // בסיס נתיב
   const now = Date.now();
   const base = (slug && side)
-    ? `users/${uid}/orders/${orderId}/assets/${slug}/${side}`
-    : `users/${uid}/orders/${orderId}/logos`;
+    ? `users_prod/${uid}/orders_prod/${orderId}/assets/${slug}/${side}`
+    : `users_prod/${uid}/orders_prod/${orderId}/logos`;
 
   const metadata = {
     contentType,

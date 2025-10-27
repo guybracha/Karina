@@ -13,7 +13,7 @@ export async function uploadOriginalLogo({ file, uid, logoId }) {
   if (!uid) uid = auth.currentUser?.uid;
   if (!uid) throw new Error("not_authed");
 
-  const path = `users/${uid}/logos/${logoId || "logo"}_${Date.now()}_${file.name}`;
+  const path = `users_prod/${uid}/logos/${logoId || "logo"}_${Date.now()}_${file.name}`;
   const r = ref(storage, path);
   const snap = await uploadBytes(r, file, { contentType: file.type });
   const url = await getDownloadURL(snap.ref);
@@ -26,7 +26,7 @@ export async function uploadMockup({ dataUrl, uid, slug, side = "front" }) {
   if (!uid) uid = auth.currentUser?.uid;
   if (!uid) throw new Error("not_authed");
 
-  const path = `users/${uid}/mockups/${slug}/${side}-${Date.now()}.png`;
+  const path = `users_prod/${uid}/mockups/${slug}/${side}-${Date.now()}.png`;
   const r = ref(storage, path);
   // אפשר uploadString(data_url) ישירות:
   const snap = await uploadString(r, dataUrl, "data_url"); // ישמור Content-Type= image/png

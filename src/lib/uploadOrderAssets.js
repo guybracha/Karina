@@ -25,24 +25,24 @@ async function toWebpDataUrl(dataUrl, quality = 0.9) {
   });
 }
 
-/** העלאת הדמיה (dataURL) ל-Storage, תחת orders/{orderId}/{slug}/{side}.png */
+/** העלאת הדמיה (dataURL) ל-Storage, תחת orders_prod/{orderId}/{slug}/{side}.png */
 export async function uploadMockupDataUrl({ orderId, slug, side, dataUrl }) {
   if (!dataUrl) return { url: null, path: null };
-  const path = `orders/${orderId}/${slug}/${side}.png`;
+  const path = `orders_prod/${orderId}/${slug}/${side}.png`;
   const r = ref(storage, path);
   await uploadString(r, dataUrl, "data_url");
   const url = await getDownloadURL(r);
   return { url, path };
 }
 
-/** העלאת לוגו כמקור (File או dataURL) ועוד וריאנט WebP, תחת orders/{orderId}/{slug}/logos/ */
+/** העלאת לוגו כמקור (File או dataURL) ועוד וריאנט WebP, תחת orders_prod/{orderId}/{slug}/logos/ */
 export async function uploadLogoForItem({ orderId, slug, file, dataUrl }) {
   const out = { originalUrl: null, originalPath: null, webpUrl: null, webpPath: null };
 
   // אם הגיע File – נעלה אותו כמות שהוא; אם הגיע dataURL – נעלה אותו כ-PNG
   if (file) {
     const safeName = (file.name || "logo").replace(/[^\w.\-]+/g, "_");
-    const path = `orders/${orderId}/${slug}/logos/original-${Date.now()}-${safeName}`;
+    const path = `orders_prod/${orderId}/${slug}/logos/original-${Date.now()}-${safeName}`;
     const r = ref(storage, path);
     await uploadBytes(r, file, { contentType: file.type || "application/octet-stream" });
     out.originalUrl = await getDownloadURL(r);
@@ -68,7 +68,7 @@ export async function uploadLogoForItem({ orderId, slug, file, dataUrl }) {
           img.onerror = reject;
           img.src = bufUrl;
         });
-        const webpPath = `orders/${orderId}/${slug}/logos/original.webp`;
+        const webpPath = `orders_prod/${orderId}/${slug}/logos/original.webp`;
         const rWebp = ref(storage, webpPath);
         await uploadString(rWebp, webpDataUrl, "data_url");
         out.webpUrl = await getDownloadURL(rWebp);
@@ -82,7 +82,7 @@ export async function uploadLogoForItem({ orderId, slug, file, dataUrl }) {
 
   if (dataUrl) {
     // מקור כ-dataURL (נעלה כ-PNG)
-    const origPath = `orders/${orderId}/${slug}/logos/original.png`;
+    const origPath = `orders_prod/${orderId}/${slug}/logos/original.png`;
     const rOrig = ref(storage, origPath);
     await uploadString(rOrig, dataUrl, "data_url");
     out.originalUrl = await getDownloadURL(rOrig);
@@ -92,7 +92,7 @@ export async function uploadLogoForItem({ orderId, slug, file, dataUrl }) {
     try {
       const webp = await toWebpDataUrl(dataUrl);
       if (webp) {
-        const webpPath = `orders/${orderId}/${slug}/logos/original.webp`;
+        const webpPath = `orders_prod/${orderId}/${slug}/logos/original.webp`;
         const rWebp = ref(storage, webpPath);
         await uploadString(rWebp, webp, "data_url");
         out.webpUrl = await getDownloadURL(rWebp);

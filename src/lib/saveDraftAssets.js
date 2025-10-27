@@ -91,7 +91,7 @@ export async function saveDraftAssets({ uid, takeOriginalFromMemory }) {
 
   // 4) שמור מסמך טיוטה ב־Firestore
   await setDoc(
-    doc(db, "users", uid, "orders", "draft"),
+    doc(db, "users_prod", uid, "orders_prod", "draft"),
     {
       status: "draft",
       items,
