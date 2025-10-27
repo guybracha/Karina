@@ -95,20 +95,22 @@ if (isBrowser) { try { window.firebaseApp = app; } catch {} }
 
 /* =======================================================================
    App Check (reCAPTCHA Enterprise)
-   ברירת מחדל: כבוי, כדי לעצור 403/throttled. הפעלה רק אם APPCHECK_ENABLE=true.
+   NOTE: initialize BEFORE any Firestore/Functions/Storage usage.
    ======================================================================= */
 const RECAPTCHA_ENTERPRISE_SITE_KEY =
   fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
+
+// Better debug print (first 8 • last 6) to avoid confusing O/0
+function maskKey(k) {
+  if (!k) return "(missing)";
+  const s = String(k);
+  return s.slice(0, 8) + "…" + s.slice(-6);
+}
 if (typeof window !== "undefined") {
-  console.info("[AppCheck] site key:",
-    RECAPTCHA_ENTERPRISE_SITE_KEY
-      ? RECAPTCHA_ENTERPRISE_SITE_KEY.slice(0, 8) + "�"
-      : "(missing)"
-  );
+  console.info("[AppCheck] site key:", maskKey(RECAPTCHA_ENTERPRISE_SITE_KEY));
 }
 
-
-// ⚠️ שינוי חשוב: כברירת-מחדל FALSE, אפילו אם יש מפתח. הפעלה ידנית בלבד.
+// Explicit on/off switch
 const APPCHECK_ENABLE = (() => {
   const raw = fromEnv("APPCHECK_ENABLE");
   if (raw) {
@@ -118,31 +120,44 @@ const APPCHECK_ENABLE = (() => {
     }
     return enabled;
   }
-
-
-  // Production fallback: אם יש מפתח reCAPTCHA וזו לא סביבת פיתוח – נפעיל אוטומטית.
-  if (!isDev && !!RECAPTCHA_ENTERPRISE_SITE_KEY) {
-    return true;
-  }
-
+  // Production fallback: enable if key exists
+  if (!isDev && !!RECAPTCHA_ENTERPRISE_SITE_KEY) return true;
   return false;
 })();
 if (typeof window !== "undefined") {
   console.info("[AppCheck] APPCHECK_ENABLE effective:", APPCHECK_ENABLE);
 }
 
-const APPCHECK_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN"); // אופציונלי
-
+const APPCHECK_DEBUG_TOKEN = fromEnv("APPCHECK_DEBUG_TOKEN"); // optional
 if (isBrowser && APPCHECK_DEBUG_TOKEN) {
   // eslint-disable-next-line no-undef
-    globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN =
+  globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN =
     APPCHECK_DEBUG_TOKEN === "true" ? true : APPCHECK_DEBUG_TOKEN;
-  }
+}
+
+// Small helper to await first App Check token (prevents early calls from failing)
+async function waitForAppCheckToken(instance, { timeoutMs = 6000 } = {}) {
+  if (!instance) return;
+  let done;
+  const p = new Promise((resolve) => (done = resolve));
+  const unsub = onAppCheckTokenChanged(instance, (token) => {
+    if (token) {
+      try { unsub(); } catch {}
+      done();
+    }
+  });
+  // also kick an immediate fetch (non-force, to avoid rate limits)
+  try { await getAppCheckToken(instance, false); } catch {}
+  await Promise.race([
+    p,
+    new Promise((r) => setTimeout(r, timeoutMs)),
+  ]);
+}
 
 export const appCheck = (function initAppCheck() {
   if (!isBrowser) return null;
   if (!APPCHECK_ENABLE) {
-    console.warn("[AppCheck] Disabled (APPCHECK_ENABLE not true).");
+    console.warn("[AppCheck] Disabled (APPCHECK_ENABLE not true).\nIf this is production, set APPCHECK_ENABLE=true and ensure reCAPTCHA Enterprise site key is valid.");
     return null;
   }
   if (!RECAPTCHA_ENTERPRISE_SITE_KEY) {
@@ -158,13 +173,21 @@ export const appCheck = (function initAppCheck() {
     onAppCheckTokenChanged(inst, (token) => {
       console.info("[AppCheck] token state:", token ? "OK" : "MISSING");
     });
+    // Attempt an early token so first requests won't race
     getAppCheckToken(inst, false)
       .then(({ token }) => {
         console.info("[AppCheck] getToken success:", token ? token.slice(0, 12) + "…" : "(empty)");
       })
       .catch((err) => {
+        // Common pitfall: recaptcha-error usually means wrong site key or domain not allowed
         console.error("[AppCheck] getToken failed:", err?.message || err);
       });
+
+    // Expose a ready promise for app code that needs to wait
+    if (isBrowser) {
+      window.__appCheckReady = waitForAppCheckToken(inst, { timeoutMs: 6000 });
+    }
+
     return inst;
   } catch (e) {
     console.warn("[AppCheck] init failed:", e?.message || e);
@@ -173,7 +196,7 @@ export const appCheck = (function initAppCheck() {
 })();
 
 /* =========================
-   Auth
+   Auth (init after App Check)
    ========================= */
 export const auth = (() => {
   try {
@@ -230,10 +253,6 @@ if (isBrowser) {
   window.addEventListener("online", goOnline);
   window.addEventListener("offline", goOffline);
 
-  // `navigator.onLine` מחזיר לעיתים false בדפדפן כרום למרות שיש אינטרנט (למשל במחשבי Windows מסוימים).
-  // בעבר היינו מכבים כאן את Firestore (disableNetwork) מידית, אך זה השאיר משתמשים "מנותקים" ללא מידע.
-  // במקום זאת אנו סומכים על אירועי online/offline כדי להחליף מצבים, וכך אם Chrome טועה –
-  // לא נחסום את טעינת הנתונים.
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     console.warn("[Firebase] navigator.onLine reported 'offline' at startup; deferring Firestore toggle until events fire.");
   }
@@ -306,9 +325,23 @@ export async function getAppCheckTokenSafe(force = false) {
   }
 }
 
+// Ensure AppCheck ready before sensitive calls (you can await this in critical flows)
+export async function ensureAppCheckReady(timeoutMs = 6000) {
+  try {
+    // If __appCheckReady exists, await it; otherwise, no-op
+    if (isBrowser && window.__appCheckReady instanceof Promise) {
+      await Promise.race([
+        window.__appCheckReady,
+        new Promise((r) => setTimeout(r, timeoutMs)),
+      ]);
+    }
+  } catch {}
+}
+
 const IMPERSONATE_FN_NAME = fromEnv("FN_IMPERSONATE") || "adminImpersonate";
 export async function impersonateUser(uid) {
-  const appCheckToken = await getAppCheckTokenSafe(); // יכול להיות null
+  await ensureAppCheckReady(); // soften race on first call
+  const appCheckToken = await getAppCheckTokenSafe(); // may be null
   const call = httpsCallable(functions, IMPERSONATE_FN_NAME);
   const { data } = await call({ uid, appCheckToken });
   if (!data?.customToken) throw new Error("Impersonate failed: no customToken");
@@ -320,13 +353,14 @@ export async function impersonateUser(uid) {
 if (typeof window !== "undefined") {
   try {
     window.getAppCheckTokenSafe = getAppCheckTokenSafe;
+    window.ensureAppCheckReady = ensureAppCheckReady;
     window.ensureAuthTokenFresh = ensureAuthTokenFresh;
     window.firebaseApp = app;
     window.firebaseAuth = auth;
     window.firebaseDb = db;
     window.firebaseFunctions = functions;
     window.firebaseStorage = storage;
-    window.appCheckInstance = appCheck; // null כשכבוי
+    window.appCheckInstance = appCheck; // null when disabled
     console.info("[Firebase] debug helpers attached to window");
   } catch (e) {
     console.warn("[Firebase] expose helpers failed:", e);
@@ -334,8 +368,3 @@ if (typeof window !== "undefined") {
 }
 
 export default app;
-
-
-
-
-
