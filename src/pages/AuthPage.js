@@ -4,9 +4,7 @@ import {
   registerWithEmail,
   signInWithGoogle,
   collectRedirectResultIfAny,
-  sendMagicLink,
   completeMagicLinkSignIn,
-  signInGuest,
   upgradeAnonWithEmail,
 } from "../services/auth";
 import { auth } from "../firebase";
@@ -106,24 +104,6 @@ export default function AuthPage() {
     finally { setLoading(false); }
   }
 
-  async function onMagicLink() {
-    setError(null); setInfo(null); setLoading(true);
-    try {
-      await sendMagicLink(email.trim());
-      setInfo("שלחנו לינק כניסה לאימייל. בדקו דואר נכנס/ספאם.");
-    } catch (e) { setError(friendly(e)); }
-    finally { setLoading(false); }
-  }
-
-  async function onGuest() {
-    setError(null); setInfo(null); setLoading(true);
-    try {
-      await signInGuest();
-      setInfo("נכנסת כאורח. ניתן לשדרג לחשבון מלא מאוחר יותר.");
-    } catch (e) { setError(friendly(e)); }
-    finally { setLoading(false); }
-  }
-
   return (
     <div className="container py-5" style={{ maxWidth: 480 }}>
       <h1 className="mb-4 text-center">ברוכים הבאים לקארינה חולצות מודפסות</h1>
@@ -178,17 +158,9 @@ export default function AuthPage() {
                 onClick={onGoogle} disabled={loading}>
           Continue with Google
         </button>
-
-        <button type="button" className="btn btn-outline-primary w-100 mt-2"
-                onClick={onMagicLink} disabled={loading}>
-          שלחו לי לינק כניסה במייל
-        </button>
-
-        <button type="button" className="btn btn-outline-dark w-100 mt-2"
-                onClick={onGuest} disabled={loading}>
-          המשך כאורח (ללא הרשמה)
-        </button>
       </form>
     </div>
   );
 }
+
+
