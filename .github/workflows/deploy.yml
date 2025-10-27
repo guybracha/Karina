@@ -100,13 +100,14 @@ jobs:
           fi
 
       # Create runtime _ENV_.js (single underscore) consumed by index.html
-      - name: Create runtime _ENV_.js
+            # Create runtime _ENV_js (no dot), with real env expansion
+      - name: Create runtime _ENV_js
         shell: bash
         run: |
           set -euo pipefail
           d=${{ steps.detect.outputs.dir }}
           mkdir -p "$d"
-          cat > "$d/_ENV_.js" << 'EOF'
+          cat > "$d/_ENV_js" <<EOF
           window.__ENV__ = {
             // ---- FB_* ----
             FB_API_KEY:              "${FB_API_KEY}",
@@ -137,33 +138,35 @@ jobs:
           EOF
 
           # Sanity: ensure no placeholders remained
-          if grep -q '\\${[A-Z_][A-Z0-9_]*}' "$d/_ENV_.js"; then
-            echo "::error::Placeholders remained in _ENV_.js (variables not expanded).";
-            sed -n '1,200p' "$d/_ENV_.js";
-            exit 1;
+          if grep -q '\${[A-Z_][A-Z0-9_]*}' "$d/_ENV_js"; then
+            echo "::error::Placeholders remained in _ENV_js (variables not expanded)."
+            sed -n '1,200p' "$d/_ENV_js"
+            exit 1
           fi
 
-      # Ensure _ENV_.js is referenced in index.html head
-      - name: Inject _ENV_.js into index.html
+      # Ensure _ENV_js is referenced in index.html (before any code that needs it)
+      - name: Inject _ENV_js into index.html
         shell: bash
         run: |
           d=${{ steps.detect.outputs.dir }}
           index="$d/index.html"
           if [ -f "$index" ]; then
-            if grep -q '</head>' "$index"; then
-              if ! grep -q '_ENV_.js' "$index"; then
-                sed -i 's#</head>#  <script src="/_ENV_.js"></script>\n</head>#' "$index"
-                echo "Injected _ENV_.js into index.html"
-              else
-                echo "index.html already contains _ENV_.js"
-              fi
+            # תקן רפרנס ישן אם קיים (_ENV_.js -> _ENV_js)
+            sed -i 's#/_ENV_\.js#/_ENV_js#g' "$index"
+            # הזרקה אם אין בכלל
+            if ! grep -q '/_ENV_js' "$index"; then
+              sed -i 's#</head>#  <script src="/_ENV_js"></script>\n</head>#' "$index"
+              echo "Injected _ENV_js into index.html"
             else
-              echo "::warning::index.html missing </head> — please include <script src=\"/_ENV_.js\"></script> manually"
+              echo "index.html already references _ENV_js"
             fi
           else
             echo "::error::index.html not found under $d"
             exit 1
           fi
+
+      # Add CNAME & SPA 404 as before (ללא שינוי)
+
 
       - name: Add CNAME for custom domain
         run: echo "karina.co.il" > "${{ steps.detect.outputs.dir }}/CNAME"
