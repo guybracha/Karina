@@ -58,7 +58,11 @@ function friendlyFirestoreError(err) {
     return "נחסמה הגישה עקב App Check (אבטחה). נסו לרענן דף, להתחבר מחדש, או לעבוד בחלון אינקוגניטו. אם הבעיה נמשכת — ודאו שבקוד לא מאותחל App Check/שווה ערך.";
   }
   if (code === "permission-denied" || /Missing or insufficient permissions/i.test(msg)) {
-    return "אין הרשאה לשמור או לקרוא כעת (בד\"כ עקב כללי Firestore).";
+    return (
+      "אין הרשאה לשמור או לקרוא כעת. ודאו שהמשתמש מחובר, שכתובת המייל שלו מאומתת (אם הכללים דורשים זאת), " +
+      "ושכללי האבטחה של Firestore מאפשרים ל-UID הזה לעדכן את users/{uid}. אם הפעלתם App Check חובה, ודאו שהוא מאופשר " +
+      "בדפדפן וקיים אסימון תקף."
+    );
   }
   return null;
 }
