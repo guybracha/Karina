@@ -78,5 +78,14 @@
       defer
       src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
     ></script>
+    <!-- Replace the variables below. -->
+    <script>
+  function onClick(e) {
+    e.preventDefault();
+    grecaptcha.enterprise.ready(async () => {
+      const token = await grecaptcha.enterprise.execute('6LeSJ_crAAAAAIOZfuqfgAhdEk7d4u5H26WakOV4', {action: 'LOGIN'});
+    });
+  }
+</script>
   </body>
 </html>
