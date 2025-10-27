@@ -35,7 +35,9 @@ jobs:
       FB_MEASUREMENT_ID:       ${{ secrets.FB_MEASUREMENT_ID }}
 
       # ===== App Check (reCAPTCHA Enterprise) =====
+      # IMPORTANT: This secret must equal 6LeSJ_crAAAAAIOZfuqfgAhdEk7d4u5H26WakOV4
       FB_RECAPTCHA_ENTERPRISE_KEY: ${{ secrets.FB_RECAPTCHA_ENTERPRISE_KEY }}
+      # Optional flags
       APPCHECK_ENABLE: ${{ secrets.APPCHECK_ENABLE }}
       APPCHECK_DEBUG_TOKEN: ${{ secrets.APPCHECK_DEBUG_TOKEN }}
 
@@ -56,11 +58,13 @@ jobs:
         run: npm ci || npm i
 
       - name: Verify Firebase & App Check env are present
+        shell: bash
         run: |
+          set -euo pipefail
           missing=0
           required=( FB_API_KEY FB_AUTH_DOMAIN FB_PROJECT_ID FB_STORAGE_BUCKET FB_MESSAGING_SENDER_ID FB_APP_ID )
           for k in "${required[@]}"; do
-            if [ -z "${!k}" ]; then
+            if [ -z "${!k:-}" ]; then
               echo "::error::Missing $k"
               missing=1
             else
@@ -68,14 +72,14 @@ jobs:
             fi
           done
 
-          if [ -z "${FB_MEASUREMENT_ID}" ]; then
+          if [ -z "${FB_MEASUREMENT_ID:-}" ]; then
             echo "::warning::FB_MEASUREMENT_ID not set (Analytics off)."
           fi
 
-          if [ -z "${FB_RECAPTCHA_ENTERPRISE_KEY}" ]; then
+          if [ -z "${FB_RECAPTCHA_ENTERPRISE_KEY:-}" ]; then
             echo "::warning::FB_RECAPTCHA_ENTERPRISE_KEY not set — App Check Enterprise will initialize only if enabled and key exists."
           else
-            echo "✅ App Check site key OK"
+            echo "✅ App Check site key provided"
           fi
 
           [ "$missing" -eq 1 ] && exit 1 || echo "ENV OK"
@@ -95,11 +99,14 @@ jobs:
             exit 1
           fi
 
-      # יצירת _ENV_.js בזמן deploy (שם עם קו תחתון אחד)
+      # Create runtime _ENV_.js (single underscore) consumed by index.html
       - name: Create runtime _ENV_.js
+        shell: bash
         run: |
+          set -euo pipefail
           d=${{ steps.detect.outputs.dir }}
-          cat > "$d/_ENV_.js" <<EOF
+          mkdir -p "$d"
+          cat > "$d/_ENV_.js" << 'EOF'
           window.__ENV__ = {
             // ---- FB_* ----
             FB_API_KEY:              "${FB_API_KEY}",
@@ -129,15 +136,16 @@ jobs:
           };
           EOF
 
-          # וידוא שאין פלייסהולדרים שלא הוחלפו
-          if grep -q '\${[A-Z_]\+}' "$d/_ENV_.js"; then
-            echo "::error::Placeholders remained in _ENV_.js (variables not expanded)."
-            sed -n '1,160p' "$d/_ENV_.js"
-            exit 1
+          # Sanity: ensure no placeholders remained
+          if grep -q '\\${[A-Z_][A-Z0-9_]*}' "$d/_ENV_.js"; then
+            echo "::error::Placeholders remained in _ENV_.js (variables not expanded).";
+            sed -n '1,200p' "$d/_ENV_.js";
+            exit 1;
           fi
 
-      # הזרקה אוטומטית של הסקריפט ל-index.html (לפני </head>)
+      # Ensure _ENV_.js is referenced in index.html head
       - name: Inject _ENV_.js into index.html
+        shell: bash
         run: |
           d=${{ steps.detect.outputs.dir }}
           index="$d/index.html"
@@ -145,7 +153,7 @@ jobs:
             if grep -q '</head>' "$index"; then
               if ! grep -q '_ENV_.js' "$index"; then
                 sed -i 's#</head>#  <script src="/_ENV_.js"></script>\n</head>#' "$index"
-                echo "Injected <script src=\"/_ENV_.js\"></script> into index.html"
+                echo "Injected _ENV_.js into index.html"
               else
                 echo "index.html already contains _ENV_.js"
               fi
@@ -160,7 +168,7 @@ jobs:
       - name: Add CNAME for custom domain
         run: echo "karina.co.il" > "${{ steps.detect.outputs.dir }}/CNAME"
 
-      # SPA fallback כדי לפתור 404 בריענון נתיבים
+      # SPA fallback to avoid 404 on deep links
       - name: Add 404.html for SPA
         run: |
           d=${{ steps.detect.outputs.dir }}
