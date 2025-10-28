@@ -49,13 +49,17 @@ function fmt(n) {
 }
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 
-function defaultAddress() { return { city: "", street: "", house: "", apt: "", zip: "", notes: "" }; }
+function defaultAddress() { return { city: "", street: "", house: "", apt: "", zip: "", phoneNumber: "", notes: "" }; }
 function normalizeAddress(x) {
   if (!x) return defaultAddress();
   if (typeof x === "string") return { ...defaultAddress(), notes: x };
   const b = defaultAddress();
   const o = { ...b, ...x };
   for (const k of Object.keys(b)) o[k] = String(o[k] ?? "");
+  // Normalize phone number to digits only
+  if (o.phoneNumber) {
+    try { o.phoneNumber = String(o.phoneNumber || "").replace(/\D+/g, ""); } catch {}
+  }
   return o;
 }
 function readAddressFromLS() {
@@ -302,10 +306,13 @@ export default function Cart() {
     window.addEventListener("storage", onStorage);
     window.addEventListener("karina:cartUpdated", onCustomCart);
     window.addEventListener("karina:itemLogosUpdated", onLogosUpdated);
+    const onFocus = () => setItems(readCartFromLS());
+    window.addEventListener("focus", onFocus);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("karina:cartUpdated", onCustomCart);
       window.removeEventListener("karina:itemLogosUpdated", onLogosUpdated);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 
@@ -787,6 +794,18 @@ export default function Cart() {
                   <label className="form-label">רחוב</label>
                   <input type="text" className="form-control" value={shippingAddress.street}
                          onChange={(e) => setShippingAddress({ ...shippingAddress, street: e.target.value })} />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">מספר טלפון ליצירת קשר</label>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    pattern="[0-9+\-()\s]{7,20}"
+                    className="form-control"
+                    placeholder="05x-xxxxxxx"
+                    value={shippingAddress.phoneNumber}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, phoneNumber: e.target.value })}
+                  />
                 </div>
                 <div className="col-md-4">
                   <label className="form-label">מספר בית</label>
