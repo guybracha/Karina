@@ -12,6 +12,7 @@ import { getDiscountPct } from "../lib/pricing";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { ensureUserDoc } from "../services/users";
 import ProductSEO from "../components/seo/ProductSEO.js";
 
 // ===== LocalStorage keys =====
@@ -223,12 +224,7 @@ export default function ProductDetail() {
   async function ensureUserAndDraft(u) {
     if (!u) return;
     try {
-      await setDoc(doc(db, "users_prod", u.uid), {
-        uid: u.uid,
-        email: u.email || null,
-        displayName: u.displayName || null,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      await ensureUserDoc(u);
 
       await setDoc(doc(db, "users_prod", u.uid, "orders_prod", "draft"), {
         status: "draft",
