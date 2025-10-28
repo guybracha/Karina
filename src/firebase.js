@@ -99,7 +99,7 @@ if (isBrowser) { try { window.firebaseApp = app; } catch {} }
    ======================================================================= */
 const RECAPTCHA_ENTERPRISE_SITE_KEY =
   fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY") ||
-  "6Le4t9crAAAAANiD1v7h13qNNOLnhC5QQMDe1wMg";
+  "6Le4t9crAAAAAGkwZ6OwapBndFGx7tJIATKrLIQ2";
 
 // Better debug print (first 8 • last 6) to avoid confusing O/0
 function maskKey(k) {
