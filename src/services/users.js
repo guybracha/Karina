@@ -74,16 +74,20 @@ export async function ensureUserDoc(user, extra = null) {
       : null;
 
   // נרמול טלפון לספרות בלבד + בדיקה
-  const phoneDigits = normalizePhone(user.phoneNumber || "");
-  const phoneNumber = phoneDigits && isValidPhoneDigits(phoneDigits) ? phoneDigits : null;
-
   const payload = {
     displayName,
     email,
-    phoneNumber,
     photoURL: clean(user.photoURL) || null,
     updatedAt: serverTimestamp(),
   };
+
+  const phoneDigits = normalizePhone(user.phoneNumber || "");
+  if (phoneDigits && isValidPhoneDigits(phoneDigits)) {
+    payload.phoneNumber = phoneDigits;
+  } else if (!exists) {
+    // Only seed null on first create; preserve existing manual entries afterwards
+    payload.phoneNumber = null;
+  }
 
   if (!exists) {
     payload.company = null;

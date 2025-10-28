@@ -47,7 +47,10 @@ function statusBadgeClass(status) {
 const prettyPhone = (s = "") => {
   const d = String(s || "").replace(/\D+/g, "");
   if (!d) return "";
-  return d.replace(/^(\d{3})(\d+)$/, "$1-$2");
+  if (d.length === 10) return d.replace(/^(\d{3})(\d{3})(\d{4})$/, "$1-$2-$3");
+  if (d.length === 9) return d.replace(/^(\d{2})(\d{3})(\d{4})$/, "$1-$2-$3");
+  if (d.length > 3) return d.replace(/^(\d{3})(\d+)$/, "$1-$2");
+  return d;
 };
 
 // זיהוי שגיאות App Check / הרשאות להודעה ידידותית
@@ -156,7 +159,7 @@ export default function Account() {
         if (!showEdit) {
           setEditName(d.displayName || user.displayName || user.email?.split("@")[0] || "");
           setEditEmail(d.email || user.email || "");
-          setEditPhoneNumber(d.phoneNumber || "");
+          setEditPhoneNumber(d.phoneNumber ? prettyPhone(d.phoneNumber) : "");
           setEditCompany(d.company || "");
         }
       },
@@ -282,7 +285,10 @@ export default function Account() {
         company: (editCompany || "").trim(),
       });
 
-      if (fresh) setProfile(fresh);
+      if (fresh) {
+        setProfile(fresh);
+        setEditPhoneNumber(fresh.phoneNumber ? prettyPhone(fresh.phoneNumber) : "");
+      }
       if (user?.reload) await user.reload();
 
       setSaveMsg("השינויים נשמרו בהצלחה.");
