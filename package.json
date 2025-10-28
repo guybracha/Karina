@@ -16,6 +16,7 @@
     "browser-image-compression": "^2.0.2",
     "fabric": "^6.7.1",
     "firebase": "^12.4.0",
+    "firebase-functions": "^6.6.0",
     "install": "^0.13.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

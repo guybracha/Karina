@@ -110,7 +110,7 @@ export const PRODUCTS = [
     price: 100,
     img: manager,
     backImg: managerBack,
-    colors: ["כתום"],
+    colors: ["כתום","צהוב"],
     sizes: ["ONE SIZE"],
     category: "safety",
     season: "אין",
