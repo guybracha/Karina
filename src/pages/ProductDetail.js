@@ -215,6 +215,11 @@ export default function ProductDetail() {
   const location = useLocation();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
   const canUploadLogo = product?.logoAllowed !== false;
+  const isCartBlocked = useMemo(() => {
+    if (!product) return false;
+    const priceNum = Number(product.price || 0);
+    return priceNum === 0 && product.isBlocked === true;
+  }, [product]);
 
   // auth
   const [user, setUser] = useState(null);
@@ -523,6 +528,7 @@ export default function ProductDetail() {
   // הוספה לעגלה — רק מרוכז
   function addBulkToCart() {
     if (!product) return;
+    if (isCartBlocked) { alert("מוצר זה חסום להוספה לעגלה."); return; }
     if (!ensureAuthed()) return;
 
     const lineId = product.slug; // ריכוז לפי מוצר
@@ -749,6 +755,11 @@ export default function ProductDetail() {
 
                 {/* מחיר בסיס + תמחור מדרגות */}
                 <p className="lead mb-1">{round2(product.price)} ₪ ליחידה</p>
+                {isCartBlocked && (
+                  <div className="small text-danger mb-1">
+                    מוצר זה חסום להוספה לעגלה כרגע.
+                  </div>
+                )}
                 <div className="small mb-1">
                   {bulkTotalForCurrentColor > 0 ? (
                     <div className="text-success">
@@ -832,10 +843,11 @@ export default function ProductDetail() {
                         <button
                           className="btn btn-primary"
                           onClick={addBulkToCart}
-                          disabled={bulkTotalForCurrentColor === 0 || !user}
+                          disabled={bulkTotalForCurrentColor === 0 || !user || isCartBlocked}
                           title={
                             checkingRole ? "בודק הרשאות…" :
                             !user ? "עליך להתחבר" :
+                            isCartBlocked ? "מוצר זה חסום להוספה לעגלה" :
                             !isSeller ? "רק מוכרים יכולים להוסיף לעגלה" :
                             undefined
                           }
