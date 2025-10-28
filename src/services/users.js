@@ -38,7 +38,7 @@ const isValidEmail =
 
 // 7–15 ספרות (אחסון נקי אחרי normalizePhone)
 const isValidPhoneDigits =
-  (v) => typeof v === "string" && /^\d{7,15}$/.test(v);
+  (v) => typeof v === "string" && /^\d{7,20}$/.test(v);
 
 function pickAllowed(obj = {}) {
   const out = {};
@@ -112,8 +112,14 @@ export async function ensureUserDoc(user, extra = null) {
     }
   }
 
-  if (exists && typeof snap.data()?.phone !== "undefined") {
-    payload.phone = deleteField();
+  if (exists) {
+    const cur = snap.data() || {};
+    if (typeof cur.phone !== "undefined") payload.phone = deleteField();
+    if (typeof cur.role !== "undefined") payload.role = deleteField();
+    if (typeof cur.admin !== "undefined") payload.admin = deleteField();
+    if (typeof cur.claims !== "undefined") payload.claims = deleteField();
+    if (typeof cur.providerIds !== "undefined") payload.providerIds = deleteField();
+    if (typeof cur.uid !== "undefined") payload.uid = deleteField();
   }
 
   try { await ensureAppCheckReady(); } catch {}
@@ -150,8 +156,13 @@ export async function updateUserProfile(uid, data = {}) {
   const payload = {};
   const now = serverTimestamp();
 
-  if (exists && typeof current.phone !== "undefined") {
-    payload.phone = deleteField();
+  if (exists) {
+    if (typeof current.phone !== "undefined") payload.phone = deleteField();
+    if (typeof current.role !== "undefined") payload.role = deleteField();
+    if (typeof current.admin !== "undefined") payload.admin = deleteField();
+    if (typeof current.claims !== "undefined") payload.claims = deleteField();
+    if (typeof current.providerIds !== "undefined") payload.providerIds = deleteField();
+    if (typeof current.uid !== "undefined") payload.uid = deleteField();
   }
 
   // displayName
@@ -283,3 +294,4 @@ export async function setMarketingConsentFalse(uid) {
   );
   return await readFresh(ref);
 }
+
