@@ -98,7 +98,8 @@ if (isBrowser) { try { window.firebaseApp = app; } catch {} }
    NOTE: initialize BEFORE any Firestore/Functions/Storage usage.
    ======================================================================= */
 const RECAPTCHA_ENTERPRISE_SITE_KEY =
-  fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY");
+  fromEnv("FB_RECAPTCHA_ENTERPRISE_KEY", "RECAPTCHA_ENTERPRISE_SITE_KEY") ||
+  "6Le4t9crAAAAANiD1v7h13qNNOLnhC5QQMDe1wMg";
 
 // Better debug print (first 8 • last 6) to avoid confusing O/0
 function maskKey(k) {
