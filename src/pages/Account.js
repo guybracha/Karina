@@ -7,7 +7,7 @@ import { getMyOrders } from "../services/orders";
 import { logout } from "../services/auth";
 
 // ⬇️ הורדנו getFunctions/httpsCallable
-import { db } from "../firebase";
+import { db, ensureAppCheckReady } from "../firebase";
 
 import {
   updateProfile,
@@ -252,6 +252,8 @@ export default function Account() {
 
     try {
       setSaving(true);
+      // Soften App Check races on first Firestore write
+      try { await ensureAppCheckReady(); } catch {}
 
       // 1) עדכון שם ב־Auth אם השתנה
       if (user.displayName !== nameTrim) {
