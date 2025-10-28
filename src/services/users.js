@@ -1,5 +1,5 @@
 // src/services/users.js
-import { db } from "../firebase";
+import { db, ensureAppCheckReady } from "../firebase";
 import {
   doc,
   getDoc,
@@ -74,11 +74,12 @@ export async function ensureUserDoc(user, extra = null) {
       : null;
 
   // נרמול טלפון לספרות בלבד + בדיקה
+  const now = serverTimestamp();
   const payload = {
     displayName,
     email,
     photoURL: clean(user.photoURL) || null,
-    updatedAt: serverTimestamp(),
+    updatedAt: now,
   };
 
   const phoneDigits = normalizePhone(user.phoneNumber || "");
@@ -91,7 +92,7 @@ export async function ensureUserDoc(user, extra = null) {
 
   if (!exists) {
     payload.company = null;
-    payload.createdAt = serverTimestamp();
+    payload.createdAt = now;
   }
 
   // שדות Marketing אופציונליים (מסוננים — לא מקבלים createdAt/updatedAt מהקליינט)
@@ -100,7 +101,7 @@ export async function ensureUserDoc(user, extra = null) {
     if (typeof e.marketingConsent === "boolean") {
       payload.marketingConsent = !!e.marketingConsent;
       if (e.marketingConsent) {
-        payload.marketingConsentAt = serverTimestamp();
+        payload.marketingConsentAt = now;
         if (typeof e.marketingConsentMethod === "string" && e.marketingConsentMethod.trim()) {
           payload.marketingConsentMethod = clean(e.marketingConsentMethod);
         }
@@ -115,6 +116,7 @@ export async function ensureUserDoc(user, extra = null) {
     payload.phone = deleteField();
   }
 
+  try { await ensureAppCheckReady(); } catch {}
   await setDoc(ref, payload, { merge: true });
 
   return await readFresh(ref);
@@ -146,6 +148,7 @@ export async function updateUserProfile(uid, data = {}) {
 
   const safe = pickAllowed(data);
   const payload = {};
+  const now = serverTimestamp();
 
   if (exists && typeof current.phone !== "undefined") {
     payload.phone = deleteField();
@@ -207,7 +210,7 @@ export async function updateUserProfile(uid, data = {}) {
   if (typeof safe.marketingConsent === "boolean") {
     payload.marketingConsent = safe.marketingConsent;
     if (safe.marketingConsent) {
-      payload.marketingConsentAt = serverTimestamp();
+      payload.marketingConsentAt = now;
       if (typeof safe.marketingConsentMethod === "string" && safe.marketingConsentMethod.trim()) {
         payload.marketingConsentMethod = clean(safe.marketingConsentMethod);
       }
@@ -227,9 +230,9 @@ export async function updateUserProfile(uid, data = {}) {
   }
 
   if (!exists) {
-    payload.createdAt = serverTimestamp();
+    payload.createdAt = now;
   }
-  payload.updatedAt = serverTimestamp();
+  payload.updatedAt = now;
 
   // אל תבצע כתיבה מיותרת אם אין מה לשנות
   const keysToWrite = Object.keys(payload).filter((k) => payload[k] !== undefined);
@@ -237,6 +240,7 @@ export async function updateUserProfile(uid, data = {}) {
     return await readFresh(ref);
   }
 
+  try { await ensureAppCheckReady(); } catch {}
   await setDoc(ref, payload, { merge: true });
   return await readFresh(ref);
 }
@@ -245,13 +249,15 @@ export async function updateUserProfile(uid, data = {}) {
 export async function setMarketingConsentTrue(uid, method = "manual_update") {
   if (!uid) throw new Error("missing uid");
   const ref = doc(db, "users_prod", uid);
+  const now = serverTimestamp();
+  try { await ensureAppCheckReady(); } catch {}
   await setDoc(
     ref,
     {
       marketingConsent: true,
-      marketingConsentAt: serverTimestamp(),
+      marketingConsentAt: now,
       marketingConsentMethod: clean(method) || "manual_update",
-      updatedAt: serverTimestamp(),
+      updatedAt: now,
       phone: deleteField(), // מחיקת שדה ישן על הדרך
     },
     { merge: true }
@@ -262,17 +268,18 @@ export async function setMarketingConsentTrue(uid, method = "manual_update") {
 export async function setMarketingConsentFalse(uid) {
   if (!uid) throw new Error("missing uid");
   const ref = doc(db, "users_prod", uid);
+  const now = serverTimestamp();
+  try { await ensureAppCheckReady(); } catch {}
   await setDoc(
     ref,
     {
       marketingConsent: false,
       marketingConsentAt: deleteField(),
       marketingConsentMethod: deleteField(),
-      updatedAt: serverTimestamp(),
+      updatedAt: now,
       phone: deleteField(),
     },
     { merge: true }
   );
   return await readFresh(ref);
 }
-
