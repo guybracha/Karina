@@ -46,9 +46,45 @@
     </script>
 
     <!-- reCAPTCHA Enterprise (render with the same site key used by App Check) -->
-    <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeSJ_crAAAAAIOZfuqfgAhdEk7d4u5H26WakOV4"></script>
+    <script>
+      (function loadRecaptchaEnterprise() {
+        try {
+          var env = window.__ENV__ || {};
+          var key =
+            env.RECAPTCHA_ENTERPRISE_SITE_KEY ||
+            env.FB_RECAPTCHA_ENTERPRISE_KEY ||
+            env.RECAPTCHA_SITE_KEY;
+          if (!key || /^\$\{.+\}$/.test(String(key))) {
+            console.warn("[AppCheck] Missing reCAPTCHA Enterprise site key in runtime env; skipping script injection.");
+            return;
+          }
+          window.__recaptchaEnterpriseSiteKey = key;
+          window.__recaptchaEnterpriseReady = new Promise(function (resolve, reject) {
+            var script = document.createElement("script");
+            script.src = "https://www.google.com/recaptcha/enterprise.js?render=" + encodeURIComponent(key);
+            script.async = true;
+            script.onload = function () {
+              if (window.grecaptcha && window.grecaptcha.enterprise) {
+                window.grecaptcha.enterprise.ready(function () {
+                  resolve(window.grecaptcha);
+                });
+              } else {
+                resolve(window.grecaptcha || null);
+              }
+            };
+            script.onerror = function (err) {
+              console.warn("[AppCheck] reCAPTCHA Enterprise script failed to load:", err);
+              reject(err);
+            };
+            document.head.appendChild(script);
+          });
+        } catch (err) {
+          console.warn("[AppCheck] reCAPTCHA Enterprise loader failed:", err);
+        }
+      })();
+    </script>
 
-    <!-- Note: Do NOT hardcode ?k=... here. App Check SDK will load the library using the same site key from ENV. -->
+    <!-- Note: Site key injected via window.__ENV__; keep App Check and reCAPTCHA in sync. -->
   </head>
   <body>
     <noscript>יש לאפשר JavaScript כדי להפעיל את האפליקציה.</noscript>
@@ -68,8 +104,26 @@
           window.__recaptchaTest = async function(evt){
             try {
               if (evt && evt.preventDefault) evt.preventDefault();
-              await new Promise(r => grecaptcha.enterprise.ready(r));
-              const token = await grecaptcha.enterprise.execute('6LeSJ_crAAAAAIOZfuqfgAhdEk7d4u5H26WakOV4', { action: 'login' });
+              var env = (window.__ENV__ || {});
+              var key =
+                window.__recaptchaEnterpriseSiteKey ||
+                env.RECAPTCHA_ENTERPRISE_SITE_KEY ||
+                env.FB_RECAPTCHA_ENTERPRISE_KEY ||
+                env.RECAPTCHA_SITE_KEY;
+              if (!key) {
+                console.warn('[reCAPTCHA] site key missing; aborting debug execute.');
+                return null;
+              }
+              if (!window.__recaptchaEnterpriseReady) {
+                console.warn('[reCAPTCHA] loader promise missing; ensure loadRecaptchaEnterprise ran.');
+                return null;
+              }
+              await window.__recaptchaEnterpriseReady;
+              if (!window.grecaptcha || !window.grecaptcha.enterprise) {
+                console.error('[reCAPTCHA] grecaptcha.enterprise unavailable after load.');
+                return null;
+              }
+              const token = await window.grecaptcha.enterprise.execute(key, { action: 'login' });
               console.log('[reCAPTCHA] token:', token);
               return token;
             } catch (e) {
