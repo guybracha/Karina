@@ -34,7 +34,7 @@ export default function Contact() {
     contactPoint: [
       {
         "@type": "ContactPoint",
-        telephone: "+972-54-504-2443",
+        telephone: "+972-557-212-443",
         contactType: "customer service",
         areaServed: "IL",
         availableLanguage: ["he", "en"],
@@ -97,13 +97,13 @@ export default function Contact() {
           <div className="card shadow-sm p-4 h-100 d-flex flex-column">
             <h5 className="mb-3">פרטי החברה</h5>
             <p className="mb-1">📍 צבי הנחל 4, פארק תעשיות עמק חפר</p>
-            <p className="mb-1">📞 054-5042443</p>
+            <p className="mb-1">📞 055-721-2443</p>
             <p className="mb-1">✉️ karina.offical.israel@gmail.com</p>
             <p className="mb-3">🕒 ימים א׳–ה׳, 9:00–17:00</p>
 
             {/* כפתור וואטסאפ */}
             <a
-              href="https://wa.me/972545042443"
+              href="https://wa.me/972557212443"
               target="_blank"
               rel="noreferrer"
               className="btn btn-success mb-3"

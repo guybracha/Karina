@@ -109,7 +109,7 @@ export default function TermsPage() {
     COMPANY_ID: "123456789",
     COMPANY_ADDRESS: "צבי הנחל 4, אזור תעשייה עמק חפר",
     SUPPORT_EMAIL: "karina.offical.israel@gmail.com",
-    SUPPORT_PHONE: "054-5042443",
+    SUPPORT_PHONE: "055-721-2443",
     SUPPORT_HOURS: "א׳–ה׳ 09:00–17:00",
     PRIVACY_URL: "/privacy",
     COOKIES_URL: "/cookies",

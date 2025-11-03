@@ -5,7 +5,7 @@ import { Helmet } from "react-helmet-async";
 export default function About() {
   const brandName = "קארינה הדפסות";
   const address = "צבי הנחל 4, פארק תעשיות עמק חפר";
-  const phone = "054-5042443";
+  const phone = "055-721-2443";
   const email = "info@karina.co.il";
   const q = encodeURIComponent(address);
 
@@ -103,7 +103,7 @@ export default function About() {
 
       {/* כפתור וואטסאפ */}
       <a
-        href="https://wa.me/972545042443"
+        href="https://wa.me/972557212443"
         target="_blank"
         rel="noreferrer"
         className="btn btn-success mb-4"

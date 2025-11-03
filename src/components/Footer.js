@@ -28,8 +28,8 @@ export default function Footer() {
             <ul className="list-unstyled small m-0">
               <li className="mb-2">
                 טלפון:{" "}
-                <a href="tel:0545042443" className="link-light text-decoration-none" dir="ltr">
-                  054-504-2443
+                <a href="tel:0557212443" className="link-light text-decoration-none" dir="ltr">
+                  055-721-2443
                 </a>
               </li>
               <li className="mb-2">
@@ -62,7 +62,7 @@ export default function Footer() {
                 <i className="bi bi-facebook" aria-hidden="true"></i>
               </a>
               <a
-                href="https://wa.me/972545042443"
+                href="https://wa.me/972557212443"
                 target="_blank" rel="noreferrer"
                 aria-label="WhatsApp"
                 className="btn btn-outline-light btn-sm rounded-circle d-inline-flex align-items-center justify-content-center footer-icon"
