@@ -92,12 +92,12 @@ export default function HomePage() {
     url: canonical,
     logo: `${origin}/img/logo1.png`,
     sameAs: [
-      "https://wa.me/972545042443",
+      "https://wa.me/972557212443",
     ],
     contactPoint: [
       {
         "@type": "ContactPoint",
-        telephone: "+972-54-504-2443",
+        telephone: "+972-55-721-2443",
         contactType: "customer service",
         areaServed: "IL",
         availableLanguage: ["he", "en"],
