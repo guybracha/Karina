@@ -480,7 +480,7 @@ export default function HomePage() {
             </p>
             <div className="d-flex gap-2 justify-content-center">
               <a
-                href="https://wa.me/972545042443?text=שלום! אשמח להצעת מחיר או פרטים נוספים על הדפסות."
+                href="https://wa.me/972557212443?text=שלום! אשמח להצעת מחיר או פרטים נוספים על הדפסות."
                 className="btn btn-success d-flex align-items-center gap-2 px-4 py-2"
                 target="_blank"
                 rel="noopener noreferrer"
