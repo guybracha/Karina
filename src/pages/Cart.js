@@ -1,5 +1,6 @@
 /* @refresh skip */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import useCities from "../hooks/useCities";
 import { Link, useNavigate } from "react-router-dom";
 import "../style/Cart.css";
 
@@ -273,6 +274,7 @@ export default function Cart() {
     catch { return "standard"; }
   });
   const [shippingAddress, setShippingAddress] = useState(() => readAddressFromLS());
+  const { filtered: cityOptions, loading: citiesLoading } = useCities(shippingAddress.city);
   const [loading, setLoading] = useState(false);
   const [uid, setUid] = useState(null);
   const busyRef = useRef(false);
@@ -787,8 +789,21 @@ export default function Cart() {
               <div className="row g-2">
                 <div className="col-md-6">
                   <label className="form-label">עיר</label>
-                  <input type="text" className="form-control" value={shippingAddress.city}
-                         onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })} />
+                  <input
+                    id="city"
+                    list="cities-list"
+                    className="form-control"
+                    placeholder={citiesLoading ? "טוען ערים…" : "הקלד/י ובחר/י עיר"}
+                    value={shippingAddress.city}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
+                    autoComplete="address-level2"
+                    dir="rtl"
+                  />
+                  <datalist id="cities-list">
+                    {cityOptions.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
                 </div>
                 <div className="col-md-6">
                   <label className="form-label">רחוב</label>
