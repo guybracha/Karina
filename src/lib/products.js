@@ -22,10 +22,16 @@ import softShellCoat from "../img/work/coat1.png";
 import softShellCoatBack from "../img/work/coat1Back.png";
 import kenguruBack from "../img/work/kenguruBack.png";
 import zipper from "../img/work/zipperHoodie.png";
-import drifitShort from "../img/work/drifitShort.png";
-import drifitShortBack from "../img/work/drifitShortBack.png";
-import drifitLong from "../img/work/drifitLong.png";
-import drifitLongBack from "../img/work/drifitLongBack.png";
+import drifitShortNavyFront from "../img/work/drifitShortNavyFront.png";
+import drifitShortNavyBack from "../img/work/drifitShortNavyBack.png";
+import drifitShortWhiteFront from "../img/work/drifitShortWhiteFront.png";
+import drifitShortWhiteBack from "../img/work/drifitShortWhiteBack.png";
+import drifitShortBlackFront from "../img/work/drifitShortBlackFront.png";
+import drifitShortBlackBack from "../img/work/drifitShortBlackBack.png";
+import drifitShortGrayFront from "../img/work/drifitShortGrayFront.png";
+import drifitShortGrayBack from "../img/work/drifitShortGrayBack.png";
+import drifitLong from "../img/work/drifitLongBlackFront.png";
+import drifitLongBack from "../img/work/drifitLongBlackBack.png";
 import hermonit from "../img/work/hermonit.png";
 import fleese from "../img/work/plizOneSide.png";
 import fleeseDouble from "../img/work/plizDoubleSide.png";
@@ -170,18 +176,37 @@ export const PRODUCTS = [{
     isBlocked: false,
   },
   {
-    slug: "drifit-short",
-    name: "חולצת דרייפיט קצרה",
-    price: 50,
-    img: drifitShort,
-    backImg: drifitShortBack,
-    colors: ["לבן", "נייבי", "אפור", "שחור"],
-    sizes: ["S", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
-    category: "workwear",
-    season: "קיץ, חורף",
-    type: "shirt",
-    logoAllowed: true,
-    isBlocked: false,
+  slug: "drifit-short",
+  name: "חולצת דרייפיט קצרה",
+  price: 50,
+
+  // ברירת מחדל (לקידום אתרים ו-fallback)
+  img: drifitShortWhiteFront,
+  backImg: drifitShortWhiteBack,
+
+  colors: ["לבן", "נייבי", "אפור", "שחור"],
+
+  // וריאציות צד קדמי לפי צבע
+  images: {
+    "לבן":  drifitShortWhiteFront,
+    "נייבי": drifitShortNavyFront,
+    "אפור": drifitShortGrayFront,
+    "שחור": drifitShortBlackFront,
+  },
+
+  // וריאציות צד אחורי לפי צבע
+  backImages: {
+    "לבן":  drifitShortWhiteBack,
+    "נייבי": drifitShortNavyBack,
+    "אפור": drifitShortGrayBack,
+    "שחור": drifitShortBlackBack,
+  },
+  sizes: ["S", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
+  category: "workwear",
+  season: "קיץ, חורף",
+  type: "shirt",
+  logoAllowed: true,
+  isBlocked: false,
   },
   {
     slug: "drifit-long",
