@@ -265,9 +265,23 @@ export default function ProductDetail() {
 
   // בחירות מוצר
   const [color, setColor] = useState(product?.colors?.[0] || "");
+  
   const [side, setSide] = useState("front");
 
-  // לוגו
+  
+// 🖼️ Choose image by selected color (front/back) using product.images/backImages
+  const baseImageForSide = useMemo(() => {
+    if (!product) return null;
+    const byColor = product.images || {};
+    const backByColor = product.backImages || {};
+    if (side === "back") {
+      return backByColor[color] || product.backImg || byColor[color] || product.img || null;
+    }
+    return byColor[color] || product.img || null;
+  }, [product, side, color]);
+
+  const shownImage = baseImageForSide;
+// לוגו
   const [logoStorageBySide, setLogoStorageBySide] = useState({ front: null, back: null });
 
   // דירוג (נשאר)
@@ -285,10 +299,6 @@ export default function ProductDetail() {
   const description = product
     ? `${product?.name ?? ""} ${canUploadLogo ? "— מתאים להדפסה אישית." : "— ללא אפשרות הטבעת לוגו."} צבעים: ${colorsList}. מידות: ${sizesList}.`
     : "המוצר לא נמצא.";
-
-  const baseImageForSide = side === "front" ? product?.img : (product?.backImg || product?.img);
-  const shownImage = baseImageForSide;
-
   const currentKey = product?.type ?? product?.category ?? null;
   const similarProducts = useMemo(
     () =>

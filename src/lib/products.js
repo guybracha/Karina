@@ -1,11 +1,18 @@
 import hoodieUrl from "../img/work/hoodie.png";
-import trikoUrl from "../img/work/longTriko.png";
-import shortTriko from "../img/work/shortTriko.png";
+import longTrikoGray from "../img/work/longTrikoGray.png";
+import longTrikoWhite from "../img/work/longTrikoWhite.png";
+import longTrikoBlack from "../img/work/longTrikoBlack.png";
+import longTrikoNavy from "../img/work/longTrikoNavy.png";
+import shortTrikoWhite from "../img/work/shortTrikoWhite.png";
+import shortTrikoNavy from "../img/work/shortTrikoNavy.png";
+import shortTrikoBlack from "../img/work/shortTrikoBlack.png";
+import shortTrikoGray from "../img/work/shortTrikoGray.png";
 import helmetUrl from "../img/safety/helmet.png";
 import yellow from "../img/safety/yellowVest.png";
 import orange from "../img/safety/orangeVest.png";
 import manager from "../img/safety/manager.png";
-import cargo from "../img/work/cargoPants.png";
+import cargoBlack from "../img/work/cargoPantsBlack.png";
+import cargoNavy from "../img/work/cargoPantsNavy.png";
 import cargoBack from "../img/work/cargoPantsBack.png";
 import kenguru from "../img/work/kenguru.png";
 import yellowBack from "../img/safety/yellowVestBack.png";
@@ -50,8 +57,14 @@ export const PRODUCTS = [{
     slug: "long-triko",
     name: "טריקו ארוך",
     price: 60,
-    img: trikoUrl,
+    img: longTrikoWhite,
     colors: ["לבן", "נייבי", "אפור", "שחור"],
+    images: {
+      "לבן": longTrikoWhite,
+      "נייבי": longTrikoNavy,
+      "אפור": longTrikoGray,
+      "שחור": longTrikoBlack,
+    },
     sizes: ["S", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",
     season: "קיץ, חורף",
@@ -292,8 +305,14 @@ export const PRODUCTS = [{
     slug: "tshirt-short",
     name: "חולצת טריקו קצר",
     price: 55,
-    img: shortTriko,
+    img: shortTrikoWhite,
     colors: ["לבן", "נייבי", "אפור", "שחור"],
+    images: {
+      "לבן": shortTrikoWhite,
+      "נייבי": shortTrikoNavy,
+      "אפור": shortTrikoGray,
+      "שחור": shortTrikoBlack,
+    },
     sizes: ["S", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",
     season: "קיץ, חורף",
@@ -332,8 +351,12 @@ export const PRODUCTS = [{
     slug: "cargo-pants",
     name: 'מכנסי דגמ"ח עבודה',
     price: 60,
-    img: cargo,
+    img: cargoBlack,
     colors: ["שחור", "נייבי"],
+    images: {
+      "שחור": cargoBlack,
+      "נייבי": cargoNavy,
+    },
     sizes: ["S", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",
     season: "קיץ, חורף",
