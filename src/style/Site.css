@@ -1712,3 +1712,12 @@ img, picture, video, canvas, svg, iframe { max-width: 100%; height: auto; displa
 .footer a.link-light:hover { opacity: .85; text-decoration: underline; }
 /* שיפור שבירת טקסטים ארוכים (אימיילים) */
 .footer .text-break { word-break: break-word; }
+
+html{
+  direction: rtl;
+  scroll-behavior: smooth;
+  scroll-padding-top: 88px;
+}
+@media (prefers-reduced-motion: reduce){
+  html{ scroll-behavior: auto; }
+}

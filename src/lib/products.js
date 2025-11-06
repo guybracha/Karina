@@ -14,6 +14,8 @@ import manager from "../img/safety/manager.png";
 import cargoBlack from "../img/work/cargoPantsBlack.png";
 import cargoNavy from "../img/work/cargoPantsNavy.png";
 import cargoBack from "../img/work/cargoPantsBack.png";
+import cargoBeige from "../img/work/cargoPantsBeige.png";
+import cargoGray from "../img/work/cargoPantsGray.png";
 import kenguru from "../img/work/kenguru.png";
 import yellowBack from "../img/safety/yellowVestBack.png";
 import orangeBack from "../img/safety/orangeVestBack.png";
@@ -340,7 +342,7 @@ export const PRODUCTS = [{
     },
     sizes: ["S", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",
-    season: "קיץ, חורף",
+    season: "קיץ",
     type: "shirt",
     logoAllowed: true,
     isBlocked: false,
@@ -377,10 +379,12 @@ export const PRODUCTS = [{
     name: 'מכנסי דגמ"ח עבודה',
     price: 60,
     img: cargoBlack,
-    colors: ["שחור", "נייבי"],
+    colors: ["שחור", "נייבי", "אפור", "בז׳"],
     images: {
       "שחור": cargoBlack,
       "נייבי": cargoNavy,
+      "אפור": cargoGray,
+      "בז׳": cargoBeige,
     },
     sizes: ["S", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",

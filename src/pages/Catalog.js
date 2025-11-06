@@ -56,7 +56,7 @@ function seasonMatches(productSeasonRaw, chosenSeasonRaw) {
   return false;
 }
 
-/** הנחת מדרגות — כל 5 יח׳ עוד 5% (תקרה 50%) */
+/** הנחת מדרגות — (הוסר מהתצוגה הקדמית, שומרים לעתיד במקרה הצורך) */
 function discountPctForQty(qty, stepSize = 5, stepPct = 5, cap = 50) {
   if (!Number.isFinite(qty) || qty <= 1) return 0;
   const steps = Math.floor((qty - 1) / stepSize);
@@ -322,9 +322,11 @@ export default function Catalog() {
                   const low = hasStock && stock <= 8;
                   const barPct = hasStock ? Math.max(12, Math.min(100, Math.round((stock / 30) * 100))) : 0;
                   const titleId = `product-title-${p.slug || idx}`;
-                  const price6  = unitAfterDiscount(p.price ?? 0, 6);
-                  const price11 = unitAfterDiscount(p.price ?? 0, 11);
-                  const hasBack = Boolean(p.backImg);
+
+                  // מחיר לאחר הנחת פריט בודד (אם יש sale). מוצג גם בפיל וגם בגוף הכרטיס.
+                  const basePrice = p.price ?? 0;
+                  const salePct   = Number.isFinite(p.sale) ? p.sale : 0;
+                  const finalPrice = Math.round(basePrice * (1 - salePct / 100));
 
                   return (
                     <div className="col-6 col-md-4 col-lg-3" role="listitem" key={p.slug || idx}>
@@ -333,7 +335,8 @@ export default function Catalog() {
                         {!p.sale && p.isNew && <span className="product-badge new">חדש</span>}
                         {!p.logoAllowed && <span className="product-badge no-logo" title="מוצר זה אינו מאפשר הדפסת לוגו">ללא הדפסה</span>}
 
-                        <span className="price-pill">{formatCurrency(p.price)}</span>
+                        {/* מציגים את המחיר לאחר הנחה בפיל העליון */}
+                        <span className="price-pill">{formatCurrency(finalPrice)}</span>
 
                         {/* --- מדיה: תמונה קדמית בלבד, בלי צד אחורי --- */}
                         <div className="product-media">
@@ -359,6 +362,22 @@ export default function Catalog() {
                         <div className="card-body d-flex flex-column">
                           <h6 id={titleId} className="card-title mb-1">{p.name}</h6>
 
+                          {/* מחיר לאחר הנחת פריט (ללא הנחות כמות) */}
+                          {salePct > 0 ? (
+                            <div className="price-section mb-2">
+                              <span className="text-muted text-decoration-line-through me-2">
+                                {formatCurrency(basePrice)}
+                              </span>
+                              <span className="fw-bold text-danger">
+                                {formatCurrency(finalPrice)}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="price-section mb-2">
+                              <span className="fw-bold">{formatCurrency(basePrice)}</span>
+                            </div>
+                          )}
+
                           <div className="chips-row mb-1">
                             <span className="chip ghost">{CATEGORY_LABELS[p.category] || "כללי"}</span>
                             <span className="chip ghost">{String(p.season)}</span>
@@ -375,12 +394,7 @@ export default function Catalog() {
                             {p.logoAllowed && <span className="chip success" title="מוצר מאפשר הדפסה">אפשר הדפסה</span>}
                           </div>
 
-                          {/* טיזר מדרגות הנחה */}
-                          <div className="discount-teaser text-muted small">
-                            <span className="me-2">הנחות כמות:</span>
-                            <span className="badge bg-light text-dark border me-1">6+ {formatCurrency(price6)}</span>
-                            <span className="badge bg-light text-dark border">11+ {formatCurrency(price11)}</span>
-                          </div>
+                          {/* הוסר: טיזר הנחות כמות */}
 
                           {low && (
                             <div className="low-stock mt-1">

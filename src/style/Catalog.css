@@ -839,3 +839,23 @@ html.is-scrolling .product-card:hover .quick-view{
   .product-card .img-wrap img,
   .product-card .quick-view { transition: none !important; }
 }
+
+.price-pill{
+  position: absolute; inset-inline-end: 10px; top: 10px;
+  border-radius: 999px; padding: 6px 10px; font-weight: 800; font-size: .85rem;
+  background: linear-gradient(180deg, #111827, #0b1220); color:#fff;
+  box-shadow: 0 10px 24px rgba(2,6,23,.25);
+  z-index: 3;
+  display:inline-flex;
+  align-items:center;
+  gap:.45rem;
+}
+.price-pill--sale{
+  background:linear-gradient(180deg,#dc2626,#991b1b);
+}
+.price-pill__compare{
+  font-size:.75rem;
+  font-weight:600;
+  color:rgba(255,255,255,.8);
+  text-decoration:line-through;
+}
