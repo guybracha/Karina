@@ -88,7 +88,7 @@ export const PRODUCTS = [{
     category: "safety",
     season: "אין",
     type: "helmet",
-    logoAllowed: false,
+    logoAllowed: true,
     isBlocked: false,
   },
   {
