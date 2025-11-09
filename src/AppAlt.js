@@ -205,6 +205,7 @@ export default function AppAlt() {
                   {/* ציבורי */}
                   <Route path="/" element={<HomePage />} />
                   <Route path="/catalog" element={<Catalog />} />
+                  <Route path="/catalog/:view" element={<Catalog />} />
                   <Route path="/product/:slug" element={<ProductDetail />} />
                   <Route path="/cart" element={<Cart />} />
                   <Route path="/contact" element={<Contact />} />

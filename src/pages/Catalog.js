@@ -1,6 +1,6 @@
 // src/pages/Catalog.jsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { PRODUCTS } from "../lib/products";
 import "../style/Catalog.css";
 import summer from "../img/cards/summer.png";
@@ -69,10 +69,31 @@ function unitAfterDiscount(basePrice, qty) {
 
 /** ========= כרטיסיות פתיחה מהירה ========= **/
 const QUICK_CARDS = [
-  { kind: "season", key: "קיץ",   title: "בגדי קיץ",   subtitle: "חולצות דקות ודרייפיט", icon: "🥵", img: summer },
-  { kind: "season", key: "חורף",  title: "בגדי חורף",  subtitle: "קפוצ׳ונים וסופטשל",    icon: "❄️", img: winter },
-  { kind: "category", key: "safety", title: "בגדי בטיחות", subtitle: "וסטים זוהרים וקסדות", icon: "🦺", img: safety },
+  { slug: "summer", kind: "season", key: "קיץ",   title: "בגדי קיץ",   subtitle: "חולצות דקות ודרייפיט", icon: "🥵", img: summer },
+  { slug: "winter", kind: "season", key: "חורף",  title: "בגדי חורף",  subtitle: "קפוצ׳ונים וסופטשל",    icon: "❄️", img: winter },
+  { slug: "safety", kind: "category", key: "safety", title: "בגדי בטיחות", subtitle: "וסטים זוהרים וקסדות", icon: "🦺", img: safety },
 ];
+
+const VIEW_PRESETS = {
+  summer: {
+    slug: "summer",
+    heading: "קטלוג בגדי קיץ",
+    description: "בחירה ממוקדת של פריטי קיץ קלים ונושמים למיתוג העסקי שלכם.",
+    season: "קיץ",
+  },
+  winter: {
+    slug: "winter",
+    heading: "קטלוג בגדי חורף",
+    description: "קולקציית חורף מחממת: קפוצ׳ונים, סופטשל ופליז לעובדים.",
+    season: "חורף",
+  },
+  safety: {
+    slug: "safety",
+    heading: "קטלוג בטיחות לעבודה",
+    description: "הציוד הזוהר והבטוח ביותר – ווסטים, קסדות ואביזרי בטיחות.",
+    category: "safety",
+  },
+};
 
 function QuickCard({ card, active, onClick }) {
   const hasBg = Boolean(card.img); // 👈 זה מה שחסר
@@ -102,6 +123,9 @@ function QuickCard({ card, active, onClick }) {
 /* ---------- קומפוננטה ---------- */
 export default function Catalog() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { view } = useParams();
+  const preset = VIEW_PRESETS[view] || null;
 
   // state from URL
   const [query, setQuery]       = useState(params.get("query") || "");
@@ -112,7 +136,9 @@ export default function Catalog() {
   const [sort, setSort]         = useState(params.get("sort") || "popular");
   const [page, setPage]         = useState(Number(params.get("page") || 1));
 
-  const hasPicked = Boolean(season || category);
+  const activeSeason = preset?.season ?? season;
+  const activeCategory = preset?.category ?? category;
+  const hasPicked = Boolean(activeSeason || activeCategory);
   const productsAnchorRef = useRef(null);
 
   // Drawer (לשימוש עתידי)
@@ -120,6 +146,17 @@ export default function Catalog() {
   const firstFocusableRef = useRef(null);
   const openDrawer  = () => setDrawerOpen(true);
   const closeDrawer = () => setDrawerOpen(false);
+
+  useEffect(() => {
+    if (!preset) return;
+    if (preset.season) {
+      if (season !== preset.season) setSeason(preset.season);
+      if (category) setCategory("");
+    } else if (preset.category) {
+      if (category !== preset.category) setCategory(preset.category);
+      if (season) setSeason("");
+    }
+  }, [preset, season, category]);
 
   // ניתוק גלילת גוף כשה-Drawer פתוח
   useEffect(() => {
@@ -164,18 +201,22 @@ export default function Catalog() {
 
   // סנכרון כתובת
   useEffect(() => {
-    const p = new URLSearchParams(params);
-    const setOrDel = (k, v) => (v ? p.set(k, v) : p.delete(k));
-    setOrDel("query", query);
-    setOrDel("color", color);
-    setOrDel("size", size);
-    setOrDel("category", category);
-    setOrDel("season", season);
-    setOrDel("sort", sort);
-    p.set("page", String(page));
-    setParams(p, { replace: true });
+    const next = new URLSearchParams();
+    if (query) next.set("query", query);
+    if (color) next.set("color", color);
+    if (size) next.set("size", size);
+    if (!preset?.category && category) next.set("category", category);
+    if (!preset?.season && season) next.set("season", season);
+    if (sort && sort !== "popular") next.set("sort", sort);
+    if (Number(page) > 1) next.set("page", String(page));
+
+    const current = params.toString();
+    const serialized = next.toString();
+    if (serialized !== current) {
+      setParams(next, { replace: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, color, size, category, season, sort, page]);
+  }, [query, color, size, category, season, sort, page, preset, params]);
 
   /* ---------- פילטור ---------- */
   const filtered = useMemo(() => {
@@ -188,12 +229,12 @@ export default function Catalog() {
 
       const matchColor     = !color || (Array.isArray(p.colors) && p.colors.includes(color));
       const matchSize      = !size  || (Array.isArray(p.sizes)  && p.sizes.includes(size));
-      const matchCategory  = !category || p.category === category;
-      const matchSeason    = seasonMatches(p.season, season);
+      const matchCategory  = !activeCategory || p.category === activeCategory;
+      const matchSeason    = seasonMatches(p.season, activeSeason);
 
       return matchQuery && matchColor && matchSize && matchCategory && matchSeason;
     });
-  }, [query, color, size, category, season]);
+  }, [query, color, size, activeCategory, activeSeason]);
 
   /* ---------- מיון ---------- */
   const sorted = useMemo(() => {
@@ -220,11 +261,26 @@ export default function Catalog() {
   useEffect(() => { setPage(1); }, [query, color, size, category, season, sort]);
 
   function clearAll() {
-    setQuery(""); setColor(""); setSize(""); setCategory(""); setSeason(""); setSort("popular"); setPage(1);
+    setQuery(""); setColor(""); setSize("");
+    if (!preset?.category) setCategory("");
+    if (!preset?.season) setSeason("");
+    setSort("popular"); setPage(1);
   }
 
   // בחירה מכרטיסייה + גלילה למוצרים
   function applyQuick(card) {
+    if (card.slug) {
+      const target = card.slug === "catalog" ? "/catalog" : `/catalog/${card.slug}`;
+      navigate(target);
+      requestAnimationFrame(() => {
+        productsAnchorRef.current?.scrollIntoView({
+          behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth",
+          block: "start",
+        });
+      });
+      return;
+    }
+
     setQuery(""); setColor(""); setSize(""); setSort("popular");
     if (card.kind === "season") { setSeason(card.key); setCategory(""); }
     else if (card.kind === "category") { setCategory(card.key); setSeason(""); }
@@ -237,8 +293,9 @@ export default function Catalog() {
   }
 
   function isCardActive(card) {
-    if (card.kind === "season") return season === card.key;
-    if (card.kind === "category") return category === card.key;
+    if (preset?.slug) return preset.slug === card.slug;
+    if (card.kind === "season") return activeSeason === card.key;
+    if (card.kind === "category") return activeCategory === card.key;
     return false;
   }
 
@@ -248,13 +305,13 @@ export default function Catalog() {
       <div className="container py-4" dir="rtl">
         {/* כותרת + סיכום */}
         <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
-          <h1 className="m-0">קטלוג מוצרים</h1>
+          <h1 className="m-0">{preset?.heading || "קטלוג מוצרים"}</h1>
           <div className="text-muted">
-            {hasPicked ? (
-              <>נמצאו <strong>{sorted.length}</strong> פריטים {season ? <>— {season}</> : <>— {CATEGORY_LABELS[category] || category}</>}</>
-            ) : (
-              <>בחרו קטגוריה/עונה כדי לראות מוצרים</>
-            )}
+            {preset?.description
+              ? preset.description
+              : hasPicked
+              ? <>נמצאו <strong>{sorted.length}</strong> פריטים {activeSeason ? <>— {activeSeason}</> : <>— {CATEGORY_LABELS[activeCategory] || activeCategory}</>}</>
+              : <>בחרו חולצות/קפוצ׳ונים ממותגים ונתאים אותם למיתוג שלכם</>}
           </div>
         </div>
 
@@ -275,14 +332,20 @@ export default function Catalog() {
           <div className="card p-2 mb-3 season-toolbar">
             <div className="d-flex align-items-center gap-2">
               <div className="ms-auto d-flex align-items-center gap-2">
-                {(season || category) && (
+                {(activeSeason || activeCategory) && (
                   <span className="badge rounded-pill bg-light text-dark border">
-                    {season ? `עונה: ${season}` : `קטגוריה: ${CATEGORY_LABELS[category] || category}`}
+                    {activeSeason ? `עונה: ${activeSeason}` : `קטגוריה: ${CATEGORY_LABELS[activeCategory] || activeCategory}`}
                     <button
                       className="btn btn-sm btn-link text-danger ms-2 p-0"
-                      onClick={() => { setSeason(""); setCategory(""); }}
+                      onClick={() => {
+                        if (preset) {
+                          navigate("/catalog");
+                          return;
+                        }
+                        setSeason(""); setCategory("");
+                      }}
                     >
-                      הסר
+                      איפוס
                     </button>
                   </span>
                 )}

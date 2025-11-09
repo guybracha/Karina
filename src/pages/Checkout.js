@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { Link, useLocation } from "react-router-dom";
 import { ref, uploadBytes, uploadString, getDownloadURL } from "firebase/storage";
 import { storage, auth, ensureAuthTokenFresh, db } from "../firebase";
+import PhoneOrderRequest from "../components/PhoneOrderRequest";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useLogosQueue } from "../contexts/LogosQueueContext.tsx";
 
@@ -705,6 +706,23 @@ export default function Checkout() {
           </div>
         )}
       </div>
+
+      {items.length > 0 && (
+        <div className="mt-4">
+          <PhoneOrderRequest
+            items={items}
+            totals={{
+              merchandiseTotal: Number(totals?.merchandiseTotal ?? computedMerchandiseTotal),
+              shippingCost: Number(totals?.shippingCost ?? shipping?.cost ?? 0),
+              grandTotal: Number(grandTotal || 0),
+              totalSaved: Number(totals?.totalSaved ?? computedTotalSaved),
+            }}
+            shippingAddress={shippingAddress}
+            source="checkout"
+            uid={auth.currentUser?.uid || null}
+          />
+        </div>
+      )}
     </div>
   );
 }

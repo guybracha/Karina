@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import useCities from "../hooks/useCities";
 import { Link, useNavigate } from "react-router-dom";
 import "../style/Cart.css";
+import PhoneOrderRequest from "../components/PhoneOrderRequest";
 
 // ---- Firebase ----
 import { auth, db, ensureAuthTokenFresh } from "../firebase";
@@ -591,6 +592,9 @@ export default function Cart() {
                   const row = priceRow(it);
                   const sizeTotals = getSizeTotalsFromItemOrAll(items, it);
                   const sizeKeys = Object.keys(sizeTotals || {});
+                  const colorEntries = Object.entries(row.variants?.colorTotals || {});
+                  const fallbackColor =
+                    (!colorEntries.length && typeof it.color === "string" && it.color.trim()) ? it.color.trim() : "";
 
                   return (
                     <tr key={it.id} style={{ wordBreak: "break-word" }}>
@@ -647,6 +651,26 @@ export default function Cart() {
                               </div>
                             </div>
                           ) : null}
+
+                          {colorEntries.length > 0 && (
+                            <div className="mb-2">
+                              <div className="text-muted small">צבעים שנבחרו:</div>
+                              <div className="d-flex flex-wrap gap-2">
+                                {colorEntries.map(([colorName, qty]) => (
+                                  <span key={colorName} className="badge text-bg-light">
+                                    {colorName}: {qty}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {!colorEntries.length && fallbackColor && (
+                            <div className="mb-2">
+                              <span className="text-muted small me-2">צבע שנבחר:</span>
+                              <span className="badge text-bg-light">{fallbackColor}</span>
+                            </div>
+                          )}
 
                           <div className="d-flex flex-wrap gap-2">
                             <span className="badge text-bg-light">
@@ -880,6 +904,16 @@ export default function Cart() {
                 {loading ? "מפנה לקופה..." : "מעבר לתשלום"}
               </button>
             </div>
+          </div>
+
+          <div className="mt-4 w-100">
+            <PhoneOrderRequest
+              items={items}
+              totals={{ merchandiseTotal, shippingCost, grandTotal, totalSaved }}
+              shippingAddress={shippingAddress}
+              source="cart"
+              uid={uid}
+            />
           </div>
         </>
       )}
