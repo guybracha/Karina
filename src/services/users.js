@@ -21,6 +21,7 @@ const ALLOWED_KEYS = new Set([
   "email",
   "phoneNumber",
   "company",
+  "city",
   "photoURL",
   "marketingConsent",
   "marketingConsentAt",
@@ -92,6 +93,7 @@ export async function ensureUserDoc(user, extra = null) {
 
   if (!exists) {
     payload.company = null;
+    payload.city = null;
     payload.createdAt = now;
   }
 
@@ -204,6 +206,16 @@ export async function updateUserProfile(uid, data = {}) {
       payload.company = v;
     } else if (exists) {
       payload.company = deleteField();
+    }
+  }
+
+  // city
+  if ("city" in safe) {
+    const v = clean(safe.city);
+    if (v) {
+      payload.city = v;
+    } else if (exists) {
+      payload.city = deleteField();
     }
   }
 

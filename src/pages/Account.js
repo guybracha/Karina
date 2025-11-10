@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { getUserProfile, updateUserProfile } from "../services/users";
 import { getMyOrders } from "../services/orders";
 import { logout } from "../services/auth";
+import useCities from "../hooks/useCities";
 
 // ⬇️ הורדנו getFunctions/httpsCallable
 import { db, ensureAppCheckReady } from "../firebase";
@@ -93,11 +94,14 @@ export default function Account() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhoneNumber, setEditPhoneNumber] = useState("");
   const [editCompany, setEditCompany] = useState("");
+  const [editCity, setEditCity] = useState("");
   const [reauthPassword, setReauthPassword] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   const [saveErr, setSaveErr] = useState(null);
+
+  const { cities, filtered: cityOptions, loading: citiesLoading } = useCities(editCity);
 
   // ⬇️ ה־state והלוגיקה של “מייל בדיקה” הוסרו
 
@@ -131,6 +135,7 @@ export default function Account() {
           setEditEmail(p?.email || user.email || "");
           setEditPhoneNumber(p?.phoneNumber || "");
           setEditCompany(p?.company || "");
+          setEditCity(p?.city || "");
         }
       } catch (err) {
         if (mounted) {
@@ -161,6 +166,7 @@ export default function Account() {
           setEditEmail(d.email || user.email || "");
           setEditPhoneNumber(d.phoneNumber ? prettyPhone(d.phoneNumber) : "");
           setEditCompany(d.company || "");
+          setEditCity(d.city || "");
         }
       },
       (err) => {
@@ -206,6 +212,7 @@ export default function Account() {
 
   const displayName = profile?.displayName || user?.displayName || (user?.email?.split("@")[0]) || "Customer";
   const email = profile?.email || user?.email || "";
+  const cityValue = profile?.city || "";
 
   function toDateString(tsOrIso) {
     if (!tsOrIso) return "";
@@ -249,6 +256,12 @@ export default function Account() {
       setSaveErr("מספר טלפון לא תקין.");
       return;
     }
+    const cityTrim = (editCity || "").trim();
+    if (cityTrim && cities.length && !cities.includes(cityTrim)) {
+      setSaveErr("בחרו עיר מתוך הרשימה.");
+      return;
+    }
+
 
     try {
       setSaving(true);
@@ -285,6 +298,7 @@ export default function Account() {
         email: emailTrim,
         phoneNumber: phoneTrim, // יינרמל לספרות בצד השירות
         company: (editCompany || "").trim(),
+        city: cityTrim,
       });
 
       if (fresh) {
@@ -327,6 +341,7 @@ export default function Account() {
               <span>משתמש מאז: {toDateString(profile?.createdAt) || "—"}</span>
               {profile?.phoneNumber && <span>טלפון: {prettyPhone(profile.phoneNumber)}</span>}
               {profile?.company && <span>חברה: {profile.company}</span>}
+              {cityValue && <span>עיר: {cityValue}</span>}
             </div>
           </div>
           <div className="d-flex flex-column align-items-end gap-2">
@@ -466,6 +481,23 @@ export default function Account() {
                       value={editCompany}
                       onChange={(e) => setEditCompany(e.target.value)}
                     />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">עיר מגורים</label>
+                    <input
+                      className="form-control"
+                      list="account-cities"
+                      value={editCity}
+                      onChange={(e) => setEditCity(e.target.value)}
+                      placeholder={citiesLoading ? "טוען רשימת ערים..." : "התחילו להקליד שם עיר"}
+                      autoComplete="address-level2"
+                      dir="rtl"
+                    />
+                    <datalist id="account-cities">
+                      {cityOptions.map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
                   </div>
 
                   <div className="mb-3">
