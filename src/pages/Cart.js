@@ -216,7 +216,7 @@ function priceRow(it) {
   const unitAfter = round2(baseUnit * (1 - dPct));
   const lineTotal = round2(unitAfter * qty);
   const saved = round2(baseUnit * qty - lineTotal);
-  return { baseUnit, qty, dPct, unitAfter, lineTotal, saved };
+  return { baseUnit, qty, dPct, unitAfter, lineTotal, saved, variants: it.variants };
 }
 
 /* =========================================================================
@@ -639,6 +639,28 @@ export default function Cart() {
                       <td className="fw-semibold align-top" style={{ maxWidth: 280 }}>
                         <div className="mb-1">{it.name}</div>
 
+                        {/* הצגת צבעים בדסקטופ */}
+                        <div className="d-none d-md-block">
+                          {colorEntries.length > 0 && (
+                            <div className="mb-2">
+                              <span className="text-muted small me-2">צבע:</span>
+                              <div className="d-flex flex-wrap gap-1 mt-1">
+                                {colorEntries.map(([colorName, qty]) => (
+                                  <span key={colorName} className="badge text-bg-secondary" style={{ fontSize: '0.75rem' }}>
+                                    {colorName} ({qty})
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {!colorEntries.length && fallbackColor && (
+                            <div className="mb-2">
+                              <span className="text-muted small me-2">צבע:</span>
+                              <span className="badge text-bg-secondary" style={{ fontSize: '0.75rem' }}>{fallbackColor}</span>
+                            </div>
+                          )}
+                        </div>
+
                         {/* מובייל בלבד: פירוט מידות + מחיר/סה"כ/כמות */}
                         <div className="d-md-none small text-muted">
                           {sizeKeys.length ? (
@@ -654,11 +676,11 @@ export default function Cart() {
 
                           {colorEntries.length > 0 && (
                             <div className="mb-2">
-                              <div className="text-muted small">צבעים שנבחרו:</div>
+                              <div className="text-muted small mb-1">צבע שנבחר:</div>
                               <div className="d-flex flex-wrap gap-2">
                                 {colorEntries.map(([colorName, qty]) => (
-                                  <span key={colorName} className="badge text-bg-light">
-                                    {colorName}: {qty}
+                                  <span key={colorName} className="badge text-bg-secondary">
+                                    {colorName} ({qty})
                                   </span>
                                 ))}
                               </div>
@@ -668,7 +690,7 @@ export default function Cart() {
                           {!colorEntries.length && fallbackColor && (
                             <div className="mb-2">
                               <span className="text-muted small me-2">צבע שנבחר:</span>
-                              <span className="badge text-bg-light">{fallbackColor}</span>
+                              <span className="badge text-bg-secondary">{fallbackColor}</span>
                             </div>
                           )}
 
