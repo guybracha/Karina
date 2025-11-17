@@ -208,11 +208,20 @@ function LogoPlacementModal({
 }
 
 export default function ProductDetail() {
+  const { slug } = useParams();
+  const location = useLocation();
+  
+  // גלילה לראש העמוד בכל כניסה או שינוי מוצר
+  useEffect(() => {
+    // גלילה מיידית
+    window.scrollTo(0, 0);
+    // גלילה נוספת אחרי רינדור (למקרה שיש תוכן דינמי)
+    setTimeout(() => window.scrollTo(0, 0), 100);
+  }, [slug]);
+  
   const [showUpload, setShowUpload] = useState(false);
   const [showPlacement, setShowPlacement] = useState(false);
 
-  const { slug } = useParams();
-  const location = useLocation();
   const product = useMemo(() => PRODUCTS.find((p) => p.slug === slug), [slug]);
   const canUploadLogo = product?.logoAllowed !== false;
   const isCartBlocked = useMemo(() => {

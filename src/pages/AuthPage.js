@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
   registerWithEmail,
@@ -24,6 +25,7 @@ function friendly(err) {
 }
 
 export default function AuthPage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState("login"); // 'login' | 'register'
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,7 +65,8 @@ export default function AuthPage() {
     setError(null); setInfo(null); setLoading(true);
     try {
       await loginWithEmail(email.trim(), password);
-      setInfo("התחברת בהצלחה.");
+      setInfo("התחברת בהצלחה! מעביר אותך לאזור האישי...");
+      setTimeout(() => navigate("/account"), 1000);
     } catch (e) { setError(friendly(e)); }
     finally { setLoading(false); }
   }
@@ -80,7 +83,8 @@ export default function AuthPage() {
       } else {
         await registerWithEmail(email.trim(), password);
       }
-      setInfo("נרשמת בהצלחה.");
+      setInfo("נרשמת בהצלחה! מעביר אותך לאזור האישי...");
+      setTimeout(() => navigate("/account"), 1000);
     } catch (e) { setError(friendly(e)); }
     finally { setLoading(false); }
   }
@@ -97,7 +101,8 @@ export default function AuthPage() {
           setTab("register");
           setError("זהו חיבור ראשון עם Google. אנא אשר/י קבלת דיוורים והרשמה.");
         } else {
-          setInfo("התחברת עם Google.");
+          setInfo("התחברת עם Google! מעביר אותך לאזור האישי...");
+          setTimeout(() => navigate("/account"), 1000);
         }
       }
     } catch (e) { setError(friendly(e)); }

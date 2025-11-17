@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { db, app } from "../firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 
 function shekels(amountCentsOrFloat) {
@@ -90,6 +90,10 @@ export default function OrderDetail() {
   const [generating, setGenerating] = useState(false);
   const [genErr, setGenErr] = useState(null);
 
+  // בקשת ביטול
+  const [cancelRequesting, setCancelRequesting] = useState(false);
+  const [cancelSuccess, setCancelSuccess] = useState(false);
+
   useEffect(() => {
     if (!orderId) return;
     setLoading(true);
@@ -144,6 +148,31 @@ export default function OrderDetail() {
       setGenErr(e.message || "יצירת ה-PDF נכשלה");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleRequestCancellation() {
+    if (!order) return;
+    
+    const confirmMsg = `האם אתה בטוח שברצונך לבקש ביטול הזמנה #${order.id}?\n\nצוות השירות יבדוק את הבקשה ויצור איתך קשר.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setCancelRequesting(true);
+    try {
+      const ref = doc(db, "orders_prod", orderId);
+      await setDoc(ref, {
+        cancellationRequested: true,
+        cancellationRequestedAt: serverTimestamp(),
+        cancellationNote: "הלקוח ביקש ביטול דרך האזור האישי"
+      }, { merge: true });
+      
+      setCancelSuccess(true);
+      alert("בקשת הביטול נשלחה בהצלחה. צוות השירות יצור איתך קשר בהקדם.");
+    } catch (e) {
+      console.error(e);
+      alert("אירעה שגיאה בשליחת בקשת הביטול. אנא נסה שוב או פנה לשירות הלקוחות.");
+    } finally {
+      setCancelRequesting(false);
     }
   }
 
@@ -370,6 +399,25 @@ export default function OrderDetail() {
           <Link to="/account" className="btn btn-secondary w-100">
             חזרה להזמנות שלי
           </Link>
+
+          {/* כפתור ביטול הזמנה */}
+          {!order.cancellationRequested && !cancelSuccess && status !== "בוטל" && (
+            <button
+              type="button"
+              className="btn btn-outline-danger w-100 mt-2"
+              onClick={handleRequestCancellation}
+              disabled={cancelRequesting}
+            >
+              {cancelRequesting ? "שולח בקשה..." : "בקש ביטול הזמנה"}
+            </button>
+          )}
+
+          {(order.cancellationRequested || cancelSuccess) && (
+            <div className="alert alert-warning mt-2 mb-0 py-2 small">
+              <strong>בקשת ביטול נשלחה</strong>
+              <div className="mt-1">צוות השירות יצור איתך קשר בהקדם.</div>
+            </div>
+          )}
         </div>
       </div>
     </div>
