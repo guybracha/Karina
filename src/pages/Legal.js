@@ -106,7 +106,7 @@ export default function TermsPage() {
     DOMAIN: "karina.co.il",
     UPDATE_DATE: "2025-09-28",
     COMPANY_NAME: "קארינה תעשיות טקסטיל",
-    COMPANY_ID: "123456789",
+    COMPANY_ID: "517093290",
     COMPANY_ADDRESS: "צבי הנחל 4, אזור תעשייה עמק חפר",
     SUPPORT_EMAIL: "karina.offical.israel@gmail.com",
     SUPPORT_PHONE: "055-721-2443",

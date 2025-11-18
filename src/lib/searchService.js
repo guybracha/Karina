@@ -1,4 +1,4 @@
-// src/lib/searchService.js
+  // src/lib/searchService.js
 import { PRODUCTS } from "./products";
 
 export async function searchProducts(q) {
