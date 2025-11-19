@@ -8,8 +8,10 @@ import {
   completeMagicLinkSignIn,
   upgradeAnonWithEmail,
 } from "../services/auth";
+import { ensureUserDoc } from "../services/users";
 import { auth } from "../firebase";
-import { getAdditionalUserInfo, onAuthStateChanged, signOut } from "firebase/auth";
+import { getAdditionalUserInfo, onAuthStateChanged, signOut, updateProfile } from "firebase/auth";
+import useCities from "../hooks/useCities";
 
 /* ============ קטן לשגיאות ידידותיות ============ */
 function friendly(err) {
@@ -29,10 +31,17 @@ export default function AuthPage() {
   const [tab, setTab] = useState("login"); // 'login' | 'register'
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [company, setCompany] = useState("");
+  const [city, setCity] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const [loading, setLoading] = useState(false);
+  const isRegister = tab === "register";
+  const { filtered: filteredCities, loading: loadingCities } = useCities(city);
+  const citySuggestions = filteredCities.slice(0, 12);
 
   // איסוף תוצאת redirect ומג'יק לינק אם חזרנו
   useEffect(() => {
@@ -75,14 +84,44 @@ export default function AuthPage() {
     e.preventDefault();
     setError(null); setInfo(null);
     if (!marketingOptIn) { setError("יש לאשר קבלת דיוורים כדי להירשם."); return; }
+
+    const trimmedName = fullName.trim();
+    const digits = phoneNumber.replace(/\D+/g, "");
+    const companyName = company.trim();
+    const cityName = city.trim();
+
+    if (!trimmedName) { setError("יש להזין שם מלא."); return; }
+    if (digits.length < 9) { setError("יש להזין מספר טלפון תקין."); return; }
+    if (!companyName) { setError("יש להזין שם חברה."); return; }
+    if (!cityName) { setError("יש להזין עיר."); return; }
+
     setLoading(true);
     try {
       // אם אורח – שדרג, אחרת רשום משתמש חדש
+      let cred;
       if (auth.currentUser?.isAnonymous) {
-        await upgradeAnonWithEmail(email.trim(), password);
+        cred = await upgradeAnonWithEmail(email.trim(), password);
       } else {
-        await registerWithEmail(email.trim(), password);
+        cred = await registerWithEmail(email.trim(), password);
       }
+
+      const user = cred?.user || auth.currentUser;
+      if (!user) throw new Error("missing_user");
+
+      if (trimmedName) {
+        try { await updateProfile(user, { displayName: trimmedName }); }
+        catch (err) { console.warn("updateProfile failed", err); }
+      }
+
+      await ensureUserDoc(user, {
+        displayName: trimmedName,
+        phoneNumber: digits,
+        company: companyName,
+        city: cityName,
+        marketingConsent: marketingOptIn,
+        marketingConsentMethod: "signup_form",
+      });
+
       setInfo("נרשמת בהצלחה! מעביר אותך לאזור האישי...");
       setTimeout(() => navigate("/account"), 1000);
     } catch (e) { setError(friendly(e)); }
@@ -140,9 +179,82 @@ export default function AuthPage() {
           <input id="pwd" type="password" className="form-control"
                  value={password} onChange={(e) => setPassword(e.target.value)}
                  required minLength={6}
-                 autoComplete={tab === "login" ? "current-password" : "new-password"}
+                 autoComplete={isRegister ? "new-password" : "current-password"}
                  disabled={loading}/>
         </div>
+
+        {isRegister && (
+          <>
+            <div className="mb-3">
+              <label className="form-label" htmlFor="fullName">שם מלא</label>
+              <input
+                id="fullName"
+                type="text"
+                className="form-control"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                autoComplete="name"
+                disabled={loading}
+              />
+            </div>
+
+            <div className="row g-3">
+              <div className="col-md-6">
+                <label className="form-label" htmlFor="phone">טלפון</label>
+                <input
+                  id="phone"
+                  type="tel"
+                  className="form-control"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  required
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="05x-xxxxxxx"
+                  disabled={loading}
+                />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label" htmlFor="company">שם חברה / ארגון</label>
+                <input
+                  id="company"
+                  type="text"
+                  className="form-control"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  required
+                  autoComplete="organization"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <div className="mb-3 mt-3">
+              <label className="form-label" htmlFor="city">עיר מגורים / פעילות</label>
+              <input
+                id="city"
+                type="text"
+                className="form-control"
+                list="signup-city-options"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                required
+                autoComplete="address-level2"
+                disabled={loading}
+                placeholder={loadingCities ? "טוען ערים..." : ""}
+              />
+              <datalist id="signup-city-options">
+                {citySuggestions.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+              <small className="form-text text-muted">
+                נעשה בפרטים שימוש רק כדי לאמת הזמנות ולזהות אתכם מול שירות הלקוחות.
+              </small>
+            </div>
+          </>
+        )}
 
         <div className="form-check mb-3">
           <input id="mk" className="form-check-input" type="checkbox"
@@ -151,12 +263,12 @@ export default function AuthPage() {
           <label className="form-check-label" htmlFor="mk">
             <span className="text-danger">*</span> אני מאשר/ת קבלת דיוורים במייל (ניתן להסרה בכל עת).
           </label>
-          {(tab === "register" && !marketingOptIn) &&
+          {(isRegister && !marketingOptIn) &&
             <div className="form-text text-danger">חובה לאשר כדי להשלים הרשמה.</div>}
         </div>
 
         <button className="btn btn-primary w-100" disabled={loading}>
-          {loading ? "מעבד…" : tab === "login" ? "Login" : "Create account"}
+          {loading ? "מעבד…" : isRegister ? "Create account" : "Login"}
         </button>
 
         <button type="button" className="btn btn-outline-secondary w-100 mt-2"
@@ -167,5 +279,3 @@ export default function AuthPage() {
     </div>
   );
 }
-
-

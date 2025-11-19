@@ -496,232 +496,156 @@ export default function Checkout() {
   }, [currentOrderId, totals, shipping, items, grandTotal]);
 
   return (
-    <div className="container py-5">
-      {/* CSS רספונסיבי לאייפריים (יחס-צד + min-height) */}
+    <div className="container-fluid p-0" style={{ height: "100vh", overflow: "hidden" }}>
+      {/* CSS לאייפריים מלא מסך */}
       <style>{`
-        .cc-frame { min-height: 380px; }
-        @media (max-width: 576px) {
-          .cc-frame { padding-top: 95%; min-height: 420px; } /* יותר גובה במסכים צרים */
+        body, html, #root { 
+          margin: 0; 
+          padding: 0; 
+          height: 100%; 
+          overflow: hidden; 
         }
-        @media (min-width: 577px) and (max-width: 991px) {
-          .cc-frame { padding-top: 80%; min-height: 400px; } /* טאבלטים */
+        .cc-frame-fullscreen { 
+          width: 100vw; 
+          height: 100vh; 
+          border: 0; 
+          display: block; 
         }
-        @media (min-width: 1200px) {
-          .cc-frame { padding-top: 66.66%; min-height: 420px; } /* ~3:2 בדסקטופ רחב */
+        /* הסתרת Navbar וכל אלמנטים אחרים */
+        nav, header, .navbar, [class*="Navbar"], [class*="navbar"] {
+          display: none !important;
         }
       `}</style>
 
-      <h1 className="mb-4">תשלום והזמנה</h1>
-
       {/* 🔔 הודעת חזרה מתשלום */}
       {paymentResult.status === "success" && (
-        <div className="alert alert-success d-flex justify-content-between align-items-center" role="alert">
-          <div>
+        <div 
+          className="alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3" 
+          style={{ zIndex: 9999, maxWidth: "600px", width: "90%" }}
+          role="alert"
+        >
+          <div className="text-center">
             <strong>תודה שרכשת אצלנו!</strong> התשלום התקבל בהצלחה
             {currentOrderId ? <> להזמנה <strong>#{currentOrderId}</strong></> : ""}.
             {paymentResult.txId ? <> מספר עסקה: <strong>{paymentResult.txId}</strong>.</> : null}
-          </div>
-          <div className="d-flex gap-2">
-            <Link to={currentOrderId ? `/orders/${currentOrderId}` : "/orders"} className="btn btn-sm btn-outline-light">
-              לצפייה בהזמנה
-            </Link>
-            <Link to="/catalog" className="btn btn-sm btn-light">
-              המשך בקניות
-            </Link>
+            <div className="mt-2">
+              <Link to={currentOrderId ? `/orders/${currentOrderId}` : "/orders"} className="btn btn-sm btn-success me-2">
+                לצפייה בהזמנה
+              </Link>
+              <Link to="/catalog" className="btn btn-sm btn-outline-success">
+                המשך בקניות
+              </Link>
+            </div>
           </div>
         </div>
       )}
 
       {paymentResult.status === "failure" && (
-        <div className="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
-          <div>
+        <div 
+          className="alert alert-danger position-fixed top-0 start-50 translate-middle-x mt-3" 
+          style={{ zIndex: 9999, maxWidth: "600px", width: "90%" }}
+          role="alert"
+        >
+          <div className="text-center">
             <strong>מצטערים, ההזמנה לא עברה.</strong> ניתן לנסות שוב או לבחור אמצעי תשלום אחר.
             {paymentResult.txId ? <> (מס׳ עסקה: <strong>{paymentResult.txId}</strong>)</> : null}
-          </div>
-          <button
-            className="btn btn-sm btn-outline-light"
-            onClick={() => setPaymentResult({ status: null, txId: null })}
-          >
-            הסתר
-          </button>
-        </div>
-      )}
-
-      {/* אם אין פרטי כתובת מהעגלה — הצג הודעה וקישור חזרה לעגלה */}
-      {!readyFromCart && (
-        <div className="alert alert-warning">
-          חסרים פרטי משלוח/כתובת. אנא חזור/י ל<a className="alert-link" href="/cart"> עגלת הקניות</a> ומלא/י את הכתובת.
-        </div>
-      )}
-
-      {/* תיבת הטמעת האשראי (אוטומטית עם פרטי העגלה) */}
-      {readyFromCart && (
-        <div className="card shadow-sm p-3 mb-4" ref={iframeBoxRef}>
-          <div className="d-flex justify-content-between align-items-center">
-            <h5 className="m-0">תשלום בכרטיס – עמוד מאובטח (Credit2000)</h5>
-            <button className="btn btn-outline-secondary btn-sm" onClick={handleCloseIframe} disabled={!iframeSrc}>
-              חזרה
-            </button>
-          </div>
-
-          <div className="mt-3 position-relative">
-            {!iframeReady && iframeSrc && (
-              <div
-                className="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-                style={{ background: "rgba(255,255,255,.6)", zIndex: 2 }}
+            <div className="mt-2">
+              <button
+                className="btn btn-sm btn-outline-danger"
+                onClick={() => {
+                  setPaymentResult({ status: null, txId: null });
+                  window.location.href = "/cart";
+                }}
               >
-                <div className="spinner-border" role="status" aria-hidden="true" />
-                <span className="ms-2">טוען מסך סליקה…</span>
-              </div>
-            )}
-
-            {iframeSrc ? (
-              <ResponsiveIframe src={iframeSrc} title="Credit2000" onLoad={() => setIframeReady(true)} />
-            ) : (
-              <div className="text-center p-4 text-muted">מכין מסך תשלום…</div>
-            )}
+                חזרה לעגלה
+              </button>
+            </div>
           </div>
-
-          <small className="text-muted d-block mt-2">
-            אם יש לך Content-Security-Policy באתר, ודא שהדומיין של Credit2000 מותר תחת <code>frame-src</code>{" "}
-            (למשל: <code>https://www.credit2000.co.il</code>).
-          </small>
-
-          {error && <div className="alert alert-danger mt-3">{error}</div>}
         </div>
       )}
 
-      <div className="row g-4">
-        {/* סיכום הזמנה */}
-        <div className="col-lg-6 col-xl-5">
-          <div className="card shadow-sm p-4">
-            <h5 className="mb-3">סיכום הזמנה</h5>
-            <ul className="list-group list-group-flush mb-3">
-              {items.map((it) => {
-                const pr = priceRow(it);
-                const originalLine = round2(pr.baseUnit * pr.qty);
-                return (
-                  <li key={it.id} className="list-group-item">
-                    <div className="d-flex justify-content-between align-items-start">
-                      <div>
-                        <div className="fw-semibold">
-                          {it.name}{" "}
-                          <small className="text-muted">
-                            x{pr.qty}
-                            {it.color ? ` • ${it.color}` : ""}
-                            {it.size ? ` • ${it.size}` : ""}
-                          </small>
-                        </div>
+      {/* אם אין פרטי כתובת מהעגלה */}
+      {!readyFromCart && (
+        <div className="d-flex align-items-center justify-content-center vh-100">
+          <div className="alert alert-warning text-center" style={{ maxWidth: "600px" }}>
+            <h4>חסרים פרטי משלוח</h4>
+            <p>אנא חזור/י לעגלת הקניות ומלא/י את פרטי הכתובת.</p>
+            {!auth.currentUser && (
+              <div className="alert alert-info mt-3 mb-3">
+                <strong>📝 נדרש להתחבר לאתר</strong>
+                <p className="mb-2 mt-2">כדי להמשיך בתהליך התשלום, יש להתחבר תחילה עם פרטי המשתמש שלך:</p>
+                <ul className="list-unstyled mb-0 text-start">
+                  <li>• אימייל או שם משתמש</li>
+                  <li>• סיסמה</li>
+                </ul>
+                <a href="/auth" className="btn btn-sm btn-primary mt-2">התחבר/הירשם</a>
+              </div>
+            )}
+            <a href="/cart" className="btn btn-warning">חזרה לעגלה</a>
+          </div>
+        </div>
+      )}
 
-                        {/* ↓ אזכור ההנחה מתחת למחיר המקורי */}
-                        <div className="small mt-1">
-                          {pr.dPct > 0 ? (
-                            <>
-                              <div className="text-muted">
-                                מחיר לפני הנחה: <s>{originalLine} ₪</s>
-                              </div>
-                              <div className="text-success">
-                                אחרי הנחה: <strong>{pr.lineTotal} ₪</strong>{" "}
-                                <span className="ms-1">(הנחה {Math.round(pr.dPct * 100)}% — חסכת {pr.saved} ₪)</span>
-                              </div>
-                              <div className="text-muted">
-                                מחיר יחידה לאחר הנחה: {pr.unitAfter} ₪
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-muted">
-                              מחיר לפני הנחה: <strong>{originalLine} ₪</strong> (אין הנחת כמות)
-                            </div>
-                          )}
-                        </div>
-                      </div>
+      {/* iframe מלא מסך */}
+      {readyFromCart && (
+        <>
+          {busy && !iframeSrc && (
+            <div className="d-flex align-items-center justify-content-center vh-100">
+              <div className="text-center">
+                <div className="spinner-border mb-3" role="status" style={{ width: "3rem", height: "3rem" }}>
+                  <span className="visually-hidden">טוען...</span>
+                </div>
+                <h5>מכין עמוד תשלום מאובטח...</h5>
+              </div>
+            </div>
+          )}
 
-                      <div className="text-end">
-                        {pr.dPct > 0 ? (
-                          <>
-                            <div className="text-muted"><s>{originalLine} ₪</s></div>
-                            <div className="fw-bold">{pr.lineTotal} ₪</div>
-                          </>
-                        ) : (
-                          <div className="fw-bold">{originalLine} ₪</div>
-                        )}
-                      </div>
+          {error && !iframeSrc && (
+            <div className="d-flex align-items-center justify-content-center vh-100">
+              <div className="alert alert-danger text-center" style={{ maxWidth: "600px" }}>
+                <h4>שגיאה</h4>
+                <p>{error}</p>
+                {error.includes("התחבר") && (
+                  <div className="alert alert-info mt-3 mb-3">
+                    <strong>📝 פרטי התחברות נדרשים:</strong>
+                    <p className="mb-2 mt-2">עבור למסך ההתחברות והזן:</p>
+                    <ul className="list-unstyled mb-0 text-start">
+                      <li>• כתובת אימייל או שם משתמש</li>
+                      <li>• סיסמה</li>
+                    </ul>
+                    <a href="/auth" className="btn btn-sm btn-primary mt-2">מעבר להתחברות</a>
+                  </div>
+                )}
+                <a href="/cart" className="btn btn-outline-danger">חזרה לעגלה</a>
+              </div>
+            </div>
+          )}
+
+          {iframeSrc && (
+            <>
+              {!iframeReady && (
+                <div 
+                  className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-white"
+                  style={{ zIndex: 9998 }}
+                >
+                  <div className="text-center">
+                    <div className="spinner-border mb-3" role="status" style={{ width: "3rem", height: "3rem" }}>
+                      <span className="visually-hidden">טוען...</span>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="text-end">
-              <div className="d-flex justify-content-between">
-                <span className="text-muted">סה״כ מוצרים (אחרי הנחות):</span>
-                <strong>{round2(totals?.merchandiseTotal ?? computedMerchandiseTotal)} ₪</strong>
-              </div>
-
-              {/* סיכום חיסכון כולל */}
-              {(totals?.totalSaved ?? computedTotalSaved) > 0 && (
-                <div className="d-flex justify-content-between text-success">
-                  <span>חסכת:</span>
-                  <strong>{round2(totals?.totalSaved ?? computedTotalSaved)} ₪</strong>
+                    <h5>טוען עמוד תשלום מאובטח של Credit2000...</h5>
+                  </div>
                 </div>
               )}
-
-              {"shippingCost" in (totals || {}) && (
-                <div className="d-flex justify-content_between">
-                  <span className="text-muted">
-                    משלוח {shipping?.label ? `(${shipping.label})` : ""}
-                  </span>
-                  <strong>{Number(totals.shippingCost || 0)} ₪</strong>
-                </div>
-              )}
-              <hr className="my-2" />
-              <h5 className="mb-0">סה״כ לתשלום: {Number(grandTotal || 0)} ₪</h5>
-            </div>
-
-            <Link to="/cart" className="btn btn-outline-secondary mt-3 w-100">
-              חזרה לעגלה
-            </Link>
-          </div>
-        </div>
-
-        {/* פרטי משלוח קצרים (תצוגה בלבד) */}
-        {readyFromCart && (
-          <div className="col-lg-6 col-xl-7">
-            <div className="card shadow-sm p-4 h-100">
-              <h6 className="mb-3">כתובת משלוח</h6>
-              <div className="text-muted">
-                {shippingAddress?.address
-                  ? shippingAddress.address
-                  : [shippingAddress?.city, shippingAddress?.street, shippingAddress?.house]
-                      .filter(Boolean)
-                      .join(" ")}
-                {shippingAddress?.apt ? `, דירה ${shippingAddress.apt}` : ""}
-                {shippingAddress?.zip ? `, ${shippingAddress.zip}` : ""}
-                {shippingAddress?.notes ? <div className="mt-2">הערות: {shippingAddress.notes}</div> : null}
-              </div>
-              <small className="text-muted d-block mt-3">
-                לשינוי הכתובת, חזור/י ל<a href="/cart">עגלת הקניות</a>.
-              </small>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {items.length > 0 && (
-        <div className="mt-4">
-          <PhoneOrderRequest
-            items={items}
-            totals={{
-              merchandiseTotal: Number(totals?.merchandiseTotal ?? computedMerchandiseTotal),
-              shippingCost: Number(totals?.shippingCost ?? shipping?.cost ?? 0),
-              grandTotal: Number(grandTotal || 0),
-              totalSaved: Number(totals?.totalSaved ?? computedTotalSaved),
-            }}
-            shippingAddress={shippingAddress}
-            source="checkout"
-            uid={auth.currentUser?.uid || null}
-          />
-        </div>
+              <iframe
+                className="cc-frame-fullscreen"
+                title="Credit2000 תשלום מאובטח"
+                src={iframeSrc}
+                allow="payment *"
+                onLoad={() => setIframeReady(true)}
+              />
+            </>
+          )}
+        </>
       )}
     </div>
   );

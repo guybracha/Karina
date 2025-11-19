@@ -102,6 +102,9 @@ export default function Navbar() {
   const cartBtnRef = useRef(null);
   const cartPanelRef = useRef(null);
 
+  // שמירת מצב משתמש קודם לזיהוי התנתקות
+  const prevUserRef = useRef(user);
+
   // Bootstrap collapse close
   function closeNav() {
     const el = collapseRef.current;
@@ -118,18 +121,40 @@ export default function Navbar() {
   }
 
   useEffect(() => {
-    // טעינה ראשונית יציבה
+    // בדיקה ראשונית: אם אין משתמש מחובר, נקה את העגלה
+    if (!user) {
+      try {
+        localStorage.removeItem(LS_CART_KEY);
+        setCart([]);
+      } catch {}
+      return;
+    }
+
+    // טעינה ראשונית יציבה (רק אם יש משתמש)
     setCart(readCartFromLS());
 
     // האזנה לשינויים מחלון אחר / טאבים אחרים
     function onStorage(e) {
-      if (e.key === LS_CART_KEY) setCart(readCartFromLS());
+      if (e.key === LS_CART_KEY) {
+        // אם אין משתמש, אל תטען את העגלה
+        if (!user) {
+          localStorage.removeItem(LS_CART_KEY);
+          setCart([]);
+        } else {
+          setCart(readCartFromLS());
+        }
+      }
     }
     window.addEventListener("storage", onStorage);
 
     // טריגר פנימי: window.dispatchEvent(new Event("karina:cartUpdated"))
     function onCustom() {
-      setCart(readCartFromLS());
+      if (!user) {
+        localStorage.removeItem(LS_CART_KEY);
+        setCart([]);
+      } else {
+        setCart(readCartFromLS());
+      }
     }
     window.addEventListener("karina:cartUpdated", onCustom);
 
@@ -137,7 +162,24 @@ export default function Navbar() {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("karina:cartUpdated", onCustom);
     };
-  }, []);
+  }, [user]);
+
+  // ניקוי עגלה כאשר משתמש מתנתק
+  useEffect(() => {
+    // אם היה משתמש מחובר ועכשיו אין - התנתקות
+    if (prevUserRef.current && !user) {
+      // איפוס העגלה
+      try {
+        localStorage.removeItem(LS_CART_KEY);
+        setCart([]);
+        window.dispatchEvent(new Event("karina:cartUpdated"));
+      } catch (err) {
+        console.error("Failed to clear cart on logout:", err);
+      }
+    }
+    // עדכון מצב קודם
+    prevUserRef.current = user;
+  }, [user]);
 
   // סכימה — עם מדרגות הנחה
   const cartCount = useMemo(

@@ -1,6 +1,6 @@
-// src/pages/ProductDetail.jsx
+﻿// src/pages/ProductDetail.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { useParams, Link, useLocation } from "react-router-dom";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { LogosQueueProvider } from "../contexts/LogosQueueContext.tsx";
 import LogoUploadModal from "../components/LogoUploadModal";
@@ -210,6 +210,7 @@ function LogoPlacementModal({
 export default function ProductDetail() {
   const { slug } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   
   // גלילה לראש העמוד בכל כניסה או שינוי מוצר
   useEffect(() => {
@@ -610,6 +611,7 @@ export default function ProductDetail() {
     window.dispatchEvent(new Event("karina:itemLogosUpdated"));
 
     alert(`נוספו לעגלה ${totalAdd} יח' של ${product.name} (לצבע ${color}) — שורה אחת מרוכזת למוצר.`);
+    navigate("/cart");
   }
 
   // דירוג

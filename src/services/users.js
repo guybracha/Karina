@@ -97,9 +97,31 @@ export async function ensureUserDoc(user, extra = null) {
     payload.createdAt = now;
   }
 
-  // שדות Marketing אופציונליים (מסוננים — לא מקבלים createdAt/updatedAt מהקליינט)
+  // שדות נוספים שמגיעים מהקליינט (כולל Marketing; עדיין לא מקבלים createdAt/updatedAt מהקליינט)
   if (extra && typeof extra === "object") {
     const e = pickAllowed(extra);
+
+    if (typeof e.displayName === "string" && e.displayName.trim()) {
+      payload.displayName = clean(e.displayName);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(e, "phoneNumber")) {
+      const digits = normalizePhone(e.phoneNumber || "");
+      if (digits && isValidPhoneDigits(digits)) {
+        payload.phoneNumber = digits;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(e, "company")) {
+      const comp = clean(e.company);
+      payload.company = comp || null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(e, "city")) {
+      const cityValue = clean(e.city);
+      payload.city = cityValue || null;
+    }
+
     if (typeof e.marketingConsent === "boolean") {
       payload.marketingConsent = !!e.marketingConsent;
       if (e.marketingConsent) {
