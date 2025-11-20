@@ -22,6 +22,8 @@ import "./style/Site.css";
 // Pages
 import HomePage from "./pages/HomePage";
 import Catalog from "./pages/Catalog";
+import WorkwearCatalog from "./pages/WorkwearCatalog";
+import SafetyCatalog from "./pages/SafetyCatalog";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
@@ -228,7 +230,8 @@ export default function AppAlt() {
                   {/* ציבורי */}
                   <Route path="/" element={<HomePage />} />
                   <Route path="/catalog" element={<Catalog />} />
-                  <Route path="/catalog/:view" element={<Catalog />} />
+                  <Route path="/workwear" element={<WorkwearCatalog />} />
+                  <Route path="/safety" element={<SafetyCatalog />} />
                   <Route path="/product/:slug" element={<ProductDetail />} />
                   <Route path="/cart" element={<Cart />} />
                   <Route path="/contact" element={<Contact />} />
