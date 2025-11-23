@@ -140,6 +140,8 @@ export default function WorkwearCatalog() {
     return PRODUCTS.filter((p) => {
       // רק מוצרי workwear
       if (p.category !== "workwear") return false;
+      // להסתיר מוצרי ילדים מתוך בגדי עבודה
+      if (p.isKids) return false;
 
       const matchQuery =
         !q ||
