@@ -15,6 +15,30 @@ function clamp(v, min, max) {
 }
 const PAGE_SIZE = 12;
 
+/** בניית עץ קטלוג לפי סוגים - רק safety */
+function buildSafetyTree(products) {
+  const tree = {};
+  
+  products.forEach((p) => {
+    if (p.category !== "safety") return;
+    
+    const type = p.type || "אחר";
+    if (!tree[type]) tree[type] = [];
+    tree[type].push(p);
+  });
+  
+  return tree;
+}
+
+function getTypeIcon(type) {
+  const typeStr = String(type).toLowerCase();
+  if (typeStr.includes("וסט") || typeStr.includes("vest")) return "🦺";
+  if (typeStr.includes("קסדה") || typeStr.includes("helmet")) return "⛑️";
+  if (typeStr.includes("כפפ") || typeStr.includes("glove")) return "🧤";
+  if (typeStr.includes("משקפ") || typeStr.includes("glass")) return "🥽";
+  return "🛡️";
+}
+
 /* ---------- קומפוננטה ---------- */
 export default function SafetyCatalog() {
   const [params, setParams] = useSearchParams();
@@ -24,6 +48,9 @@ export default function SafetyCatalog() {
   const [size, setSize]         = useState(params.get("size") || "");
   const [sort, setSort]         = useState(params.get("sort") || "popular");
   const [page, setPage]         = useState(Number(params.get("page") || 1));
+  const [showTree, setShowTree] = useState(false);
+  
+  const tree = useMemo(() => buildSafetyTree(PRODUCTS), []);
 
   const productsAnchorRef = useRef(null);
 
@@ -163,6 +190,124 @@ export default function SafetyCatalog() {
 
         {/* עוגן לגלילה */}
         <div ref={productsAnchorRef} aria-hidden="true" />
+
+        {/* כפתור להצגת עץ מוצרים */}
+        <div className="text-center mb-4">
+          <button 
+            className="btn btn-outline-primary btn-lg"
+            onClick={() => setShowTree(!showTree)}
+          >
+            {showTree ? "🔼 הסתר עץ מוצרים" : "🔽 הצג עץ מוצרים לפי סוגים"}
+          </button>
+        </div>
+
+        {/* עץ קטלוגים לפי סוגים */}
+        {showTree && (
+          <div className="accordion accordion-flush shadow-lg rounded-4 overflow-hidden mb-4" id="safetyTree" style={{
+            background: "white",
+            border: "1px solid #eef2f7"
+          }}>
+            {Object.entries(tree).map(([typeName, items], i) => (
+              <div className="accordion-item border-0" key={typeName} style={{
+                borderBottom: i < Object.entries(tree).length - 1 ? "1px solid #f1f5f9" : "none"
+              }}>
+                <h2 className="accordion-header" id={`h-type-${i}`}>
+                  <button
+                    className="accordion-button collapsed fw-bold fs-5 py-4"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target={`#c-type-${i}`}
+                    style={{
+                      background: "linear-gradient(to right, #f8fafc, #ffffff)",
+                      color: "#0f172a",
+                      borderRadius: i === 0 ? "1rem 1rem 0 0" : "0"
+                    }}
+                  >
+                    <span className="me-3" style={{ fontSize: "1.5rem" }}>
+                      {getTypeIcon(typeName)}
+                    </span>
+                    {typeName}
+                    <span className="badge bg-light text-dark ms-3 rounded-pill px-3 py-2">
+                      {items.length} מוצרים
+                    </span>
+                  </button>
+                </h2>
+
+                <div
+                  id={`c-type-${i}`}
+                  className="accordion-collapse collapse"
+                  data-bs-parent="#safetyTree"
+                >
+                  <div className="accordion-body p-4" style={{ background: "#fafbfc" }}>
+                    <div className="row g-3">
+                      {items.map((p) => (
+                        <div className="col-6 col-md-4 col-lg-3" key={p.slug}>
+                          <Link
+                            to={`/product/${p.slug}`}
+                            className="product-card card border-0 h-100 text-decoration-none shadow-sm"
+                            style={{
+                              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                              borderRadius: "1rem",
+                              overflow: "hidden"
+                            }}
+                          >
+                            <div className="position-relative" style={{
+                              aspectRatio: "1/1",
+                              background: "#f8fafc",
+                              display: "grid",
+                              placeItems: "center"
+                            }}>
+                              <img 
+                                src={p.img} 
+                                alt={p.name} 
+                                className="p-3"
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "contain"
+                                }}
+                              />
+                              {p.sale && (
+                                <span className="product-badge sale position-absolute" style={{
+                                  top: "10px",
+                                  right: "10px"
+                                }}>
+                                  -{p.sale}%
+                                </span>
+                              )}
+                            </div>
+                            <div className="card-body p-3">
+                              <h6 className="card-title mb-2 fw-bold" style={{
+                                fontSize: "0.9rem",
+                                color: "#0f172a",
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden"
+                              }}>
+                                {p.name}
+                              </h6>
+                              {p.price && (
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="fw-bold" style={{ 
+                                    color: "#10b981",
+                                    fontSize: "1rem"
+                                  }}>
+                                    {formatCurrency(p.price)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* גריד מוצרים */}
         {paged.length > 0 ? (

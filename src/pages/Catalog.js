@@ -155,134 +155,25 @@ export default function Catalog() {
           ))}
         </div>
 
-        {/* עץ קטלוגים מעוצב */}
-        <div className="accordion accordion-flush shadow-lg rounded-4 overflow-hidden" id="catalogTree" style={{
-          background: "white",
-          border: "1px solid #eef2f7"
+        {/* הסבר על קטלוגים ייעודיים */}
+        <div className="text-center mb-5 p-4 rounded-4 shadow-sm" style={{
+          background: "linear-gradient(135deg, rgba(79,70,229,0.05), rgba(16,185,129,0.05))",
+          border: "1px solid #e5e7eb"
         }}>
-          {Object.entries(tree).map(([main, seasons], i) => (
-            <div className="accordion-item border-0" key={main} style={{
-              borderBottom: i < Object.entries(tree).length - 1 ? "1px solid #f1f5f9" : "none"
-            }}>
-              <h2 className="accordion-header" id={`h-${i}`}>
-                <button
-                  className="accordion-button collapsed fw-bold fs-5 py-4"
-                  type="button"
-                  data-bs-toggle="collapse"
-                  data-bs-target={`#c-${i}`}
-                  style={{
-                    background: "linear-gradient(to right, #f8fafc, #ffffff)",
-                    color: "#0f172a",
-                    borderRadius: i === 0 ? "1rem 1rem 0 0" : "0"
-                  }}
-                >
-                  <span className="me-3" style={{ fontSize: "1.5rem" }}>
-                    {getCategoryIcon(main)}
-                  </span>
-                  {main}
-                  <span className="badge bg-light text-dark ms-3 rounded-pill px-3 py-2">
-                    {Object.values(seasons).flat().length} מוצרים
-                  </span>
-                </button>
-              </h2>
-
-              <div
-                id={`c-${i}`}
-                className="accordion-collapse collapse"
-                data-bs-parent="#catalogTree"
-              >
-                <div className="accordion-body p-4" style={{ background: "#fafbfc" }}>
-                  {Object.entries(seasons).map(([season, items]) => (
-                    <div key={season} className="mb-5">
-                      {/* כותרת עונה מעוצבת */}
-                      <div className="d-flex align-items-center mb-3 pb-2" style={{
-                        borderBottom: "2px solid #e5e7eb"
-                      }}>
-                        <span className="me-2" style={{ fontSize: "1.3rem" }}>
-                          {getSeasonIcon(season)}
-                        </span>
-                        <h5 className="mb-0 fw-bold" style={{ color: "#1e293b" }}>
-                          {season}
-                        </h5>
-                        <span className="badge bg-primary rounded-pill ms-3 px-3">
-                          {items.length}
-                        </span>
-                      </div>
-
-                      {/* כרטיסי מוצרים */}
-                      <div className="row g-3">
-                        {items.map((p) => (
-                          <div className="col-6 col-md-4 col-lg-3" key={p.slug}>
-                            <Link
-                              to={`/product/${p.slug}`}
-                              className="product-card card border-0 h-100 text-decoration-none shadow-sm"
-                              style={{
-                                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                                borderRadius: "1rem",
-                                overflow: "hidden"
-                              }}
-                            >
-                              <div className="position-relative" style={{
-                                aspectRatio: "1/1",
-                                background: "#f8fafc",
-                                display: "grid",
-                                placeItems: "center"
-                              }}>
-                                <img 
-                                  src={p.img} 
-                                  alt={p.name} 
-                                  className="p-3"
-                                  style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "contain"
-                                  }}
-                                />
-                                {/* תג מבצע אם יש */}
-                                {p.onSale && (
-                                  <span className="product-badge sale position-absolute" style={{
-                                    top: "10px",
-                                    right: "10px"
-                                  }}>
-                                    מבצע
-                                  </span>
-                                )}
-                              </div>
-                              <div className="card-body p-3">
-                                <h6 className="card-title mb-2 fw-bold" style={{
-                                  fontSize: "0.9rem",
-                                  color: "#0f172a",
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: "vertical",
-                                  overflow: "hidden"
-                                }}>
-                                  {p.name}
-                                </h6>
-                                {p.basePrice && (
-                                  <div className="d-flex align-items-center gap-2">
-                                    <span className="fw-bold" style={{ 
-                                      color: "#10b981",
-                                      fontSize: "1rem"
-                                    }}>
-                                      ₪{p.basePrice}
-                                    </span>
-                                    <span className="text-muted small">
-                                      מחיר התחלתי
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
+          <div className="mb-3" style={{ fontSize: "2rem" }}>📋</div>
+          <h4 className="fw-bold mb-3">חפשו את המוצר המושלם</h4>
+          <p className="text-muted mb-4">
+            לחצו על אחת מהקטגוריות למעלה כדי לצפות בקטלוג המלא עם עץ מוצרים מפורט.<br />
+            כל קטלוג מכיל חלוקה מסודרת לפי סוגים ועונות.
+          </p>
+          <div className="d-flex gap-3 justify-content-center flex-wrap">
+            <Link to="/workwear" className="btn btn-primary btn-lg">
+              👔 עבור לקטלוג ביגוד עבודה
+            </Link>
+            <Link to="/safety" className="btn btn-success btn-lg">
+              🦺 עבור לקטלוג מוצרי בטיחות
+            </Link>
+          </div>
         </div>
 
         {/* פוטר הסבר */}
