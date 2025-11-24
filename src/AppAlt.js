@@ -1,5 +1,5 @@
 // src/AppAlt.jsx
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Helmet, HelmetProvider } from "react-helmet-async";
 
@@ -17,30 +17,46 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 
+// Styles & A11y
 import "./style/Site.css";
-
-// Pages
-import HomePage from "./pages/HomePage";
-import Catalog from "./pages/Catalog";
-import WorkwearCatalog from "./pages/WorkwearCatalog";
-import SafetyCatalog from "./pages/SafetyCatalog";
-import ProductDetail from "./pages/ProductDetail";
-import Cart from "./pages/Cart";
-import Checkout from "./pages/Checkout";
-import Contact from "./pages/Contact";
-import FAQ from "./pages/FAQ";
-import About from "./pages/About";
-import Account from "./pages/Account";
-import NotFound from "./pages/NotFound";
-import OrderDetail from "./pages/OrderDetail";
-import Orders from "./pages/Orders";
-import AuthPage from "./pages/AuthPage";
-import Legal from "./pages/Legal";
-
 import "./a11y/a11y.css";
 import A11yToolkit from "./a11y/A11yToolkit";
 import ReadAloud from "./a11y/ReadAloud";
 import A11yFab from "./a11y/A11yFab";
+
+// Pages - טוענים בצורה דינמית (Code Splitting)
+const HomePage = lazy(() => import("./pages/HomePage"));
+const Catalog = lazy(() => import("./pages/Catalog"));
+const WorkwearCatalog = lazy(() => import("./pages/WorkwearCatalog"));
+const SafetyCatalog = lazy(() => import("./pages/SafetyCatalog"));
+const ProductDetail = lazy(() => import("./pages/ProductDetail"));
+const Cart = lazy(() => import("./pages/Cart"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const Contact = lazy(() => import("./pages/Contact"));
+const FAQ = lazy(() => import("./pages/FAQ"));
+const About = lazy(() => import("./pages/About"));
+const Account = lazy(() => import("./pages/Account"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const OrderDetail = lazy(() => import("./pages/OrderDetail"));
+const Orders = lazy(() => import("./pages/Orders"));
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const Legal = lazy(() => import("./pages/Legal"));
+
+// קומפוננטת Loading
+function PageLoader() {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '60vh',
+      fontSize: '1.2rem',
+      color: '#666'
+    }}>
+      <div>טוען...</div>
+    </div>
+  );
+}
 
 /** ====================== קבועים ====================== */
 const GA_ID = "G-SHQSKGKY2C";
@@ -226,12 +242,13 @@ export default function AppAlt() {
                 <ScrollToTop />
                 <GAListener />
 
-                <Routes>
-                  {/* ציבורי */}
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/catalog" element={<Catalog />} />
-                  <Route path="/workwear" element={<WorkwearCatalog />} />
-                  <Route path="/safety" element={<SafetyCatalog />} />
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    {/* ציבורי */}
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/catalog" element={<Catalog />} />
+                    <Route path="/workwear" element={<WorkwearCatalog />} />
+                    <Route path="/safety" element={<SafetyCatalog />} />
                   <Route path="/product/:slug" element={<ProductDetail />} />
                   <Route path="/cart" element={<Cart />} />
                   <Route path="/contact" element={<Contact />} />
@@ -277,6 +294,7 @@ export default function AppAlt() {
                   <Route path="*" element={<NotFound />} />
                   <Route path="/legal" element={<Legal />} />
                 </Routes>
+                </Suspense>
               </main>
 
               <Footer />

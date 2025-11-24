@@ -1,5 +1,5 @@
 import React from 'react';
-import Work from '../img/work.png';
+import Work from '../webp/work.png';
 
 function WorkShirts({ onScrollToWork = () => {} }) {
   return (

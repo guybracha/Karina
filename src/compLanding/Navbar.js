@@ -1,6 +1,6 @@
 // Navbar.jsx
 import React, { useState } from "react";
-import Karina from "../img/logo.png";
+import Karina from "../webp/logo.webp";
 
 export default function Navbar({ onGoWork, onGoShield, onGoContact }) {
   const [open, setOpen] = useState(false);

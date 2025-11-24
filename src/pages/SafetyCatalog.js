@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PRODUCTS } from "../lib/products";
 import "../style/Catalog.css";
-import safety from "../img/cards/safety.png";
+import safety from "../webp/cards/safety.webp";
 
 /* ---------- עזרות ---------- */
 function formatCurrency(n) {

@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from "react";
 import ThreeDCarousel from "../compLanding/ThreeDCarousel";
-import hoodie from "../img/work/hoodie1.png";
-import kenguru from "../img/work/kenguru.png";
-import hoodiePocket from "../img/work/hoodiePocket.png";
-import polo from "../img/work/polo.png";
-import coat from "../img/work/coat1.png";
+import hoodie from "../webp/work/hoodie1.webp";
+import kenguru from "../webp/work/kenguru.webp";
+import hoodiePocket from "../webp/work/hoodiePocket.webp";
+import polo from "../webp/work/polo.webp";
+import coat from "../webp/work/coat1.webp";
 
 export default function Work() {
   // הוספת תגית עונה לכל מוצר

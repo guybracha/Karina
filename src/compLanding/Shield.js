@@ -1,9 +1,9 @@
 import React from "react";
 import ThreeDCarousel from "../compLanding/ThreeDCarousel";
-import helmet from "../img/safety/helmet.png";
-import manager from "../img/safety/manager.png";
-import yellowVest from "../img/safety/yellowVest.png";
-import orangeVest from "../img/safety/orangeVest.png";
+import helmet from "../webp/safety/helmet.webp";
+import manager from "../webp/safety/manager.webp";
+import yellowVest from "../webp/safety/yellowVest.webp";
+import orangeVest from "../webp/safety/orangeVest.webp";
 
 export default function Shield() {
   const images = [

@@ -8,7 +8,7 @@ import Work from "../compLanding/Work";
 import Shield from "../compLanding/Shield";
 import Contact from "../compLanding/Contact";
 import Footer from "../compLanding/Footer";
-import logo from "../img/logo.png";
+import logo from "../webp/logo.webp";
 import Video from "../compLanding/Video";
 import FacebookIcon from "../compLanding/FacebookIcon";
 import Navbar from "../compLanding/Navbar";

@@ -1,5 +1,5 @@
 import React from 'react';
-import safety from '../img/safety.png';
+import safety from '../webp/safety.png';
 
 function ShieldShirts({ onScrollToShield = () => {} }) {
   return (

@@ -1,0 +1,36 @@
+/* אופטימיזציות ביצועים למובייל */
+
+/* 1. שיפור rendering של גופנים - הוסף לגופנים קיימים */
+/* font-display: swap; */
+
+/* 2. שיפור תמונות */
+img {
+  content-visibility: auto; /* טוען תמונות רק כשהן בviewport */
+}
+
+/* 3. שיפור אנימציות */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 4. שיפור גלילה */
+html {
+  -webkit-overflow-scrolling: touch; /* smooth scrolling במכשירי iOS */
+}
+
+/* 5. containment לפריטים בגריד */
+.product-card {
+  contain: layout style paint; /* מונע recalculation מיותר */
+}
+
+/* 6. will-change לאלמנטים מתנועעים */
+.season-card:hover {
+  will-change: transform; /* אופטימיזציה לאנימציות */
+}
+

@@ -2,12 +2,12 @@
 import React from "react";
 import ThreeDCarousel from "../compLanding/ThreeDCarousel";
 
-import rec1 from "../img/rec/rec1.png";
-import rec2 from "../img/rec/rec2.png";
-import rec3 from "../img/rec/rec3.png";
-import rec4 from "../img/rec/rec4.png";
-import rec5 from "../img/rec/rec5.png";
-import rec6 from "../img/rec/rec6.png";
+import rec1 from "../webp/rec/rec1.png";
+import rec2 from "../webp/rec/rec2.png";
+import rec3 from "../webp/rec/rec3.png";
+import rec4 from "../webp/rec/rec4.png";
+import rec5 from "../webp/rec/rec5.png";
+import rec6 from "../webp/rec/rec6.png";
 
 export default function Clients() {
   const images = [

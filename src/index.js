@@ -5,6 +5,7 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import AppAlt from './AppAlt';
 import "./firebase"; 
+import './style/performance.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

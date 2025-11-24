@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import logo from "../img/logo.png";
+import logo from "../webp/logo.webp";
 import useDebounce from "../hooks/useDebounce";
 import { searchProducts } from "../lib/searchService";
 import { PRODUCTS } from "../lib/products";

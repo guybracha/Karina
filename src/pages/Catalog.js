@@ -3,8 +3,8 @@ import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { PRODUCTS } from "../lib/products";
 import "../style/Catalog.css";
-import summer from "../img/cards/summer.png";
-import safety from "../img/cards/safety.png";
+import summer from "../webp/cards/summer.webp";
+import safety from "../webp/cards/safety.webp";
 
 /** ========= כרטיסיות פתיחה מהירה ========= **/
 const QUICK_CARDS = [

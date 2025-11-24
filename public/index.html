@@ -11,6 +11,11 @@
     <link rel="icon" href="%PUBLIC_URL%/logo.png" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" as="image" href="%PUBLIC_URL%/webp/logo.webp" fetchpriority="high" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="dns-prefetch" href="https://www.google.com" />
 
     <!-- canonical -->
     <link rel="canonical" href="https://karina.co.il/" />

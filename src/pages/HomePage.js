@@ -1,14 +1,14 @@
 // src/pages/HomePage.jsx
 import React, { useEffect, useMemo, useRef, useState, useId } from "react";
 import { NavLink } from "react-router-dom";
-import banner from "../img/background.png";
+import banner from "../webp/background.webp";
 import { PRODUCTS } from "../lib/products";
 import "../style/home.css";
 import { Helmet } from "react-helmet-async";
-import logo from "../img/logo1.png";
-import render1 from "../img/render1.png";
-import render2 from "../img/render2.png";
-import render3 from "../img/render3.png";
+import logo from "../webp/logo1.webp";
+import render1 from "../webp/render1.webp";
+import render2 from "../webp/render2.webp";
+import render3 from "../webp/render3.webp";
 
 /* ==================== קבועים/נתונים סטטיים ==================== */
 

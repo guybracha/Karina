@@ -1,6 +1,6 @@
 // src/compLanding/ContactBanner.jsx
 import React, { useState, useEffect } from "react";
-import contactBtn from "../img/contactbanner.png"; // התמונה הקטנה
+import contactBtn from "../webp/contactbanner.png"; // התמונה הקטנה
 
 export default function ContactBanner() {
   // false = מצב סגור (מציג את הגרפיקה שלך)

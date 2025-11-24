@@ -3,8 +3,8 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PRODUCTS } from "../lib/products";
 import "../style/Catalog.css";
-import summer from "../img/cards/summer.png";
-import winter from "../img/cards/winter.png";
+import summer from "../webp/cards/summer.webp";
+import winter from "../webp/cards/winter.webp";
 
 /* ---------- עזרות ---------- */
 function formatCurrency(n) {
@@ -286,6 +286,7 @@ export default function WorkwearCatalog() {
                           loading="lazy"
                           decoding="async"
                           className="img-front"
+                          fetchpriority={idx < 4 ? "high" : "low"}
                         />
                         <div className="media-overlay">
                           <Link
