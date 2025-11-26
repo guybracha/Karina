@@ -238,7 +238,7 @@ export const PRODUCTS = [{
   {
     slug: "storm-suit",
     name: "חרמונית",
-    price: null,
+    price: 400,
     img: hermonit,
     colors: ["נייבי"],
     sizes: ["S", "M", "L", "XL", "2XL", "3XL"],
@@ -247,7 +247,7 @@ export const PRODUCTS = [{
     isKids: false,
     type: "overall",
     logoAllowed: true,
-    isBlocked: true,
+    isBlocked: false,
   },
   {
     slug: "fleece-reversible",
