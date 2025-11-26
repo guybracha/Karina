@@ -4,7 +4,7 @@ import "bootstrap-icons/font/bootstrap-icons.css";
 
 export default function Footer() {
   return (
-    <footer className="footer bg-dark text-light mt-auto pt-4">
+    <footer id="footer" className="footer bg-dark text-light mt-auto pt-4">
       <div className="container py-2">
         {/* רספונסיבי: 1 עמודה במובייל, 2 ב־sm, 3 ב־md+ */}
         <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-4 align-items-start">

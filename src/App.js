@@ -9,11 +9,19 @@ import A11yToolkit from "./a11y/A11yToolkit";
 import ReadAloud from "./a11y/ReadAloud";
 import A11yFab from "./a11y/A11yFab"; // ⬅️ FAB נגישות
 
+// UX Enhancements
+import { ToastProvider } from "./contexts/ToastContext";
+import MobileBottomNav from "./components/MobileBottomNav";
+import SkipLinks from "./components/SkipLinks";
+import "./style/animations.css";
+
 function App() {
   return (
     <HelmetProvider>
-      <>
-        <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
+      <ToastProvider>
+        <>
+          <SkipLinks />
+          <Helmet htmlAttributes={{ lang: "he", dir: "rtl" }}>
       <title>קארינה חולצות מודפסות</title>
       <meta name="description" content="הדפסות על חולצות עבודה, בטיחות ומיתוג לחברות. גרפיקה מקצועית, זמני אספקה מהירים ושירות אישי." />
       <link rel="canonical" href="https://karina.co.il/" />
@@ -47,7 +55,9 @@ function App() {
 
 
         <div className="App">
-          <LandingOne />
+          <main id="main-content">
+            <LandingOne />
+          </main>
 
           {/* ===== כלים לנגישות =====
              שמים אותם בתוך עטיפה עם dir="ltr" כדי שהמיקום וה-X לא יתהפכו ב-RTL */}
@@ -56,8 +66,12 @@ function App() {
             <ReadAloud />
             <A11yFab />
           </div>
+
+          {/* Mobile Bottom Navigation */}
+          <MobileBottomNav />
         </div>
-      </>
+        </>
+      </ToastProvider>
     </HelmetProvider>
   );
 }

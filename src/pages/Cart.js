@@ -5,6 +5,12 @@ import { Link, useNavigate } from "react-router-dom";
 import "../style/Cart.css";
 import PhoneOrderRequest from "../components/PhoneOrderRequest";
 
+// UX Enhancements
+import { useToast } from "../contexts/ToastContext";
+import { useAutoSave } from "../hooks/useAutoSave";
+import OrderProgressBar from "../components/OrderProgressBar";
+import { LoadingOverlay } from "../components/LoadingStates";
+
 // ---- Firebase ----
 import { auth, db, ensureAuthTokenFresh } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -268,6 +274,7 @@ const SHIP_OPTIONS = {
 export default function Cart() {
   const navigate = useNavigate();
   const storage = getStorage();
+  const toast = useToast();
 
   const [items, setItems] = useState([]);
   const [shipping, setShipping] = useState(() => {
@@ -279,6 +286,9 @@ export default function Cart() {
   const [loading, setLoading] = useState(false);
   const [uid, setUid] = useState(null);
   const busyRef = useRef(false);
+
+  // Auto-save shipping address
+  useAutoSave('karina:shippingAddress', shippingAddress, 2000, false);
 
   // לוגואים פר־מוצר (מה-LS), מפתח = slug
   const [itemLogosMap, setItemLogosMap] = useState(() => readItemLogosMap());
@@ -390,6 +400,7 @@ export default function Cart() {
   function removeItem(id) {
     if (!window.confirm("אתה בטוח שאתה רוצה להסיר מהעגלה?")) return;
 
+    const itemName = items.find(it => it.id === id)?.name || 'פריט';
     const updated = items.filter((it) => it.id !== id);
     setItems(updated);
     saveCartToLS(updated);
@@ -404,6 +415,9 @@ export default function Cart() {
     // ננקה גם את ה־cache של ה־URLים שנפתרו
     const res = { ...resolvedLogos };
     if (res[id]) { delete res[id]; setResolvedLogos(res); }
+
+    // Toast notification
+    toast.success(`${itemName} הוסר מהעגלה`);
   }
 
   /* ===== סיכומי סל לפי מדרגות ===== */
@@ -557,8 +571,11 @@ export default function Cart() {
 
   /* ---------- render ---------- */
   return (
-    <div className="container py-4">
-      <h1 className="h3 mb-4">העגלה שלי</h1>
+    <>
+      <OrderProgressBar currentStep={3} />
+      <LoadingOverlay show={loading} message="מעבד הזמנה..." />
+      <div className="container py-4">
+        <h1 className="h3 mb-4">העגלה שלי</h1>
 
       {items.length === 0 ? (
         <div className="alert alert-info">
@@ -939,6 +956,7 @@ export default function Cart() {
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

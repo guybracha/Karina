@@ -11,14 +11,18 @@ import { ensureUserDoc } from "./services/users";
 import { AuthProvider } from "./contexts/AuthContext";
 import { OrdersProvider } from "./contexts/OrdersContext";
 import { LogosQueueProvider } from "./contexts/LogosQueueContext.tsx";
+import { ToastProvider } from "./contexts/ToastContext";
 
 // Shared UI
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
+import SkipLinks from "./components/SkipLinks";
+import MobileBottomNav from "./components/MobileBottomNav";
 
 // Styles & A11y
 import "./style/Site.css";
+import "./style/animations.css";
 import "./a11y/a11y.css";
 import A11yToolkit from "./a11y/A11yToolkit";
 import ReadAloud from "./a11y/ReadAloud";
@@ -233,10 +237,12 @@ export default function AppAlt() {
       <AuthProvider>
         <OrdersProvider>
           <LogosQueueProvider>
-            <BrowserRouter>
-              <RootSEO />
+            <ToastProvider>
+              <BrowserRouter>
+                <RootSEO />
+                <SkipLinks />
 
-              <Navbar />
+                <Navbar />
 
               <main className="min-vh-100">
                 <ScrollToTop />
@@ -298,6 +304,7 @@ export default function AppAlt() {
               </main>
 
               <Footer />
+              <MobileBottomNav />
               {/* <ChatWidget onSend={handleChatSend} /> */}
 
               <div dir="ltr" id="a11y-fixed-layer">
@@ -305,7 +312,8 @@ export default function AppAlt() {
                 <ReadAloud />
                 <A11yFab />
               </div>
-            </BrowserRouter>
+              </BrowserRouter>
+            </ToastProvider>
           </LogosQueueProvider>
         </OrdersProvider>
       </AuthProvider>

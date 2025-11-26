@@ -1,0 +1,149 @@
+.order-progress-bar {
+  background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+  border-bottom: 1px solid #e9ecef;
+}
+
+.steps-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 800px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.step-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 1;
+}
+
+.step {
+  z-index: 2;
+  position: relative;
+}
+
+.step-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  position: relative;
+}
+
+.step.active .step-circle {
+  border-color: #0d6efd;
+  background: #0d6efd;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1);
+  transform: scale(1.1);
+}
+
+.step.completed .step-circle {
+  border-color: #198754;
+  background: #198754;
+  color: #fff;
+}
+
+.step-check {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.step-number {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.step-icon {
+  font-size: 20px;
+}
+
+.step-label {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #6c757d;
+  text-align: center;
+  max-width: 100px;
+  line-height: 1.2;
+}
+
+.step.active .step-label {
+  color: #0d6efd;
+  font-weight: 600;
+}
+
+.step.completed .step-label {
+  color: #198754;
+}
+
+.step-line {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  right: -50%;
+  height: 3px;
+  background: #dee2e6;
+  z-index: 1;
+  transition: background-color 0.3s ease;
+}
+
+.step-wrapper:last-child .step-line {
+  display: none;
+}
+
+.step-line.completed {
+  background: #198754;
+}
+
+/* Mobile adjustments */
+@media (max-width: 575.98px) {
+  .step-circle {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .step-number {
+    font-size: 14px;
+  }
+  
+  .step-label {
+    font-size: 0.7rem;
+    max-width: 60px;
+  }
+  
+  .step-line {
+    top: 18px;
+  }
+}
+
+/* Animation on mount */
+@keyframes stepPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step.active .step-circle {
+  animation: stepPulse 2s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step.active .step-circle {
+    animation: none;
+  }
+}

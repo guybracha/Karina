@@ -1,0 +1,323 @@
+/* ============================================
+   Micro-interactions & Animations
+   עבור חוויית משתמש מלוטשת
+============================================ */
+
+/* Bounce animation for cart badge updates */
+@keyframes bounceIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.cart-badge.updated,
+.badge.animated {
+  animation: bounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Shake animation for errors */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-8px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(8px);
+  }
+}
+
+.form-control.error,
+.input-error {
+  animation: shake 0.5s;
+  border-color: var(--bs-danger) !important;
+}
+
+/* Pulse animation for CTA buttons */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--bs-primary-rgb), 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(var(--bs-primary-rgb), 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--bs-primary-rgb), 0);
+  }
+}
+
+.btn-primary.pulse {
+  animation: pulse 2s infinite;
+}
+
+/* Slide in from top (for notifications) */
+@keyframes slideInTop {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.toast,
+.alert.animated {
+  animation: slideInTop 0.3s ease-out;
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Scale up on hover */
+.scale-hover {
+  transition: transform 0.2s ease;
+}
+
+.scale-hover:hover {
+  transform: scale(1.05);
+}
+
+/* Glow effect for focused elements */
+.glow-focus:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25),
+              0 0 20px rgba(13, 110, 253, 0.15);
+}
+
+/* Rotate on loading */
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rotating {
+  animation: rotate 1s linear infinite;
+}
+
+/* Heartbeat for favorites/likes */
+@keyframes heartbeat {
+  0%, 100% {
+    transform: scale(1);
+  }
+  10%, 30% {
+    transform: scale(0.9);
+  }
+  20%, 40% {
+    transform: scale(1.1);
+  }
+}
+
+.heartbeat {
+  animation: heartbeat 1.3s ease-in-out infinite;
+}
+
+/* Wiggle for attention */
+@keyframes wiggle {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-5deg);
+  }
+  75% {
+    transform: rotate(5deg);
+  }
+}
+
+.wiggle {
+  animation: wiggle 0.5s ease-in-out;
+}
+
+/* Smooth height transitions */
+.smooth-height {
+  transition: height 0.3s ease;
+  overflow: hidden;
+}
+
+/* Button press effect */
+.btn-press:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+}
+
+/* Gradient animation for loading */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gradient-animated {
+  background: linear-gradient(270deg, #0d6efd, #6610f2, #0d6efd);
+  background-size: 200% 200%;
+  animation: gradientShift 3s ease infinite;
+}
+
+/* Float animation */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.float-animation {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Ripple effect on click */
+.ripple-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-effect::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.ripple-effect:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+/* Success checkmark animation */
+@keyframes checkmark {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.checkmark-animated {
+  stroke-dasharray: 100;
+  animation: checkmark 0.5s ease-in-out forwards;
+}
+
+/* Blur in */
+@keyframes blurIn {
+  from {
+    filter: blur(10px);
+    opacity: 0;
+  }
+  to {
+    filter: blur(0);
+    opacity: 1;
+  }
+}
+
+.blur-in {
+  animation: blurIn 0.4s ease-out;
+}
+
+/* Skeleton shimmer (for loading states) */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 0%,
+    #e0e0e0 20%,
+    #f0f0f0 40%,
+    #f0f0f0 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+/* Accessibility: Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .skeleton-shimmer {
+    animation: none;
+    background: #e9ecef;
+  }
+}
+
+/* Utility classes for common animations */
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.animate-on-scroll.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Hover lift effect */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Focus ring */
+.focus-ring:focus-visible {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+  border-radius: 4px;
+}

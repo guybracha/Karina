@@ -1,19 +1,43 @@
 // src/pages/Contact.jsx
 import React, { useState } from "react";
 import { Helmet } from "react-helmet-async";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
 
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState(null); // 'success' | 'error' | null
 
   function handleChange(e) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    alert("תודה! פנייתך התקבלה ואנו נחזור אליך בהקדם.");
-    setForm({ name: "", email: "", message: "" });
+    setLoading(true);
+    setStatus(null);
+
+    try {
+      const sendContactForm = httpsCallable(functions, "sendContactForm");
+      await sendContactForm({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        message: form.message.trim(),
+      });
+
+      setStatus("success");
+      setForm({ name: "", email: "", message: "" });
+
+      // הסרת ההודעה אחרי 5 שניות
+      setTimeout(() => setStatus(null), 5000);
+    } catch (error) {
+      console.error("Error sending contact form:", error);
+      setStatus("error");
+    } finally {
+      setLoading(false);
+    }
   }
 
   // ---- SEO ----
@@ -132,6 +156,21 @@ export default function Contact() {
         <div className="col-lg-7">
           <div className="card shadow-sm p-4 h-100">
             <h5 className="mb-3">שלחו לנו הודעה</h5>
+
+            {status === "success" && (
+              <div className="alert alert-success fade-in" role="alert">
+                <i className="bi bi-check-circle-fill me-2"></i>
+                תודה! פנייתך התקבלה ואנו נחזור אליך בהקדם. נשלח אליך מייל אישור.
+              </div>
+            )}
+
+            {status === "error" && (
+              <div className="alert alert-danger fade-in" role="alert">
+                <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                אירעה שגיאה בשליחת ההודעה. אנא נסה שוב או צור קשר בטלפון/וואטסאפ.
+              </div>
+            )}
+
             <form onSubmit={handleSubmit}>
               <div className="mb-3">
                 <label className="form-label">שם מלא</label>
@@ -171,8 +210,15 @@ export default function Contact() {
                 />
               </div>
 
-              <button type="submit" className="btn btn-primary">
-                שליחה
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {loading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    שולח...
+                  </>
+                ) : (
+                  "שליחה"
+                )}
               </button>
             </form>
           </div>
