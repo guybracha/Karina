@@ -29,7 +29,10 @@ export async function saveChatMessage(userMessage, botResponse, metadata = {}) {
       sessionId: metadata.sessionId || generateSessionId(),
     });
   } catch (error) {
-    console.error("Error saving chat log:", error);
+    // Silent fail - don't spam console with permission errors
+    if (error?.code !== 'permission-denied') {
+      console.warn("Error saving chat log:", error.message);
+    }
   }
 }
 
@@ -199,7 +202,10 @@ export async function findSimilarQuestions(userMessage, limitCount = 5) {
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, limitCount);
   } catch (error) {
-    console.error("Error finding similar questions:", error);
+    // Silent fail for permission errors
+    if (error?.code !== 'permission-denied') {
+      console.warn("Error finding similar questions:", error.message);
+    }
     return [];
   }
 }

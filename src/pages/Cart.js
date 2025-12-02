@@ -878,7 +878,7 @@ export default function Cart() {
                   <input
                     type="tel"
                     inputMode="tel"
-                    pattern="[0-9+\-()\s]{7,20}"
+                    pattern="[0-9+\-\(\)\s]{7,20}"
                     className="form-control"
                     placeholder="05x-xxxxxxx"
                     value={shippingAddress.phoneNumber}
