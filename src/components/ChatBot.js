@@ -4,6 +4,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import { PRODUCTS } from "../lib/products";
 import { priceForItem, getDiscountPct } from "../lib/pricing";
+import { saveChatMessage, findSimilarQuestions } from "../lib/chatbotAnalytics";
 import "./ChatBot.css";
 
 const INITIAL_MESSAGES = [
@@ -22,11 +23,15 @@ const QUICK_REPLIES = [
   { id: "logo", text: "🎨 העלאת לוגו", query: "איך מעלים לוגו?" },
   { id: "shipping", text: "🚚 משלוחים", query: "מה זמני המשלוח?" },
   { id: "contact", text: "📞 יצירת קשר", query: "איך יוצרים קשר?" },
+  { id: "popular", text: "🔥 מוצרים פופולריים", query: "מה המוצרים הפופולריים?" },
+  { id: "compare", text: "⚖️ השוואת מוצרים", query: "תעזור לי להשוות" },
+  { id: "packages", text: "📦 חבילות מומלצות", query: "מה החבילות המומלצות?" },
 ];
 
 const KNOWLEDGE_BASE = {
   pricing: {
-    keywords: ["מחיר", "עולה", "עלות", "הצעת מחיר", "כמה", "תמחור"],
+    keywords: ["מחיר", "עולה", "עלות", "הצעת מחיר", "כמה", "תמחור", "מחירים", "מחירון", "price"],
+    synonyms: ["כסף", "לשלם", "תשלום", "עלות", "תקציב"],
     response: `💰 **מחירון קארינה**
 
 המחיר משתנה בהתאם ל:
@@ -318,6 +323,75 @@ karina.offical.israel@gmail.com
     },
   },
 
+  popular: {
+    keywords: ["פופולרי", "פופולריים", "נמכר", "מבוקש", "מומלץ", "הכי", "טוב"],
+    response: () => {
+      const popularProducts = [
+        { name: "טריקו ארוך", reason: "הכי נמכר - איכות מעולה במחיר שווה" },
+        { name: "אפוד זוהר", reason: "חובה לעבודות בטיחות" },
+        { name: "קפוצ'ון", reason: "מושלם לחורף - חם ונוח" },
+        { name: "פולו קצר", reason: "קלאסי ואלגנטי" },
+      ];
+
+      let response = `🔥 **המוצרים הפופולריים שלנו**\n\n`;
+      response += `בהתבסס על הזמנות אחרונות:\n\n`;
+
+      popularProducts.forEach((p, idx) => {
+        const product = PRODUCTS.find(prod => prod.name.includes(p.name.split(' ')[0]));
+        if (product) {
+          response += `**${idx + 1}. ${product.name}**\n`;
+          response += `   ${p.reason}\n`;
+          response += `   💰 החל מ-₪${product.price}\n\n`;
+        }
+      });
+
+      response += `💡 רוצה לחשב מחיר? כתוב:\n"חשב מחיר [שם מוצר] כמות [מספר]"`;
+      return response;
+    },
+  },
+
+  compare: {
+    keywords: ["השוואה", "השווה", "הבדל", "לבחור", "עדיף", "טוב יותר", "מה ההבדל"],
+    response: () => {
+      return `⚖️ **השוואת מוצרים**\n\n**טריקו ארוך vs פולו:**\n• **טריקו** - כותנה 100%, נושם, מחיר משתלם\n• **פולו** - מראה מקצועי יותר, צווארון\n\n**סווטשירט vs קפוצ'ון:**\n• **סווטשירט** - קל יותר, מחיר נמוך\n• **קפוצ'ון** - חם יותר, כיס קנגורו\n\n**DTF vs רקמה:**\n• **DTF** - צבעוני, מפורט, זול יותר\n• **רקמה** - פרימיום, עמיד מאוד, מגביה מחיר\n\n💡 **צריך עזרה בבחירה?**\nספר לי מה המטרה והתקציב!`;
+    },
+  },
+
+  packages: {
+    keywords: ["חבילה", "חבילות", "סט", "מארז", "קומבו", "package"],
+    response: () => {
+      return `📦 **חבילות מומלצות לעסקים**\n\n**🏢 חבילת Start-Up (10-20 עובדים)**\n• 15 טריקו ארוך\n• הדפסת לוגו DTF\n• 💰 החל מ-₪${(15 * 60 * 0.95).toFixed(0)} (כולל הנחה!)\n\n**🏭 חבילת Professional (20-50 עובדים)**\n• 30 פולו + 20 טריקו\n• רקמת לוגו פרימיום\n• 💰 מחיר מיוחד - צור קשר\n\n**⚡ חבילת Enterprise (50+ עובדים)**\n• מבחר מוצרים מותאם אישית\n• ייעוץ מקצועי\n• הנחות עד 45%!\n\n**🦺 חבילת Safety**\n• 20 אפודים זוהרים\n• 10 וסטים\n• לוגו רפלקטיבי\n\n📞 **מעוניין?** חייג: 055-721-2443`;
+    },
+  },
+
+  recommendations: {
+    keywords: ["תמליץ", "המלץ", "המלצה", "מה לקחת", "מה כדאי", "recommend"],
+    response: (userMessage) => {
+      const msg = userMessage.toLowerCase();
+      
+      if (msg.includes("קיץ") || msg.includes("חם")) {
+        return `☀️ **המלצות לקיץ**\n\n1. **טריקו קצר** - קליל ונושם\n2. **פולו קצר** - מקצועי וקליל\n3. **גופייה** - לימים חמים במיוחד\n\n💡 כולם מכותנה 100% נושמת!`;
+      }
+      
+      if (msg.includes("חורף") || msg.includes("קר")) {
+        return `❄️ **המלצות לחורף**\n\n1. **קפוצ'ון** - חם ונוח\n2. **סווטשירט** - שכבה מעולה\n3. **מעיל פליז** - חימום מקסימלי\n\n💡 ניתן לשלב שכבות!`;
+      }
+      
+      if (msg.includes("בטיחות") || msg.includes("עבודה")) {
+        return `🦺 **המלצות לבטיחות בעבודה**\n\n1. **אפוד זוהר** - חובה באתרי בניה\n2. **וסט רפלקטיבי** - נראות גבוהה\n3. **מכנסי עבודה** - עמידות מקסימלית\n\n⚠️ עומדים בתקני ISO!`;
+      }
+
+      return `💡 **המלצות כלליות**\n\n**למשרד/מכירות:**\n• פולו - מראה מקצועי\n\n**לעובדים בשטח:**\n• טריקו - נוח ועמיד\n\n**לאירועים:**\n• סווטשירט/קפוצ'ון - זכירות גבוהה\n\n**לבטיחות:**\n• אפוד זוהר - חובה בתקן\n\n🔍 ספר לי יותר על השימוש ואמליץ בדיוק!`;
+    },
+  },
+
+  tips: {
+    keywords: ["טיפ", "טיפים", "עצה", "עצות", "לדעת", "חשוב", "tip"],
+    response: () => {
+      return `💡 **טיפים חשובים**\n\n**📸 לוגו איכותי = תוצאה מושלמת**\n• העלו קובץ ברזולוציה גבוהה\n• PDF/AI = איכות הכי טובה\n• PNG שקוף = אפשרויות גמישות\n\n**📏 בחירת מידות**\n• מדדו חולצה קיימת\n• השאירו מרווח לנוחות\n• ילדים? קחו מידה גדולה יותר\n\n**💰 חסכו כסף**\n• הזמינו בכמויות - הנחות עד 45%!\n• שלבו מספר עובדים בהזמנה אחת\n• הדפסה חד-צדדית זולה יותר\n\n**🎨 עיצוב מנצח**\n• לוגו פשוט = קריא יותר\n• ניגודיות גבוהה (כהה על בהיר)\n• גודל סביר - לא קטן מדי\n\n**⏱️ תזמון**\n• הזמינו 10-14 ימים לפני האירוע\n• אשרו הדמיה מהר = ייצור מהר\n\n📞 שאלות? 055-721-2443`;
+    },
+  },
+
   discounts: {
     keywords: ["הנחה", "הנחות", "discount", "מבצע", "מבצעים"],
     response: () => {
@@ -458,6 +532,12 @@ function findBestMatch(userMessage) {
   const msg = userMessage.toLowerCase();
   let bestMatch = null;
   let maxScore = 0;
+  
+  // Normalize common variations and typos
+  const normalizedMsg = msg
+    .replace(/[?!.,]/g, '') // Remove punctuation
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim();
 
   // Check for price calculation request
   const priceMatch = msg.match(/חשב\s+מחיר\s+(.+?)\s+כמות\s+(\d+)/);
@@ -512,11 +592,23 @@ function findBestMatch(userMessage) {
 
   for (const [category, data] of Object.entries(KNOWLEDGE_BASE)) {
     let score = 0;
+    
+    // Check main keywords
     for (const keyword of data.keywords) {
-      if (msg.includes(keyword.toLowerCase())) {
-        score += keyword.length;
+      if (normalizedMsg.includes(keyword.toLowerCase())) {
+        score += keyword.length * 2; // Higher weight for main keywords
       }
     }
+    
+    // Check synonyms if available
+    if (data.synonyms) {
+      for (const synonym of data.synonyms) {
+        if (normalizedMsg.includes(synonym.toLowerCase())) {
+          score += synonym.length; // Lower weight for synonyms
+        }
+      }
+    }
+    
     if (score > maxScore) {
       maxScore = score;
       bestMatch = typeof data.response === "function" ? data.response(userMessage) : data.response;
@@ -545,6 +637,21 @@ function formatMessage(text) {
   return formatted;
 }
 
+// Extract keywords from message for analytics
+function extractKeywords(message) {
+  const allKeywords = Object.values(KNOWLEDGE_BASE).flatMap(kb => kb.keywords);
+  const msg = message.toLowerCase();
+  return allKeywords.filter(keyword => msg.includes(keyword.toLowerCase()));
+}
+
+// Share conversation to WhatsApp
+function shareToWhatsApp(product, quantity, price) {
+  const phone = "972557212443"; // קארינה
+  const message = `שלום, אני מעוניין להזמין:\n${product}\nכמות: ${quantity}\nמחיר משוער: ₪${price}\n\nהגעתי מהאתר דרך הצ'אט בוט 🤖`;
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  window.open(url, '_blank');
+}
+
 export default function ChatBot({ initialOpen = false }) {
   const [isOpen, setIsOpen] = useState(initialOpen);
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
@@ -552,6 +659,7 @@ export default function ChatBot({ initialOpen = false }) {
   const [isTyping, setIsTyping] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [suggestedActions, setSuggestedActions] = useState([]);
+  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -613,17 +721,31 @@ export default function ChatBot({ initialOpen = false }) {
     setIsTyping(true);
     setSuggestedActions([]); // Clear suggestions on new message
 
+    let responseText = "";
+    let matchCategory = "general";
+
     try {
+      // Try to find similar questions from history first
+      const similarQuestions = await findSimilarQuestions(messageText, 3);
+      
       // חפש בבסיס הידע המקומי
       const localMatch = findBestMatch(messageText);
 
       if (localMatch) {
         // סימולציה של "מקליד..."
         await new Promise((resolve) => setTimeout(resolve, 800));
-        addMessage("assistant", localMatch);
+        responseText = localMatch;
+        addMessage("assistant", responseText);
+        
+        // Determine category
+        const msg = messageText.toLowerCase();
+        if (msg.includes("מחיר") || msg.includes("עולה")) matchCategory = "pricing";
+        else if (msg.includes("חיפוש") || msg.includes("מחפש")) matchCategory = "search";
+        else if (msg.includes("משלוח")) matchCategory = "shipping";
+        else if (msg.includes("לוגו")) matchCategory = "logo";
+        else if (msg.includes("מידות")) matchCategory = "sizes";
         
         // Add suggested actions based on context
-        const msg = messageText.toLowerCase();
         if (msg.includes("חיפוש") || msg.includes("מחפש")) {
           // Suggest quick price calculations for found products
           const matches = searchProducts(messageText);
@@ -645,6 +767,11 @@ export default function ChatBot({ initialOpen = false }) {
             }))
           );
         }
+      } else if (similarQuestions.length > 0 && similarQuestions[0].similarity > 0.5) {
+        // Use answer from similar question
+        responseText = similarQuestions[0].answer;
+        addMessage("assistant", responseText);
+        matchCategory = "history_match";
       } else {
         // אם אין התאמה מקומית, נסה AI
         try {
@@ -652,18 +779,31 @@ export default function ChatBot({ initialOpen = false }) {
           const result = await chatWithAI({ message: messageText });
           
           if (result.data?.response) {
-            addMessage("assistant", result.data.response);
+            responseText = result.data.response;
+            addMessage("assistant", responseText);
+            matchCategory = "ai";
           } else {
             throw new Error("No response from AI");
           }
         } catch (aiError) {
           console.error("AI error:", aiError);
           // Fallback
-          addMessage(
-            "assistant",
-            `קיבלתי את השאלה שלך: "${messageText}"\n\nאני כרגע לא יכול לתת תשובה מדויקת, אבל הצוות שלנו ישמח לעזור!\n\n📞 חייגו: 055-721-2443\n✉️ כתבו: karina.offical.israel@gmail.com\n\nאו השתמשו בתפריט המהיר למטה 👇`
-          );
+          responseText = `קיבלתי את השאלה שלך: "${messageText}"\n\nאני כרגע לא יכול לתת תשובה מדויקת, אבל הצוות שלנו ישמח לעזור!\n\n📞 חייגו: 055-721-2443\n✉️ כתבו: karina.offical.israel@gmail.com\n\nאו השתמשו בתפריט המהיר למטה 👇`;
+          addMessage("assistant", responseText);
+          matchCategory = "fallback";
         }
+      }
+
+      // Save chat to Firebase for analytics
+      try {
+        await saveChatMessage(messageText, responseText, {
+          category: matchCategory,
+          sessionId: sessionId,
+          matchedKeywords: extractKeywords(messageText),
+        });
+      } catch (saveError) {
+        console.error("Error saving chat log:", saveError);
+        // Don't interrupt user experience if logging fails
       }
     } finally {
       setIsTyping(false);
@@ -677,6 +817,30 @@ export default function ChatBot({ initialOpen = false }) {
     }
   };
 
+  const rateResponse = async (messageId, isHelpful) => {
+    // Update message locally
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, rated: isHelpful } : msg
+    ));
+
+    // Save to Firebase
+    try {
+      const message = messages.find(m => m.id === messageId);
+      if (message && message.role === "assistant") {
+        await saveChatMessage(
+          messages[messages.indexOf(message) - 1]?.text || "",
+          message.text,
+          {
+            wasHelpful: isHelpful,
+            sessionId: sessionId,
+          }
+        );
+      }
+    } catch (error) {
+      console.error("Error rating message:", error);
+    }
+  };
+
   const toggleChat = () => {
     setIsOpen((prev) => !prev);
   };
@@ -686,6 +850,7 @@ export default function ChatBot({ initialOpen = false }) {
       setMessages(INITIAL_MESSAGES);
       setInput("");
       setIsTyping(false);
+      setSuggestedActions([]);
     }
   };
 
@@ -728,24 +893,46 @@ export default function ChatBot({ initialOpen = false }) {
 
         {/* Messages */}
         <div className="chatbot-messages">
-          {messages.map((msg) => (
+          {messages.map((msg, idx) => (
             <div key={msg.id} className={`message ${msg.role}`}>
               {msg.role === "assistant" && (
                 <div className="message-avatar">
                   <i className="bi bi-robot"></i>
                 </div>
               )}
-              <div className="message-bubble">
-                <div 
-                  className="message-text"
-                  dangerouslySetInnerHTML={{ __html: formatMessage(msg.text) }}
-                />
-                <div className="message-time">
-                  {msg.timestamp.toLocaleTimeString("he-IL", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+              <div className="message-content-wrapper">
+                <div className="message-bubble">
+                  <div 
+                    className="message-text"
+                    dangerouslySetInnerHTML={{ __html: formatMessage(msg.text) }}
+                  />
+                  <div className="message-time">
+                    {msg.timestamp.toLocaleTimeString("he-IL", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
                 </div>
+                {msg.role === "assistant" && idx > 0 && (
+                  <div className="message-actions">
+                    <button
+                      className={`rate-btn ${msg.rated === true ? 'active' : ''}`}
+                      onClick={() => rateResponse(msg.id, true)}
+                      title="תשובה מועילה"
+                      aria-label="תשובה מועילה"
+                    >
+                      👍
+                    </button>
+                    <button
+                      className={`rate-btn ${msg.rated === false ? 'active' : ''}`}
+                      onClick={() => rateResponse(msg.id, false)}
+                      title="תשובה לא מועילה"
+                      aria-label="תשובה לא מועילה"
+                    >
+                      👎
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

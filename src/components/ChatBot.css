@@ -232,6 +232,56 @@
   margin-top: 4px;
 }
 
+/* Message Actions (Rating Buttons) */
+.message-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.message-actions {
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+  margin-right: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.message:hover .message-actions {
+  opacity: 1;
+}
+
+.rate-btn {
+  background: transparent;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rate-btn:hover {
+  background: #f5f5f5;
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+.rate-btn.active {
+  background: #667eea;
+  border-color: #667eea;
+  transform: scale(1.1);
+}
+
+.rate-btn:active {
+  transform: scale(0.95);
+}
+
 /* Typing Indicator */
 .message-bubble.typing {
   padding: 16px 20px;
