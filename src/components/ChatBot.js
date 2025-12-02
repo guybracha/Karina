@@ -567,7 +567,20 @@ export default function ChatBot({ initialOpen = false }) {
     if (isOpen) {
       setUnreadCount(0);
       inputRef.current?.focus();
+      
+      // מניעת גלילה במובייל כשהצ'אט פתוח
+      if (window.innerWidth <= 768) {
+        document.body.style.overflow = 'hidden';
+      }
+    } else {
+      // החזרת גלילה כשהצ'אט נסגר
+      document.body.style.overflow = '';
     }
+    
+    // Cleanup
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen]);
 
   const addMessage = (role, text) => {
