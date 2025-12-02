@@ -5,6 +5,7 @@ import { functions } from "../firebase";
 import { PRODUCTS } from "../lib/products";
 import { priceForItem, getDiscountPct } from "../lib/pricing";
 import { saveChatMessage, findSimilarQuestions } from "../lib/chatbotAnalytics";
+import { findSalesConversationReply } from "../lib/salesTrainingData";
 import ProductCard, { ProductCarousel } from "./ProductCard";
 import PriceCalculatorWidget from "./PriceCalculatorWidget";
 import "./ChatBot.css";
@@ -685,6 +686,19 @@ function findBestMatch(userMessage) {
   return bestMatch;
 }
 
+// Try to mimic human sales reps based on curated transcripts
+function findSalesTrainingMatch(userMessage, context) {
+  const match = findSalesConversationReply(userMessage, { context });
+  if (!match) return null;
+
+  return {
+    text: match.text,
+    followUps: match.followUps || [],
+    scenario: match.scenario || "sales_training",
+    score: match.score || 0,
+  };
+}
+
 // Format message text with simple markdown-like formatting
 function formatMessage(text) {
   if (!text) return text;
@@ -822,11 +836,20 @@ export default function ChatBot({ initialOpen = false }) {
 
       // Try to find similar questions from history first
       const similarQuestions = await findSimilarQuestions(messageText, 3);
+      const salesTrainingMatch = findSalesTrainingMatch(messageText, conversationContext);
       
       // חפש בבסיס הידע המקומי
       const localMatch = findBestMatch(messageText);
 
-      if (localMatch) {
+      if (salesTrainingMatch) {
+        responseText = salesTrainingMatch.text;
+        if (salesTrainingMatch.followUps.length > 0) {
+          setSuggestedActions(salesTrainingMatch.followUps.slice(0, 3));
+        }
+        addMessage("assistant", responseText);
+        setConsecutiveFailures(0);
+        matchCategory = "sales_training";
+      } else if (localMatch) {
         // סימולציה של "מקליד..."
         await new Promise((resolve) => setTimeout(resolve, 800));
         responseText = localMatch;
@@ -918,6 +941,8 @@ export default function ChatBot({ initialOpen = false }) {
           category: matchCategory,
           sessionId: sessionId,
           matchedKeywords: extractKeywords(messageText),
+          matchedSalesScenario: salesTrainingMatch?.scenario || null,
+          salesTrainingScore: salesTrainingMatch?.score || null,
         });
       } catch (saveError) {
         console.error("Error saving chat log:", saveError);
