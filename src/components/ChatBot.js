@@ -5,6 +5,8 @@ import { functions } from "../firebase";
 import { PRODUCTS } from "../lib/products";
 import { priceForItem, getDiscountPct } from "../lib/pricing";
 import { saveChatMessage, findSimilarQuestions } from "../lib/chatbotAnalytics";
+import ProductCard, { ProductCarousel } from "./ProductCard";
+import PriceCalculatorWidget from "./PriceCalculatorWidget";
 import "./ChatBot.css";
 
 const INITIAL_MESSAGES = [
@@ -15,6 +17,41 @@ const INITIAL_MESSAGES = [
     timestamp: new Date(),
   },
 ];
+
+// זיהוי כוונה מתקדם
+const INTENT_PATTERNS = {
+  SEARCH_PRODUCT: {
+    patterns: [/חפש|מחפש|יש לכם|תראה|אני רוצה|מעוניין ב/i],
+    confidence: 0.8,
+    category: 'search'
+  },
+  CALCULATE_PRICE: {
+    patterns: [/מחיר|כמה עולה|חשב|תמחור|הצעת מחיר/i],
+    confidence: 0.9,
+    category: 'pricing'
+  },
+  COMPARE: {
+    patterns: [/השוואה|השווה|הבדל|לבחור|עדיף|טוב יותר|מה ההבדל/i],
+    confidence: 0.85,
+    category: 'compare'
+  },
+  ORDER_STATUS: {
+    patterns: [/הזמנה|סטטוס|מעקב|tracking|איפה ההזמנה|מתי מגיע/i],
+    confidence: 0.9,
+    category: 'order'
+  },
+  COMPLAINT: {
+    patterns: [/בעיה|תלונה|לא עובד|לא מרוצה|גרוע|נורא|מאוכזב/i],
+    confidence: 0.95,
+    category: 'complaint',
+    escalate: true
+  },
+  SHIPPING: {
+    patterns: [/משלוח|זמן אספקה|delivery|הובלה|שליח/i],
+    confidence: 0.85,
+    category: 'shipping'
+  }
+};
 
 const QUICK_REPLIES = [
   { id: "pricing", text: "💰 הצעת מחיר", query: "אשמח לקבל הצעת מחיר" },
@@ -364,6 +401,13 @@ karina.offical.israel@gmail.com
     },
   },
 
+  orderTracking: {
+    keywords: ["הזמנה", "סטטוס", "מעקב", "tracking", "איפה ההזמנה", "מתי מגיע", "מספר הזמנה"],
+    response: (userMessage, orderId = null) => {
+      return `📦 **מעקב אחר הזמנה**\n\n${orderId ? `מספר הזמנה: ${orderId}\n\n` : ''}אני יכול לעזור לך לעקוב אחר ההזמנה שלך!\n\n**📝 איך זה עובד?**\n1. היכנס לאזור האישי שלך\n2. לחץ על "ההזמנות שלי"\n3. צפה בסטטוס ההזמנה בזמן אמת\n\n**🔔 התראות אוטומטיות:**\n• SMS כשההזמנה יוצאת לדרך\n• מספר מעקב למשלוח\n• עדכון בכל שלב\n\n**📞 צריך עזרה?**\nחייג: 055-721-2443 ונבדוק את הסטטוס מיידית!\n\n**⏱️ זמני אספקה:**\n• 7-10 ימי עסקים מאישור הדמיה\n• משלוח מהיר זמין (תוספת תשלום)`;
+    },
+  },
+
   recommendations: {
     keywords: ["תמליץ", "המלץ", "המלצה", "מה לקחת", "מה כדאי", "recommend"],
     response: (userMessage) => {
@@ -424,6 +468,29 @@ karina.offical.israel@gmail.com
     },
   },
 };
+
+// פונקציה לזיהוי כוונת המשתמש
+function detectIntent(message) {
+  const results = [];
+  
+  for (const [intent, config] of Object.entries(INTENT_PATTERNS)) {
+    for (const pattern of config.patterns) {
+      if (pattern.test(message)) {
+        results.push({
+          intent,
+          confidence: config.confidence,
+          category: config.category,
+          shouldEscalate: config.escalate || false
+        });
+        break;
+      }
+    }
+  }
+  
+  // מיין לפי רמת ביטחון
+  results.sort((a, b) => b.confidence - a.confidence);
+  return results[0] || null;
+}
 
 // Helper functions for interactive features
 function levenshteinDistance(str1, str2) {
@@ -660,6 +727,9 @@ export default function ChatBot({ initialOpen = false }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [suggestedActions, setSuggestedActions] = useState([]);
   const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+  const [conversationContext, setConversationContext] = useState([]);
+  const [richContent, setRichContent] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -691,17 +761,23 @@ export default function ChatBot({ initialOpen = false }) {
     };
   }, [isOpen]);
 
-  const addMessage = (role, text) => {
+  const addMessage = (role, text, richContentData = null) => {
     const newMessage = {
       id: Date.now().toString(),
       role,
       text,
+      richContent: richContentData,
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, newMessage]);
 
     if (role === "assistant" && !isOpen) {
       setUnreadCount((prev) => prev + 1);
+    }
+
+    // עדכן context - שמור רק 5 הודעות אחרונות
+    if (role === "user") {
+      setConversationContext(prev => [...prev, text].slice(-5));
     }
 
     return newMessage;
@@ -715,16 +791,35 @@ export default function ChatBot({ initialOpen = false }) {
   const handleSend = async (messageText = input.trim()) => {
     if (!messageText) return;
 
+    // זהה כוונה
+    const intent = detectIntent(messageText);
+
     // הוסף הודעת משתמש
     addMessage("user", messageText);
     setInput("");
     setIsTyping(true);
     setSuggestedActions([]); // Clear suggestions on new message
+    setRichContent(null);
 
     let responseText = "";
-    let matchCategory = "general";
+    let matchCategory = intent?.category || "general";
+    let richContentData = null;
 
     try {
+      // בדוק אם צריך escalation
+      if (intent?.shouldEscalate || consecutiveFailures >= 3) {
+        responseText = `😔 אני רואה שיש קושי למצוא את התשובה המתאימה.
+
+📞 **בואו נדבר ישירות:**
+• טלפון/WhatsApp: 055-721-2443
+• אימייל: karina.offical.israel@gmail.com
+
+הצוות שלנו ישמח לעזור לך אישית! 🙂`;
+        addMessage("assistant", responseText);
+        setConsecutiveFailures(0);
+        return;
+      }
+
       // Try to find similar questions from history first
       const similarQuestions = await findSimilarQuestions(messageText, 3);
       
@@ -735,38 +830,47 @@ export default function ChatBot({ initialOpen = false }) {
         // סימולציה של "מקליד..."
         await new Promise((resolve) => setTimeout(resolve, 800));
         responseText = localMatch;
-        addMessage("assistant", responseText);
         
-        // Determine category
+        // בדוק אם יש מוצרים להציג
         const msg = messageText.toLowerCase();
-        if (msg.includes("מחיר") || msg.includes("עולה")) matchCategory = "pricing";
-        else if (msg.includes("חיפוש") || msg.includes("מחפש")) matchCategory = "search";
-        else if (msg.includes("משלוח")) matchCategory = "shipping";
-        else if (msg.includes("לוגו")) matchCategory = "logo";
-        else if (msg.includes("מידות")) matchCategory = "sizes";
+        const priceCalcMatch = msg.match(/חשב\s+מחיר\s+(.+?)\s+כמות\s+(\d+)/);
         
-        // Add suggested actions based on context
-        if (msg.includes("חיפוש") || msg.includes("מחפש")) {
-          // Suggest quick price calculations for found products
+        if (priceCalcMatch) {
+          const [, productName, quantity] = priceCalcMatch;
+          const product = PRODUCTS.find(p => 
+            !p.isBlocked && (
+              p.name.toLowerCase().includes(productName.toLowerCase()) ||
+              productName.toLowerCase().includes(p.name.toLowerCase())
+            )
+          );
+          
+          if (product) {
+            richContentData = {
+              type: 'price-calculator',
+              product: product,
+              quantity: parseInt(quantity)
+            };
+          }
+        } else if (msg.includes("חיפוש") || msg.includes("מחפש") || msg.includes("יש לכם")) {
           const matches = searchProducts(messageText);
-          if (matches.length > 0 && matches.length <= 3) {
+          if (matches.length > 0 && matches.length <= 5) {
+            richContentData = {
+              type: 'product-carousel',
+              products: matches.slice(0, 5)
+            };
+            
+            // הצע חישובי מחיר
             setSuggestedActions(
-              matches.map(p => ({
+              matches.slice(0, 3).map(p => ({
                 text: `חשב מחיר ${p.name}`,
                 query: `חשב מחיר ${p.name} כמות 10`
               }))
             );
           }
-        } else if (msg.includes("מחשבון") || msg.includes("מחיר")) {
-          // Suggest popular products for calculation
-          const popular = PRODUCTS.filter(p => !p.isBlocked).slice(0, 3);
-          setSuggestedActions(
-            popular.map(p => ({
-              text: `${p.name} - ₪${p.price}`,
-              query: `חשב מחיר ${p.name} כמות 20`
-            }))
-          );
         }
+        
+        addMessage("assistant", responseText, richContentData);
+        setConsecutiveFailures(0); // אפס failures אחרי הצלחה
       } else if (similarQuestions.length > 0 && similarQuestions[0].similarity > 0.5) {
         // Use answer from similar question
         responseText = similarQuestions[0].answer;
@@ -776,19 +880,33 @@ export default function ChatBot({ initialOpen = false }) {
         // אם אין התאמה מקומית, נסה AI
         try {
           const chatWithAI = httpsCallable(functions, "chatWithAssistant");
-          const result = await chatWithAI({ message: messageText });
+          const result = await chatWithAI({ 
+            message: messageText,
+            context: {
+              conversationHistory: conversationContext,
+              intent: intent,
+              sessionId: sessionId
+            }
+          });
           
           if (result.data?.response) {
             responseText = result.data.response;
             addMessage("assistant", responseText);
             matchCategory = "ai";
+            setConsecutiveFailures(0);
           } else {
             throw new Error("No response from AI");
           }
         } catch (aiError) {
           console.error("AI error:", aiError);
+          setConsecutiveFailures(prev => prev + 1);
+          
           // Fallback
-          responseText = `קיבלתי את השאלה שלך: "${messageText}"\n\nאני כרגע לא יכול לתת תשובה מדויקת, אבל הצוות שלנו ישמח לעזור!\n\n📞 חייגו: 055-721-2443\n✉️ כתבו: karina.offical.israel@gmail.com\n\nאו השתמשו בתפריט המהיר למטה 👇`;
+          if (consecutiveFailures >= 2) {
+            responseText = `😔 נראה שאני מתקשה למצוא תשובות מדויקות כרגע.\n\n**האם תרצה לדבר עם נציג אנושי?**\n\n📞 טלפון/WhatsApp: 055-721-2443\n✉️ אימייל: karina.offical.israel@gmail.com\n\nאנחנו כאן בשבילך!`;
+          } else {
+            responseText = `קיבלתי את השאלה שלך: "${messageText}"\n\nאני כרגע לא יכול לתת תשובה מדויקת, אבל הצוות שלנו ישמח לעזור!\n\n📞 חייגו: 055-721-2443\n✉️ כתבו: karina.offical.israel@gmail.com\n\nאו השתמשו בתפריט המהיר למטה 👇`;
+          }
           addMessage("assistant", responseText);
           matchCategory = "fallback";
         }
@@ -906,6 +1024,24 @@ export default function ChatBot({ initialOpen = false }) {
                     className="message-text"
                     dangerouslySetInnerHTML={{ __html: formatMessage(msg.text) }}
                   />
+                  
+                  {/* תוכן עשיר */}
+                  {msg.richContent && msg.richContent.type === 'product-carousel' && (
+                    <ProductCarousel 
+                      products={msg.richContent.products}
+                      onCalculatePrice={(product) => {
+                        handleQuickReply(`חשב מחיר ${product.name} כמות 20`);
+                      }}
+                    />
+                  )}
+                  
+                  {msg.richContent && msg.richContent.type === 'price-calculator' && (
+                    <PriceCalculatorWidget 
+                      product={msg.richContent.product}
+                      initialQuantity={msg.richContent.quantity}
+                    />
+                  )}
+                  
                   <div className="message-time">
                     {msg.timestamp.toLocaleTimeString("he-IL", {
                       hour: "2-digit",

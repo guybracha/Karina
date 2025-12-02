@@ -185,6 +185,17 @@
   position: relative;
 }
 
+/* Rich content support */
+.message.assistant .message-bubble {
+  max-width: 85%; /* Wider for rich content */
+}
+
+.message-bubble .product-carousel,
+.message-bubble .price-calculator-widget {
+  margin: 12px -8px 8px -8px;
+  width: calc(100% + 16px);
+}
+
 .message.assistant .message-bubble {
   background: #fff;
   border: 1px solid #e5e7eb;
