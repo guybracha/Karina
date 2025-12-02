@@ -19,6 +19,7 @@ import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import SkipLinks from "./components/SkipLinks";
 import MobileBottomNav from "./components/MobileBottomNav";
+import ChatBot from "./components/ChatBot";
 
 // Styles & A11y
 import "./style/Site.css";
@@ -305,7 +306,7 @@ export default function AppAlt() {
 
               <Footer />
               <MobileBottomNav />
-              {/* <ChatWidget onSend={handleChatSend} /> */}
+              <ChatBot />
 
               <div dir="ltr" id="a11y-fixed-layer">
                 <A11yToolkit />
