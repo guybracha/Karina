@@ -311,6 +311,9 @@ export default function Checkout() {
         const orderId = state?.orderId || Math.floor(Date.now() / 1000);
         if (!cancelled) setCurrentOrderId(orderId);
 
+        // ✅ יצירת ההזמנה במסד הנתונים לפני התשלום (עם סטטוס pending)
+        await createOrderDoc({ orderId, txId: null, initialStatus: "pending" });
+
         // שם לקוח למסוף (אופציונלי — ננסה להרכיב מהכתובת)
         const clientName =
           state?.contact?.fullName ||
@@ -383,7 +386,7 @@ export default function Checkout() {
   /* =========================
      Order doc creation
   ========================= */
-  async function createOrderDoc({ orderId, txId }) {
+  async function createOrderDoc({ orderId, txId, initialStatus = "paid" }) {
     const uid = auth.currentUser?.uid || null;
     if (!uid) throw new Error("not_authed");
 
@@ -402,10 +405,11 @@ export default function Checkout() {
       orderId: String(orderId),
       uid,
       createdAt: serverTimestamp(),
-      status: "paid",
-      autoEmailOnCreate: true,
+      status: initialStatus,
+      autoEmailOnCreate: initialStatus === "paid", // רק אם התשלום הצליח
       provider: "credit2000",
       txId: txId || null,
+      contact: state?.contact || null, // פרטי הלקוח (שם, טלפון, אימייל)
       totals: {
         merchandiseTotal: Number((totals?.merchandiseTotal ?? computedMerchandiseTotal) || 0),
         shippingCost: Number(totals?.shippingCost || 0),
@@ -447,18 +451,26 @@ export default function Checkout() {
       },
     };
 
+    // שמירה ב-collection הגלובלי
     await setDoc(doc(db, "orders_prod", String(orderId)), orderDoc);
+    
+    // שמירה גם ב-collection של המשתמש
+    if (uid) {
+      await setDoc(doc(db, "users_prod", uid, "orders_prod", String(orderId)), orderDoc);
+    }
 
-    // אופציונלי: ניקוי עגלה/פריוויוזים/מפת לוגואים אחרי הזמנה מוצלחת
-    try {
-      localStorage.removeItem(LS_CART_KEY);
-      localStorage.removeItem(LS_ITEM_LOGOS); // ✅ NEW: ניקוי המפה הפר־שורתית
-      const slugs = [...new Set(cartItems.map((it) => it.slug).filter(Boolean))];
-      slugs.forEach((slug) => {
-        localStorage.removeItem(LS_PREVIEW_KEY(slug, "front"));
-        localStorage.removeItem(LS_PREVIEW_KEY(slug, "back"));
-      });
-    } catch {}
+    // ניקוי עגלה רק אם התשלום הצליח (לא במצב pending)
+    if (initialStatus === "paid") {
+      try {
+        localStorage.removeItem(LS_CART_KEY);
+        localStorage.removeItem(LS_ITEM_LOGOS);
+        const slugs = [...new Set(cartItems.map((it) => it.slug).filter(Boolean))];
+        slugs.forEach((slug) => {
+          localStorage.removeItem(LS_PREVIEW_KEY(slug, "front"));
+          localStorage.removeItem(LS_PREVIEW_KEY(slug, "back"));
+        });
+      } catch {}
+    }
   }
 
   /* =========================
@@ -471,6 +483,7 @@ export default function Checkout() {
       if (!data || typeof data !== "object") return;
 
       if (data.provider === "credit2000" && typeof data.type === "string" && data.type.startsWith("payment:")) {
+        console.log("[Checkout] Received payment message:", data);
         const ok = data.type === "payment:success";
         // סוגרים את האייפריים ומציגים חיווי
         setIframeSrc("");
@@ -479,15 +492,23 @@ export default function Checkout() {
         // גלילה לראש העמוד כדי לראות את הבאנר
         window.scrollTo({ top: 0, behavior: "smooth" });
 
-        // אם הצליח — כתוב מסמך הזמנה עם הלוגואים ל-Firestore
+        // אם הצליח — עדכן את ההזמנה לסטטוס paid וניקוי עגלה
         if (ok) {
-          const txId = data.txId || null;
-          const orderId = currentOrderId || Math.floor(Date.now() / 1000);
-          createOrderDoc({ orderId, txId }).catch((err) => {
-            console.error("[orders] failed to create order doc:", err);
-            // לא מפיל את ה-UI; מציג אזהרה ידידותית
-            setError("התשלום הצליח, אך נכשלה שמירת ההזמנה במערכת. ננסה שוב מאוחר יותר.");
-          });
+          // ההזמנה כבר קיימת עם status: "pending", רק צריך לעדכן ל-"paid"
+          // ה-backend (credit2000Return) כבר עדכן את הסטטוס
+          
+          // ניקוי עגלה ולוגואים
+          try {
+            localStorage.removeItem(LS_CART_KEY);
+            localStorage.removeItem(LS_ITEM_LOGOS);
+            const slugs = [...new Set((items || []).map((it) => it.slug).filter(Boolean))];
+            slugs.forEach((slug) => {
+              localStorage.removeItem(LS_PREVIEW_KEY(slug, "front"));
+              localStorage.removeItem(LS_PREVIEW_KEY(slug, "back"));
+            });
+          } catch (err) {
+            console.error("[cleanup] failed:", err);
+          }
         }
       }
     }
