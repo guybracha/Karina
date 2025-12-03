@@ -176,14 +176,33 @@ export default function OrderDetail() {
     }
   }
 
-  // סכום פריטים (אם רוצים להצליב עם amountCents)
-  const itemsTotalCents = useMemo(() => {
+  // סכום פריטים + משלוח מהנתונים בהזמנה
+  const totals = useMemo(() => {
+    // נסה לקחת מ-totals אם קיים
+    if (order?.totals) {
+      return {
+        merchandiseTotal: Number(order.totals.merchandiseTotal || 0),
+        shippingCost: Number(order.totals.shippingCost || 0),
+        grandTotal: Number(order.totals.grandTotal || 0),
+      };
+    }
+
+    // חישוב ידני מהפריטים אם אין totals
     const items = order?.items ?? [];
-    return items.reduce((sum, it) => {
-      const priceCents = Number(it?.priceCents || 0);
+    const merchandiseTotal = items.reduce((sum, it) => {
+      // נסה לקחת lineTotal אם קיים, אחרת חשב מחיר * כמות
+      const lineTotal = Number(it?.lineTotal || 0);
+      if (lineTotal > 0) return sum + lineTotal;
+      
+      const price = Number(it?.price || it?.unitAfter || it?.priceCents || 0);
       const qty = Number(it?.qty || 0);
-      return sum + priceCents * qty;
+      return sum + (price * qty);
     }, 0);
+
+    const shippingCost = Number(order?.shippingCost || order?.shipping?.cost || 0);
+    const grandTotal = merchandiseTotal + shippingCost;
+
+    return { merchandiseTotal, shippingCost, grandTotal };
   }, [order]);
 
   if (loading) {
@@ -222,13 +241,9 @@ export default function OrderDetail() {
 
   const createdAt = toDateString(order.createdAt);
   const status = order.status || "—";
-  const amountCents = typeof order.amountCents === "number" ? order.amountCents : 0;
-  const shippingPriceCents =
-    typeof order.shippingPriceCents === "number" ? order.shippingPriceCents : 0;
-  const currency = order.currency || "ILS";
-
+  
   const items = Array.isArray(order.items) ? order.items : [];
-  const shippingAddress = order.shippingAddress || null;
+  const shippingAddress = order.shippingAddress || order.shipping?.address || null;
   const shipping = order.shipping || null;
 
   return (
@@ -242,8 +257,38 @@ export default function OrderDetail() {
               <div className="d-flex flex-wrap gap-3">
                 <div><strong>תאריך:</strong> {createdAt || "—"}</div>
                 <div><strong>סטטוס:</strong> {status}</div>
-                <div><strong>מטבע:</strong> {currency}</div>
+                {shipping?.method && <div><strong>שיטת משלוח:</strong> {shipping.method}</div>}
               </div>
+              
+              {/* סטטוס תשלום */}
+              {order.paymentStatus && (
+                <div className="mt-3">
+                  <strong>סטטוס תשלום: </strong>
+                  {order.paymentStatus === "succeeded" || order.paymentStatus === "approved" ? (
+                    <span className="badge bg-success">אושר ✓</span>
+                  ) : order.paymentStatus === "failed" || order.paymentStatus === "declined" ? (
+                    <span className="badge bg-danger">נדחה ✗</span>
+                  ) : order.paymentStatus === "pending" ? (
+                    <span className="badge bg-warning text-dark">ממתין לאישור</span>
+                  ) : order.paymentStatus === "refunded" ? (
+                    <span className="badge bg-info">הוחזר</span>
+                  ) : (
+                    <span className="badge bg-secondary">{order.paymentStatus}</span>
+                  )}
+                </div>
+              )}
+              
+              {order.paymentMethod && (
+                <div className="mt-2 text-muted small">
+                  <strong>אמצעי תשלום:</strong> {order.paymentMethod}
+                </div>
+              )}
+              
+              {order.paymentError && (
+                <div className="alert alert-danger mt-2 mb-0 py-2 small">
+                  <strong>שגיאת תשלום:</strong> {order.paymentError}
+                </div>
+              )}
             </div>
           </div>
 
@@ -255,45 +300,59 @@ export default function OrderDetail() {
               ) : (
                 <ul className="list-group list-group-flush">
                   {items.map((it, idx) => {
-                    const lineCents = Number(it?.priceCents || 0) * Number(it?.qty || 0);
+                    const unitPrice = Number(it?.unitAfter || it?.price || 0);
+                    const qty = Number(it?.qty || 0);
+                    const lineTotal = Number(it?.lineTotal || (unitPrice * qty));
+                    const baseUnit = Number(it?.baseUnit || it?.price || 0);
+                    const saved = Number(it?.saved || 0);
                     const logoLinks = extractLogoLinksFromItem(it);
 
                     return (
-                      <li
-                        key={idx}
-                        className="list-group-item d-flex justify-content-between align-items-center"
-                      >
-                        <div className="me-3">
-                          <div className="fw-semibold">
-                            {it?.name || it?.slug || "פריט"}
-                          </div>
-                          <div className="small text-muted">
-                            כמות: {it?.qty ?? 1}
-                            {it?.color ? ` · צבע: ${it.color}` : ""}
-                            {it?.size ? ` · מידה: ${it.size}` : ""}
-                          </div>
-
-                          {/* ===== קישורי לוגואים לפריט ===== */}
-                          {logoLinks.length > 0 && (
-                            <div className="small mt-1">
-                              <strong>לוגואים:</strong>{" "}
-                              {logoLinks.map((lk, i) => (
-                                <a
-                                  key={lk.url + i}
-                                  href={lk.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="link-primary me-2"
-                                  title={lk.url}
-                                >
-                                  {lk.label}
-                                </a>
-                              ))}
+                      <li key={idx} className="list-group-item">
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div className="me-3 flex-grow-1">
+                            <div className="fw-semibold">
+                              {it?.name || it?.slug || "פריט"}
                             </div>
-                          )}
+                            <div className="small text-muted">
+                              כמות: {qty}
+                              {it?.color ? ` · צבע: ${it.color}` : ""}
+                              {it?.size ? ` · מידה: ${it.size}` : ""}
+                            </div>
+                            <div className="small mt-1">
+                              <span className="text-muted">מחיר ליחידה: </span>
+                              <span>{shekels(unitPrice)}</span>
+                              {saved > 0 && (
+                                <>
+                                  <span className="text-decoration-line-through text-muted ms-2">
+                                    {shekels(baseUnit)}
+                                  </span>
+                                  <span className="badge bg-success ms-2">
+                                    חיסכון: {shekels(saved)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            {logoLinks.length > 0 && (
+                              <div className="small mt-1">
+                                <strong>לוגואים:</strong>{" "}
+                                {logoLinks.map((lk, i) => (
+                                  <a
+                                    key={lk.url + i}
+                                    href={lk.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="link-primary me-2"
+                                    title={lk.url}
+                                  >
+                                    {lk.label}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-nowrap fw-semibold">{shekels(lineTotal)}</div>
                         </div>
-
-                        <div className="text-nowrap">{shekels(lineCents)}</div>
                       </li>
                     );
                   })}
@@ -307,18 +366,24 @@ export default function OrderDetail() {
           <div className="card shadow-sm mb-3">
             <div className="card-body">
               <h5 className="mb-3">סיכום</h5>
-              <div className="d-flex justify-content-between">
+              <div className="d-flex justify-content-between mb-2">
                 <span>סך פריטים</span>
-                <span>{shekels(itemsTotalCents)}</span>
+                <span>{shekels(totals.merchandiseTotal)}</span>
               </div>
-              <div className="d-flex justify-content-between">
+              <div className="d-flex justify-content-between mb-2">
                 <span>משלוח</span>
-                <span>{shekels(shippingPriceCents)}</span>
+                <span>{totals.shippingCost > 0 ? shekels(totals.shippingCost) : "חינם"}</span>
               </div>
+              {order?.totals?.totalSaved > 0 && (
+                <div className="d-flex justify-content-between mb-2 text-success">
+                  <span>חיסכון כולל</span>
+                  <span>-{shekels(order.totals.totalSaved)}</span>
+                </div>
+              )}
               <hr />
-              <div className="d-flex justify-content-between fw-bold">
+              <div className="d-flex justify-content-between fw-bold fs-5">
                 <span>סה״כ לתשלום</span>
-                <span>{shekels(amountCents)}</span>
+                <span>{shekels(totals.grandTotal)}</span>
               </div>
             </div>
           </div>
