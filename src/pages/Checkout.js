@@ -407,7 +407,7 @@ export default function Checkout() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(), // ✅ הוספתי - נדרש ע"י Firestore Rules
       status: initialStatus,
-      autoEmailOnCreate: initialStatus === "paid", // רק אם התשלום הצליח
+      autoEmailOnCreate: true, // ✅ תמיד שלח מייל בעת יצירת הזמנה
       provider: "credit2000",
       txId: txId || null,
       contact: state?.contact || null, // פרטי הלקוח (שם, טלפון, אימייל)
