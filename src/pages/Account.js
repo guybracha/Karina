@@ -371,23 +371,46 @@ export default function Account() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id}>
-                    <td className="fw-semibold">
-                      <Link to={`/orders/${o.id}`} className="link-primary text-decoration-none">
-                        {o.id}
-                      </Link>
-                    </td>
-                    <td>{toDateString(o.createdAt)}</td>
-                    <td>{typeof o.amountCents !== "undefined" ? shekels(o.amountCents) : shekels(o.amount)}</td>
-                    <td><span className={statusBadgeClass(o.status)}>{o.status}</span></td>
-                    <td className="text-end">
-                      <Link to={`/orders/${o.id}`} className="btn btn-sm btn-outline-primary">
-                        פרטי הזמנה
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {orders.map((o) => {
+                  // חישוב הסה"כ האמיתי
+                  let totalAmount = 0;
+                  if (o.totals?.grandTotal) {
+                    totalAmount = o.totals.grandTotal;
+                  } else if (o.amountCents) {
+                    totalAmount = o.amountCents;
+                  } else if (o.amount) {
+                    totalAmount = o.amount;
+                  } else if (o.items) {
+                    // חישוב ידני מהפריטים
+                    const itemsTotal = (o.items || []).reduce((sum, it) => {
+                      const lineTotal = Number(it?.lineTotal || 0);
+                      if (lineTotal > 0) return sum + lineTotal;
+                      const price = Number(it?.price || it?.unitAfter || it?.priceCents || 0);
+                      const qty = Number(it?.qty || 0);
+                      return sum + (price * qty);
+                    }, 0);
+                    const shippingCost = Number(o.shippingCost || o.shipping?.cost || 0);
+                    totalAmount = itemsTotal + shippingCost;
+                  }
+
+                  return (
+                    <tr key={o.id}>
+                      <td className="fw-semibold">
+                        <Link to={`/orders/${o.id}`} className="link-primary text-decoration-none">
+                          {o.id}
+                        </Link>
+                      </td>
+                      <td>{toDateString(o.createdAt)}</td>
+                      <td>{shekels(totalAmount)}</td>
+                      <td><span className={statusBadgeClass(o.status)}>{o.status}</span></td>
+                      <td className="text-end">
+                        <Link to={`/orders/${o.id}`} className="btn btn-sm btn-outline-primary">
+                          פרטי הזמנה
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
