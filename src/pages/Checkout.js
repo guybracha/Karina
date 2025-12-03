@@ -405,6 +405,7 @@ export default function Checkout() {
       orderId: String(orderId),
       uid,
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(), // ✅ הוספתי - נדרש ע"י Firestore Rules
       status: initialStatus,
       autoEmailOnCreate: initialStatus === "paid", // רק אם התשלום הצליח
       provider: "credit2000",

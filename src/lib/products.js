@@ -7,6 +7,10 @@ import shortTrikoWhite from "../webp/workwear/shortTrikoWhite.webp";
 import shortTrikoNavy from "../webp/workwear/shortTrikoNavy.webp";
 import shortTrikoBlack from "../webp/workwear/shortTrikoBlack.webp";
 import shortTrikoGray from "../webp/workwear/shortTrikoGray.webp";
+import shortTrikoWhiteBack from "../webp/workwear/shortTrikoWhiteBack.webp";
+import shortTrikoNavyBack from "../webp/workwear/shortTrikoNavyBack.webp";
+import shortTrikoBlackBack from "../webp/workwear/shortTrikoBlackBack.webp";
+import shortTrikoGrayBack from "../webp/workwear/shortTrikoGrayBack.webp";
 import helmetUrl from "../webp/safety/helmet.webp";
 import yellow from "../webp/safety/yellowVest.webp";
 import orange from "../webp/safety/orangeVest.webp";
@@ -351,14 +355,29 @@ export const PRODUCTS = [{
     slug: "tshirt-short",
     name: "חולצת טריקו קצר",
     price: 55,
+    
+    // ברירת מחדל (לקידום אתרים ו-fallback)
     img: shortTrikoWhite,
+    backImg: shortTrikoWhiteBack,
+    
     colors: ["לבן", "נייבי", "אפור", "שחור"],
+    
+    // וריאציות צד קדמי לפי צבע
     images: {
       "לבן": shortTrikoWhite,
       "נייבי": shortTrikoNavy,
       "אפור": shortTrikoGray,
       "שחור": shortTrikoBlack,
     },
+    
+    // וריאציות צד אחורי לפי צבע
+    backImages: {
+      "לבן": shortTrikoWhiteBack,
+      "נייבי": shortTrikoNavyBack,
+      "אפור": shortTrikoGrayBack,
+      "שחור": shortTrikoBlackBack,
+    },
+    
     sizes: ["S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",
     isKids: true,

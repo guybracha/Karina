@@ -85,19 +85,13 @@ export default function AuthPage() {
     setError(null); setInfo(null);
     if (!marketingOptIn) { setError("יש לאשר קבלת דיוורים כדי להירשם."); return; }
 
-    const trimmedEmail = email.trim();
     const trimmedName = fullName.trim();
     const digits = phoneNumber.replace(/\D+/g, "");
     const companyName = company.trim();
     const cityName = city.trim();
 
-    // בדיקות חובה
-    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setError("יש להזין כתובת אימייל תקינה.");
-      return;
-    }
     if (!trimmedName) { setError("יש להזין שם מלא."); return; }
-    if (digits.length < 9) { setError("יש להזין מספר טלפון תקין (לפחות 9 ספרות)."); return; }
+    if (digits.length < 9) { setError("יש להזין מספר טלפון תקין."); return; }
     if (!companyName) { setError("יש להזין שם חברה."); return; }
     if (!cityName) { setError("יש להזין עיר."); return; }
 
@@ -106,9 +100,9 @@ export default function AuthPage() {
       // אם אורח – שדרג, אחרת רשום משתמש חדש
       let cred;
       if (auth.currentUser?.isAnonymous) {
-        cred = await upgradeAnonWithEmail(trimmedEmail, password);
+        cred = await upgradeAnonWithEmail(email.trim(), password);
       } else {
-        cred = await registerWithEmail(trimmedEmail, password);
+        cred = await registerWithEmail(email.trim(), password);
       }
 
       const user = cred?.user || auth.currentUser;
@@ -141,74 +135,14 @@ export default function AuthPage() {
       if (!res?.user) setInfo("מועברים להשלמת התחברות…");
       else {
         const isNew = !!getAdditionalUserInfo(res)?.isNewUser;
-        if (isNew) {
-          // משתמש חדש דרך Google - צריך לוודא שיש קבלת דיוורים ופרטים נוספים
-          if (!marketingOptIn) {
-            try { await signOut(auth); } catch {}
-            setTab("register");
-            setError("זהו חיבור ראשון עם Google. אנא אשר/י קבלת דיוורים והרשמה.");
-            return;
-          }
-          
-          // קבלנו אישור דיוורים - עכשיו צריך פרטים נוספים
-          const user = res.user;
-          const displayName = user.displayName || "";
-          const userEmail = user.email || "";
-          
-          // בדיקה אם יש מספר טלפון
-          if (!user.phoneNumber) {
-            // אין טלפון - צריך לבקש
-            alert("שלום " + displayName + "!\n\n" +
-                  "כדי להשלים את ההרשמה לאתר קארינה, נדרשים מספר פרטים נוספים:\n" +
-                  "• מספר טלפון (חובה)\n" +
-                  "• שם חברה / ארגון\n" +
-                  "• עיר מגורים\n\n" +
-                  "אנא מלא/י את הפרטים בחלונות הבאים.");
-            
-            const phone = prompt("מספר טלפון (לדוגמה: 050-1234567):");
-            if (!phone || phone.trim().replace(/\D+/g, "").length < 9) {
-              try { await signOut(auth); } catch {}
-              setError("מספר טלפון חובה להשלמת ההרשמה (לפחות 9 ספרות). נא לנסות שוב.");
-              return;
-            }
-            
-            const phoneDigits = phone.trim().replace(/\D+/g, "");
-            
-            // בקש גם חברה ועיר
-            const companyName = prompt("שם חברה / ארגון:");
-            if (!companyName || !companyName.trim()) {
-              try { await signOut(auth); } catch {}
-              setError("שם חברה חובה להשלמת ההרשמה. נא לנסות שוב.");
-              return;
-            }
-            
-            const cityName = prompt("עיר מגורים / פעילות:");
-            if (!cityName || !cityName.trim()) {
-              try { await signOut(auth); } catch {}
-              setError("עיר חובה להשלמת ההרשמה. נא לנסות שוב.");
-              return;
-            }
-            
-            // שמירת הפרטים
-            await ensureUserDoc(user, {
-              displayName,
-              phoneNumber: phoneDigits,
-              company: companyName.trim(),
-              city: cityName.trim(),
-              marketingConsent: true,
-              marketingConsentMethod: "google_signup",
-            });
-          } else {
-            // יש טלפון - רק נשמור את הסכמת הדיוורים
-            await ensureUserDoc(user, {
-              marketingConsent: true,
-              marketingConsentMethod: "google_signup",
-            });
-          }
+        if (isNew && !marketingOptIn) {
+          try { await signOut(auth); } catch {}
+          setTab("register");
+          setError("זהו חיבור ראשון עם Google. אנא אשר/י קבלת דיוורים והרשמה.");
+        } else {
+          setInfo("התחברת עם Google! מעביר אותך לאזור האישי...");
+          setTimeout(() => navigate("/account"), 1000);
         }
-        
-        setInfo("התחברת עם Google! מעביר אותך לאזור האישי...");
-        setTimeout(() => navigate("/account"), 1000);
       }
     } catch (e) { setError(friendly(e)); }
     finally { setLoading(false); }
@@ -234,20 +168,14 @@ export default function AuthPage() {
 
       <form onSubmit={tab === "login" ? onLogin : onRegister} className="card card-body" noValidate>
         <div className="mb-3">
-          <label className="form-label" htmlFor="email">
-            {isRegister && <span className="text-danger">* </span>}
-            Email
-          </label>
+          <label className="form-label" htmlFor="email">Email</label>
           <input id="email" type="email" className="form-control"
                  value={email} onChange={(e) => setEmail(e.target.value)}
                  required autoComplete="email" disabled={loading}/>
         </div>
 
         <div className="mb-3">
-          <label className="form-label" htmlFor="pwd">
-            {isRegister && <span className="text-danger">* </span>}
-            Password
-          </label>
+          <label className="form-label" htmlFor="pwd">Password</label>
           <input id="pwd" type="password" className="form-control"
                  value={password} onChange={(e) => setPassword(e.target.value)}
                  required minLength={6}
@@ -258,9 +186,7 @@ export default function AuthPage() {
         {isRegister && (
           <>
             <div className="mb-3">
-              <label className="form-label" htmlFor="fullName">
-                <span className="text-danger">* </span>שם מלא
-              </label>
+              <label className="form-label" htmlFor="fullName">שם מלא</label>
               <input
                 id="fullName"
                 type="text"
@@ -275,9 +201,7 @@ export default function AuthPage() {
 
             <div className="row g-3">
               <div className="col-md-6">
-                <label className="form-label" htmlFor="phone">
-                  <span className="text-danger">* </span>טלפון
-                </label>
+                <label className="form-label" htmlFor="phone">טלפון</label>
                 <input
                   id="phone"
                   type="tel"
@@ -292,9 +216,7 @@ export default function AuthPage() {
                 />
               </div>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="company">
-                  <span className="text-danger">* </span>שם חברה / ארגון
-                </label>
+                <label className="form-label" htmlFor="company">שם חברה / ארגון</label>
                 <input
                   id="company"
                   type="text"
@@ -309,9 +231,7 @@ export default function AuthPage() {
             </div>
 
             <div className="mb-3 mt-3">
-              <label className="form-label" htmlFor="city">
-                <span className="text-danger">* </span>עיר מגורים / פעילות
-              </label>
+              <label className="form-label" htmlFor="city">עיר מגורים / פעילות</label>
               <input
                 id="city"
                 type="text"
