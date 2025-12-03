@@ -217,9 +217,9 @@ export async function createOrder(userIdOrCustomer, items, opts = {}) {
 export async function getMyOrders(uid, pageSize = 20, cursor = null) {
   if (!uid) return { data: [], nextCursor: null };
 
+  // ✅ טוען מה-subcollection של המשתמש (users_prod/{uid}/orders_prod)
   let base = query(
-    collection(db, "orders_prod"),
-    where("customer.uid", "==", uid),
+    collection(db, "users_prod", uid, "orders_prod"),
     orderBy("createdAt", "desc"),
     limit(pageSize)
   );
@@ -231,14 +231,14 @@ export async function getMyOrders(uid, pageSize = 20, cursor = null) {
   return { data, nextCursor };
 }
 
-/** האזנה בזמן אמת להזמנות המשתמש לפי customer.uid */
+/** האזנה בזמן אמת להזמנות המשתמש מה-subcollection */
 export function listenMyOrders(uid, cb) {
   if (!uid) return () => {};
   const q = query(
-    collection(db, "orders_prod"),
-    where("customer.uid", "==", uid),
+    collection(db, "users_prod", uid, "orders_prod"),
     orderBy("createdAt", "desc")
   );
+  
   return onSnapshot(q, (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   });
