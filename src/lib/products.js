@@ -3,6 +3,10 @@ import longTrikoGray from "../webp/workwear/longTrikoGray.webp";
 import longTrikoWhite from "../webp/workwear/longTrikoWhite.webp";
 import longTrikoBlack from "../webp/workwear/longTrikoBlack.webp";
 import longTrikoNavy from "../webp/workwear/longTrikoNavy.webp";
+import longTrikoGrayBack from "../webp/workwear/longTrikoGrayBack.webp";
+import longTrikoWhiteBack from "../webp/workwear/longTrikoWhiteBack.webp";
+import longTrikoBlackBack from "../webp/workwear/longTrikoBlackBack.webp";
+import longTrikoNavyBack from "../webp/workwear/longTrikoNavyBack.webp";
 import shortTrikoWhite from "../webp/workwear/shortTrikoWhite.webp";
 import shortTrikoNavy from "../webp/workwear/shortTrikoNavy.webp";
 import shortTrikoBlack from "../webp/workwear/shortTrikoBlack.webp";
@@ -70,14 +74,29 @@ export const PRODUCTS = [{
     slug: "long-triko",
     name: "טריקו ארוך",
     price: 60,
+    
+    // ברירת מחדל (לקידום אתרים ו-fallback)
     img: longTrikoWhite,
+    backImg: longTrikoWhiteBack,
+    
     colors: ["לבן", "נייבי", "אפור", "שחור"],
+    
+    // וריאציות צד קדמי לפי צבע
     images: {
       "לבן": longTrikoWhite,
       "נייבי": longTrikoNavy,
       "אפור": longTrikoGray,
       "שחור": longTrikoBlack,
     },
+    
+    // וריאציות צד אחורי לפי צבע
+    backImages: {
+      "לבן": longTrikoWhiteBack,
+      "נייבי": longTrikoNavyBack,
+      "אפור": longTrikoGrayBack,
+      "שחור": longTrikoBlackBack,
+    },
+    
     sizes: ["S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",
     isKids: true,
