@@ -56,6 +56,16 @@ import managerYellowBack from "../webp/safety/managerYellowBack.webp";
 import pwd from "../webp/safety/pwd.webp";
 import pwdBack from "../webp/safety/pwdBack.webp";
 
+/**
+ * מערך כל המוצרים במערכת
+ * 
+ * כל מוצר צריך לכלול:
+ * - printArea: אזור הדפסה בצד קדמי (x, y, w, h כאחוזים, widthCm/heightCm בס"מ)
+ * - backPrintArea: אזור הדפסה בצד אחורי (אופציונלי, רק אם יש backImg)
+ * - images: מיפוי צבע->תמונה קדמית (אופציונלי, אם יש וריאציות)
+ * - backImages: מיפוי צבע->תמונה אחורית (אופציונלי)
+ * - logoAllowed: true/false - האם ניתן להדפיס לוגו
+ */
 export const PRODUCTS = [{
     slug: "hoodie-zipper",
     name: "קפוצ׳ון רוכסן",
@@ -69,6 +79,8 @@ export const PRODUCTS = [{
     type: "hoodie",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 25, heightCm: 30 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 25, heightCm: 30 },
   },
   {
     slug: "long-triko",
@@ -104,6 +116,8 @@ export const PRODUCTS = [{
     type: "shirt",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.3, w: 0.4, h: 0.3, widthCm: 28, heightCm: 25 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 30, heightCm: 35 },
   },
   {
     slug: "safety-helmet",
@@ -118,6 +132,7 @@ export const PRODUCTS = [{
     type: "helmet",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.35, y: 0.4, w: 0.3, h: 0.2, widthCm: 15, heightCm: 8 },
   },
   {
     slug: "vest-yellow",
@@ -133,6 +148,8 @@ export const PRODUCTS = [{
     type: "vest",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.25, y: 0.3, w: 0.5, h: 0.3, widthCm: 20, heightCm: 15 },
+    backPrintArea: { x: 0.25, y: 0.3, w: 0.5, h: 0.4, widthCm: 25, heightCm: 30 },
   },
   {
     slug: "vest-orange",
@@ -148,6 +165,8 @@ export const PRODUCTS = [{
     type: "vest",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.25, y: 0.3, w: 0.5, h: 0.3, widthCm: 20, heightCm: 15 },
+    backPrintArea: { x: 0.25, y: 0.3, w: 0.5, h: 0.4, widthCm: 25, heightCm: 30 },
   },
   {
     slug: "manager-vest-orange",
@@ -163,6 +182,8 @@ export const PRODUCTS = [{
     type: "vest",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.25, y: 0.25, w: 0.5, h: 0.35, widthCm: 22, heightCm: 18 },
+    backPrintArea: { x: 0.25, y: 0.25, w: 0.5, h: 0.4, widthCm: 25, heightCm: 30 },
   },
   {
     slug: "manager-vest-yellow",
@@ -178,6 +199,8 @@ export const PRODUCTS = [{
     type: "vest",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.25, y: 0.25, w: 0.5, h: 0.35, widthCm: 22, heightCm: 18 },
+    backPrintArea: { x: 0.25, y: 0.25, w: 0.5, h: 0.4, widthCm: 25, heightCm: 30 },
   },
   {
     slug: "hoodie-kenguru",
@@ -193,6 +216,8 @@ export const PRODUCTS = [{
     type: "hoodie",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 25, heightCm: 30 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 25, heightCm: 30 },
   },
   {
     slug: "softshell-coat",
@@ -208,6 +233,8 @@ export const PRODUCTS = [{
     type: "jacket",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.2, w: 0.4, h: 0.3, widthCm: 25, heightCm: 28 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 28, heightCm: 35 },
   },
   {
   slug: "drifit-short",
@@ -242,6 +269,8 @@ export const PRODUCTS = [{
   type: "shirt",
   logoAllowed: true,
   isBlocked: false,
+  printArea: { x: 0.3, y: 0.3, w: 0.4, h: 0.3, widthCm: 28, heightCm: 25 },
+  backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 30, heightCm: 35 },
   },
   {
     slug: "drifit-long",
@@ -257,6 +286,8 @@ export const PRODUCTS = [{
     type: "shirt",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.3, w: 0.4, h: 0.3, widthCm: 28, heightCm: 25 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 30, heightCm: 35 },
   },
   {
     slug: "storm-suit",
@@ -271,6 +302,8 @@ export const PRODUCTS = [{
     type: "overall",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.2, w: 0.4, h: 0.25, widthCm: 22, heightCm: 20 },
+    backPrintArea: { x: 0.3, y: 0.3, w: 0.4, h: 0.3, widthCm: 25, heightCm: 30 },
   },
   {
     slug: "fleece-reversible",
@@ -285,6 +318,8 @@ export const PRODUCTS = [{
     type: "fleece",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.3, widthCm: 24, heightCm: 26 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 26, heightCm: 32 },
   },
   {
     slug: "lab-coat",
@@ -299,6 +334,8 @@ export const PRODUCTS = [{
     type: "coat",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.3, widthCm: 25, heightCm: 28 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 28, heightCm: 35 },
   },
   {
     slug: "half-apron",
@@ -313,6 +350,7 @@ export const PRODUCTS = [{
     type: "apron",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.35, w: 0.4, h: 0.3, widthCm: 20, heightCm: 18 },
   },
   {
     slug: "full-apron",
@@ -327,6 +365,8 @@ export const PRODUCTS = [{
     type: "apron",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.3, w: 0.4, h: 0.35, widthCm: 22, heightCm: 25 },
+    backPrintArea: { x: 0.3, y: 0.35, w: 0.4, h: 0.3, widthCm: 20, heightCm: 22 },
   },
   {
     slug: "chef-jacket",
@@ -341,6 +381,8 @@ export const PRODUCTS = [{
     type: "chef-jacket",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.3, widthCm: 24, heightCm: 26 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 26, heightCm: 32 },
   },
   {
     slug: "drifit-stripes",
@@ -355,6 +397,8 @@ export const PRODUCTS = [{
     type: "shirt",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.3, w: 0.4, h: 0.3, widthCm: 26, heightCm: 24 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 28, heightCm: 32 },
   },
   {
     slug: "thermal-bottle",
@@ -369,6 +413,7 @@ export const PRODUCTS = [{
     type: "bottle",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.35, y: 0.35, w: 0.3, h: 0.3, widthCm: 8, heightCm: 10 },
   },
   {
     slug: "tshirt-short",
@@ -404,6 +449,8 @@ export const PRODUCTS = [{
     type: "shirt",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.3, w: 0.4, h: 0.3, widthCm: 28, heightCm: 25 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 30, heightCm: 35 },
   },
   {
     slug: "helmet-manager",
@@ -418,6 +465,7 @@ export const PRODUCTS = [{
     type: "helmet",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.35, y: 0.4, w: 0.3, h: 0.2, widthCm: 15, heightCm: 8 },
   },
   {
     slug: "maatz-vest",
@@ -433,18 +481,20 @@ export const PRODUCTS = [{
     type: "vest",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.25, y: 0.3, w: 0.5, h: 0.3, widthCm: 20, heightCm: 15 },
+    backPrintArea: { x: 0.25, y: 0.3, w: 0.5, h: 0.4, widthCm: 25, heightCm: 30 },
   },
   {
     slug: "cargo-pants",
     name: 'מכנסי דגמ"ח עבודה',
     price: 60,
     img: cargoBlack,
-    colors: ["שחור", "נייבי", "אפור", "בז׳"],
+    colors: ["שחור", "נייבי", "אפור", "בז'"],
     images: {
       "שחור": cargoBlack,
       "נייבי": cargoNavy,
       "אפור": cargoGray,
-      "בז׳": cargoBeige,
+      "בז'": cargoBeige,
     },
     sizes: ["S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"],
     category: "workwear",
@@ -453,6 +503,7 @@ export const PRODUCTS = [{
     type: "pants",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.65, y: 0.5, w: 0.25, h: 0.15, widthCm: 12, heightCm: 10 },
   },
   {
     slug: "fleese-single",
@@ -467,5 +518,7 @@ export const PRODUCTS = [{
     type: "coat",
     logoAllowed: true,
     isBlocked: false,
+    printArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.3, widthCm: 24, heightCm: 26 },
+    backPrintArea: { x: 0.3, y: 0.25, w: 0.4, h: 0.35, widthCm: 26, heightCm: 32 },
   }
 ];

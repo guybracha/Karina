@@ -5,7 +5,6 @@ import { Helmet } from "react-helmet-async";
 import { LogosQueueProvider } from "../contexts/LogosQueueContext.tsx";
 import LogoUploadModal from "../components/LogoUploadModal";
 import ColorSwatches from "../components/ColorSwatches";
-// import SizePicker from "../components/SizePicker";
 import { PRODUCTS } from "../lib/products";
 import { getDiscountPct } from "../lib/pricing";
 
@@ -683,16 +682,39 @@ export default function ProductDetail() {
   const [placementBySide, setPlacementBySide] = useState({ front: null, back: null });
   useEffect(() => {
     try {
-      const pf = JSON.parse(localStorage.getItem(LS_PLACEMENT_KEY(product?.slug || "unknown", "front")) || "null");
-      const pb = JSON.parse(localStorage.getItem(LS_PLACEMENT_KEY(product?.slug || "unknown", "back"))  || "null");
+      const rawFront = localStorage.getItem(LS_PLACEMENT_KEY(product?.slug || "unknown", "front"));
+      const rawBack = localStorage.getItem(LS_PLACEMENT_KEY(product?.slug || "unknown", "back"));
+      
+      const parseFront = rawFront ? JSON.parse(rawFront) : null;
+      const parseBack = rawBack ? JSON.parse(rawBack) : null;
+      
+      // תמיכה לאחור: אם זה אובייקט ישן (placement בלבד), נשתמש בו. אחרת נחלץ את placement מהאובייקט החדש
+      const pf = parseFront?.placement || (parseFront?.xPct !== undefined ? parseFront : null);
+      const pb = parseBack?.placement || (parseBack?.xPct !== undefined ? parseBack : null);
+      
       setPlacementBySide({ front: pf, back: pb });
-    } catch { setPlacementBySide({ front: null, back: null }); }
+    } catch { 
+      setPlacementBySide({ front: null, back: null }); 
+    }
   }, [product?.slug]);
 
   function savePlacementForSide(sideKey, placement, dpiReport) {
-    try { localStorage.setItem(LS_PLACEMENT_KEY(product.slug, sideKey), JSON.stringify(placement)); } catch {}
+    const dataToSave = {
+      placement,
+      dpiReport,
+      savedAt: Date.now(),
+      side: sideKey,
+      slug: product.slug,
+    };
+    try { 
+      localStorage.setItem(LS_PLACEMENT_KEY(product.slug, sideKey), JSON.stringify(dataToSave)); 
+    } catch (e) {
+      console.warn("Failed to save placement:", e);
+    }
     setPlacementBySide((prev) => ({ ...prev, [sideKey]: placement }));
-    window.dispatchEvent(new CustomEvent("karina:logoPlacementSaved", { detail: { slug: product.slug, side: sideKey, placement, dpiReport } }));
+    window.dispatchEvent(new CustomEvent("karina:logoPlacementSaved", { 
+      detail: { slug: product.slug, side: sideKey, placement, dpiReport } 
+    }));
   }
 
   return (
