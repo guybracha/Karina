@@ -426,10 +426,33 @@ img[loading="lazy"]{ content-visibility:auto; }
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   padding: 8px 0 24px;
+  cursor: grab;
+}
+
+.product-carousel:active {
+  cursor: grabbing;
 }
 
 .product-carousel::-webkit-scrollbar {
   display: none; /* Chrome, Safari */
+}
+
+/* רמז ויזואלי לגלילה בצד ימין */
+.product-carousel-wrapper::after {
+  content: '';
+  position: absolute;
+  left: 48px;
+  top: 0;
+  bottom: 24px;
+  width: 60px;
+  background: linear-gradient(to left, rgba(248, 250, 252, 0), rgba(248, 250, 252, 0.95));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.product-carousel-wrapper:hover::after {
+  opacity: 1;
 }
 
 .product-carousel-card {

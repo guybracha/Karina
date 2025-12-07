@@ -115,12 +115,24 @@ function ProductCarousel({ products }) {
 
     const onScroll = () => updateScrollButtons();
     const onResize = () => updateScrollButtons();
+    
+    // גלילה אופקית עם גלגלת העכבר (במחשב נייח)
+    const onWheel = (e) => {
+      // בודק אם זו גלילה אנכית (לא shift+wheel)
+      if (e.deltaY !== 0 && !e.shiftKey) {
+        e.preventDefault();
+        const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
+        el.scrollBy({ left: e.deltaY, behavior });
+      }
+    };
 
     el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("resize", onResize);
 
     return () => {
       el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", onWheel);
       window.removeEventListener("resize", onResize);
     };
   }, []);
