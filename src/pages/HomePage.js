@@ -61,6 +61,137 @@ function computeTopCategories(products) {
 
 /* ==================== קומפוננטה ==================== */
 
+/** המרת שמות צבעים מעברית לקודי hex */
+function getColorHex(colorName) {
+  const colorMap = {
+    'שחור': '#000000',
+    'לבן': '#FFFFFF',
+    'אפור': '#808080',
+    'נייבי': '#001f3f',
+    'כחול': '#0074D9',
+    'צהוב': '#FFDC00',
+    'ירוק': '#2ECC40',
+    'כתום': '#FF851B',
+    'אדום': '#FF4136',
+    'ורוד': '#FF69B4',
+    'חום': '#8B4513',
+    'בז\'': '#F5F5DC',
+    'תכלת': '#87CEEB',
+    'סגול': '#800080',
+    'ליים': '#CDDC39',
+  };
+  return colorMap[colorName] || '#E2E8F0';
+}
+
+/** קומפוננטת קרוסלת מוצרים */
+function ProductCarousel({ products }) {
+  const carouselRef = useRef(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const updateScrollButtons = () => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < maxScroll - 4);
+  };
+
+  const scrollTo = (direction) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const cardWidth = 280;
+    const gap = 16;
+    const scrollAmount = (cardWidth + gap) * direction;
+    const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
+    el.scrollBy({ left: scrollAmount, behavior });
+  };
+
+  useEffect(() => {
+    const el = carouselRef.current;
+    if (!el) return;
+    updateScrollButtons();
+
+    const onScroll = () => updateScrollButtons();
+    const onResize = () => updateScrollButtons();
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  return (
+    <div className="product-carousel-wrapper position-relative">
+      <button
+        className="carousel-btn carousel-btn-prev"
+        onClick={() => scrollTo(-1)}
+        disabled={!canScrollLeft}
+        aria-label="מוצר קודם"
+      >
+        <i className="bi bi-chevron-right" />
+      </button>
+
+      <div className="product-carousel" ref={carouselRef}>
+        {products.map((product) => (
+          <NavLink
+            key={product.slug}
+            to={`/product/${product.slug}`}
+            className="product-carousel-card"
+          >
+            <div className="product-carousel-img">
+              <img
+                src={product.img}
+                alt={product.name}
+                loading="lazy"
+                decoding="async"
+              />
+            </div>
+            <div className="product-carousel-body">
+              <h3 className="product-carousel-title">{product.name}</h3>
+              <div className="product-carousel-price">
+                ₪{product.price}
+                <span className="text-muted small"> / יחידה</span>
+              </div>
+              {product.colors && product.colors.length > 0 && (
+                <div className="product-carousel-colors-wrapper">
+                  <div className="product-carousel-colors">
+                    {product.colors.map((color, idx) => (
+                      <span
+                        key={idx}
+                        className="color-dot"
+                        style={{ backgroundColor: getColorHex(color) }}
+                        title={color}
+                        aria-label={color}
+                      />
+                    ))}
+                  </div>
+                  <div className="color-count text-muted small">
+                    {product.colors.length} {product.colors.length === 1 ? 'צבע' : 'צבעים'}
+                  </div>
+                </div>
+              )}
+            </div>
+          </NavLink>
+        ))}
+      </div>
+
+      <button
+        className="carousel-btn carousel-btn-next"
+        onClick={() => scrollTo(1)}
+        disabled={!canScrollRight}
+        aria-label="מוצר הבא"
+      >
+        <i className="bi bi-chevron-left" />
+      </button>
+    </div>
+  );
+}
+
 export default function HomePage() {
   // ===== SEO =====
   const origin =
@@ -284,6 +415,25 @@ export default function HomePage() {
   </div>
 </section>
 
+
+      {/* ===== קרוסלת מוצרים פופולריים ===== */}
+      <section className="py-6 bg-light">
+        <div className="container">
+          <header className="text-center mb-4">
+            <h2 className="h3 fw-bold">המוצרים הפופולריים שלנו</h2>
+            <p className="text-muted m-0">עיינו במבחר המוצרים המבוקשים ביותר</p>
+          </header>
+
+          <ProductCarousel products={bestSellers} />
+
+          <div className="text-center mt-4">
+            <NavLink to="/catalog" className="btn btn-primary">
+              <i className="bi bi-grid-3x3-gap me-2"></i>
+              צפו בכל הקטלוג
+            </NavLink>
+          </div>
+        </div>
+      </section>
 
       {/* ===== איך זה עובד ===== */}
       <section className="container py-6">

@@ -409,3 +409,214 @@ img[loading="lazy"]{ content-visibility:auto; }
 @media (min-width: 768px) {
   .usp { padding: 14px 16px; }
 }
+
+/* =========================================
+   Product Carousel
+========================================= */
+.product-carousel-wrapper {
+  position: relative;
+  padding: 0 48px; /* מרווח לכפתורי ניווט */
+}
+
+.product-carousel {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  padding: 8px 0 24px;
+}
+
+.product-carousel::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+.product-carousel-card {
+  flex: 0 0 auto;
+  width: 280px;
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
+  display: flex;
+  flex-direction: column;
+}
+
+.product-carousel-card:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--shadow-soft-hover);
+}
+
+.product-carousel-img {
+  width: 100%;
+  height: 220px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.product-carousel-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s var(--ease);
+}
+
+.product-carousel-card:hover .product-carousel-img img {
+  transform: scale(1.08);
+}
+
+.product-carousel-body {
+  padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.product-carousel-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  color: #1e293b;
+  line-height: 1.3;
+}
+
+.product-carousel-price {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--bs-primary);
+  margin: 4px 0;
+}
+
+.product-carousel-colors-wrapper {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.product-carousel-colors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.color-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.color-dot:hover {
+  border-color: #cbd5e1;
+}
+
+.product-carousel-card:hover .color-dot {
+  transform: scale(1.1);
+  border-color: var(--bs-primary);
+}
+
+.color-count {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* כפתורי ניווט */
+.carousel-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.25s var(--ease);
+}
+
+.carousel-btn:hover:not(:disabled) {
+  background: var(--bs-primary);
+  color: #fff;
+  border-color: var(--bs-primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.carousel-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.carousel-btn-prev {
+  right: 0;
+}
+
+.carousel-btn-next {
+  left: 0;
+}
+
+.carousel-btn i {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* רספונסיביות */
+@media (max-width: 767.98px) {
+  .product-carousel-wrapper {
+    padding: 0;
+  }
+
+  .carousel-btn {
+    display: none; /* מסתיר כפתורים במובייל */
+  }
+
+  .product-carousel {
+    padding: 8px 0 16px;
+  }
+
+  .product-carousel-card {
+    width: 240px;
+  }
+
+  .product-carousel-img {
+    height: 180px;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .product-carousel-card {
+    width: 220px;
+  }
+
+  .product-carousel-img {
+    height: 160px;
+  }
+
+  .product-carousel-body {
+    padding: 16px;
+  }
+
+  .product-carousel-title {
+    font-size: 1rem;
+  }
+
+  .product-carousel-price {
+    font-size: 1.1rem;
+  }
+}
